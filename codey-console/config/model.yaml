@@ -1,4 +1,6 @@
-﻿provider: http
+# codey-console 默认模型配置。
+# 可通过命令行参数覆盖其中任意项。
+provider: http
 endpoint: "https://api.deepseek.com/chat/completions"
 modelName: "deepseek-v4-pro"
 apiKey: "sk-d24de3ac58ed46fe901e89caf5c92ec4"

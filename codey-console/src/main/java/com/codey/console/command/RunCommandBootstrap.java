@@ -68,7 +68,7 @@ final class RunCommandBootstrap {
     }
 
     RunCommandRuntime bootstrap(RunCommandOptions options) {
-        AppConfig appConfig = new AppConfigLoader().load(options.getAppConfigPath());
+        AppConfig appConfig = new AppConfigLoader().load(resolveConfigPath(options.getAppConfigPath()));
         Path workspaceRoot = resolveWorkspaceRoot(options, appConfig);
         LocalWorkspaceGateway workspaceGateway = new LocalWorkspaceGateway(workspaceRoot);
         ObjectMapper objectMapper = new ObjectMapper();
@@ -136,7 +136,7 @@ final class RunCommandBootstrap {
 
     private ModelGateway createModelGateway(RunCommandOptions options, ObjectMapper objectMapper) {
         ModelConfigLoader modelConfigLoader = new ModelConfigLoader();
-        ModelConfig modelConfig = modelConfigLoader.load(options.getModelConfigPath());
+        ModelConfig modelConfig = modelConfigLoader.load(resolveConfigPath(options.getModelConfigPath()));
         modelConfig = modelConfigLoader.applyOverrides(
                 modelConfig,
                 options.getModelProvider(),
@@ -194,6 +194,24 @@ final class RunCommandBootstrap {
                         new FinalResultInterpreter(objectMapper)
                 )
         );
+    }
+
+    /**
+     * 兼容从仓库根目录启动时，自动定位到 codey-console 专属配置目录。
+     */
+    private String resolveConfigPath(String configuredPath) {
+        if (isBlank(configuredPath)) {
+            return configuredPath;
+        }
+        Path directPath = Paths.get(configuredPath);
+        if (directPath.isAbsolute() || directPath.toFile().exists()) {
+            return configuredPath;
+        }
+        Path consoleRelativePath = Paths.get("codey-console").resolve(configuredPath).normalize();
+        if (consoleRelativePath.toFile().exists()) {
+            return consoleRelativePath.toString();
+        }
+        return configuredPath;
     }
 
     private String resolveApiKey(ModelConfig modelConfig) {

@@ -40,10 +40,10 @@ codey/
 ├─ codey-common/         通用客户端 DTO、工具定义、元数据模型
 ├─ codey-core/           核心运行时、Prompt 编排、工具执行、会话与验证能力
 ├─ codey-console/        命令行入口，支持交互式聊天与任务执行
+│  └─ config/            codey-console 专属运行配置
 ├─ codey-boot-starter/   Spring Boot Starter，便于业务系统集成
 ├─ codey-demo-api/       Web Demo 后端，提供聊天、SSE、业务示例、工作区接口
 ├─ codey-demo-vue/       Web Demo 前端，提供示例导航和交互页面
-├─ config/               运行配置
 └─ README.md
 ```
 
@@ -144,6 +144,11 @@ npm run dev
 ### Console 模式
 
 `codey-console` 提供命令行入口，适合在本地工程目录中直接运行 AI 任务。
+
+默认配置文件位于 `codey-console/config/`，其中：
+
+- `app.yaml` 用于控制台运行配置
+- `model.yaml` 用于模型连接配置
 
 常见能力包括：
 

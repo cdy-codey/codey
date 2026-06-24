@@ -28,7 +28,7 @@ public class RunCommand implements Callable<Integer> {
     @Option(names = "--workdir", description = "工作目录；未传时优先使用 app 配置，否则默认当前目录")
     private String workingDirectory;
 
-    @Option(names = "--app-config", description = "console 应用配置 YAML 路径", defaultValue = "config/app.yaml")
+    @Option(names = "--app-config", description = "console 应用配置 YAML 路径；默认兼容 codey-console/config/app.yaml", defaultValue = "config/app.yaml")
     private String appConfigPath;
 
     @Option(names = "--context-file", description = "Optional context file paths")
@@ -43,7 +43,7 @@ public class RunCommand implements Callable<Integer> {
     @Option(names = "--skills-dir", description = "外部 Skill YAML 目录")
     private String skillsDir;
 
-    @Option(names = "--model-config", description = "Model config YAML path", defaultValue = "config/model.yaml")
+    @Option(names = "--model-config", description = "Model config YAML path; 默认兼容 codey-console/config/model.yaml", defaultValue = "config/model.yaml")
     private String modelConfigPath;
 
     @Option(names = "--model-provider", description = "Model provider: stub/http")
