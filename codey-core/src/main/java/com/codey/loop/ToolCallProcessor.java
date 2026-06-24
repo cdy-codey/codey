@@ -1,0 +1,555 @@
+package com.codey.loop;
+
+import com.codey.infra.ModelMessage;
+import com.codey.infra.ModelToolCall;
+import com.codey.config.AgentSession;
+import com.codey.session.SessionEventFactory;
+import com.codey.session.SessionStore;
+import com.codey.skill.SkillDefinition;
+import com.codey.tools.ToolExecutionRecord;
+import com.codey.tools.ToolExecutor;
+import com.codey.tools.ToolInvocation;
+import com.codey.tools.ToolResult;
+import com.codey.verify.Verifier;
+import com.codey.verify.VerifyResult;
+
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 处理一轮模型返回中的 tool calls，收敛工具权限、执行、校验和 transcript 回写逻辑。
+ */
+final class ToolCallProcessor {
+    private final ToolExecutor toolExecutor;
+    private final ToolAccessController toolAccessController;
+    private final LoopGuard loopGuard;
+    private final HumanConfirmationService humanConfirmationService;
+    private final SessionStore sessionStore;
+    private final Verifier verifier;
+    private final ReplanService replanService;
+
+    ToolCallProcessor(ToolExecutor toolExecutor,
+                      ToolAccessController toolAccessController,
+                      LoopGuard loopGuard,
+                      HumanConfirmationService humanConfirmationService,
+                      SessionStore sessionStore,
+                      Verifier verifier,
+                      ReplanService replanService) {
+        this.toolExecutor = toolExecutor;
+        this.toolAccessController = toolAccessController;
+        this.loopGuard = loopGuard;
+        this.humanConfirmationService = humanConfirmationService;
+        this.sessionStore = sessionStore;
+        this.verifier = verifier;
+        this.replanService = replanService;
+    }
+
+    void processToolCalls(List<ModelToolCall> toolCalls,
+                          AgentSession session,
+                          SkillDefinition skill,
+                          String assistantContent,
+                          String assistantReasoningContent) {
+        if (toolCalls == null || toolCalls.isEmpty()) {
+            return;
+        }
+        assignMissingToolCallIds(toolCalls);
+
+        List<ToolInvocation> parallelBatch = new ArrayList<ToolInvocation>();
+        List<String> parallelSignatures = new ArrayList<String>();
+        List<ModelToolCall> parallelToolCalls = new ArrayList<ModelToolCall>();
+        List<ModelToolCall> executedToolCalls = new ArrayList<ModelToolCall>();
+        List<ModelMessage> toolResultMessages = new ArrayList<ModelMessage>();
+        for (ModelToolCall toolCall : toolCalls) {
+            ToolInvocation request = toToolInvocation(toolCall, session);
+            if (!toolExecutor.canRunInParallel(request)
+                    && !flushParallelBatch(parallelBatch, parallelSignatures, parallelToolCalls, session, executedToolCalls, toolResultMessages)) {
+                break;
+            }
+            if (!toolAccessController.isAllowed(skill, request, session)) {
+                String error = "Tool request not allowed by skill constraints: " + request.getToolName();
+                sessionStore.appendEvent(SessionEventFactory.securityEvent(session.getSessionId(), error));
+                replanService.appendFeedbackAndRequestReplan(session, error);
+                break;
+            }
+
+            boolean isWriteTool = !toolExecutor.isReadOnly(request);
+            LoopGuardDecision guardDecision = loopGuard.inspect(request, isWriteTool, session);
+            if (guardDecision.getAction() == LoopGuardDecision.Action.SKIP) {
+                session.appendSystemFeedback(guardDecision.getMessage());
+                continue;
+            }
+            if (guardDecision.getAction() == LoopGuardDecision.Action.REPLAN) {
+                if (!flushParallelBatch(parallelBatch, parallelSignatures, parallelToolCalls, session, executedToolCalls, toolResultMessages)) {
+                    break;
+                }
+                replanService.appendFeedbackAndRequestReplan(session, guardDecision.getMessage());
+                continue;
+            }
+
+            String requestSignature = guardDecision.getRequestSignature();
+            if (toolExecutor.canRunInParallel(request)) {
+                parallelBatch.add(request);
+                parallelSignatures.add(requestSignature);
+                parallelToolCalls.add(toolCall);
+                continue;
+            }
+
+            if (isWriteTool) {
+                FinalResult confirmationState = toConfirmationState(request);
+                if (shouldRequireHumanConfirmation(confirmationState, request, session)) {
+                    HumanDecision decision = humanConfirmationService.confirmEdit(session, confirmationState, request);
+                    sessionStore.appendEvent(SessionEventFactory.humanDecision(session.getSessionId(), decision));
+                    session.appendInteraction(buildHumanDecisionMessage(request, confirmationState, decision));
+                    if (!decision.isApproved()) {
+                        replanService.appendFeedbackAndRequestReplan(session, decision.getFeedback());
+                        break;
+                    }
+                    if (!isBlank(decision.getFeedback())) {
+                        session.appendSystemFeedback("人工已批准本次编辑，并补充说明: " + decision.getFeedback());
+                    }
+                }
+                session.setLastEditedFilePath(resolveWriteTargetPath(request));
+            }
+
+            sessionStore.appendEvent(SessionEventFactory.toolExecutionStarted(session.getSessionId(), request));
+            ToolResult result = toolExecutor.execute(request);
+            sessionStore.appendEvent(SessionEventFactory.toolCall(session.getSessionId(), request, result));
+            rememberExecutedToolCall(executedToolCalls, toolCall);
+            if (!result.isSuccess()) {
+                loopGuard.recordFailure(session, requestSignature);
+                session.appendSystemFeedback(result.getErrorMessage());
+                appendToolResultMessage(toolResultMessages, toolCall, result.getErrorMessage());
+                replanService.requestReplan(session, result.getErrorMessage());
+                break;
+            }
+            loopGuard.recordSuccess(session, requestSignature, isWriteTool);
+            rememberContextAfterToolSuccess(session, request);
+            appendToolResultMessage(toolResultMessages, toolCall, result.getContentForModel());
+            rememberReadFileSnippetIfAny(session, request, result.getContentForModel());
+
+            if (isWriteTool) {
+                session.appendEditResult(result.getContent());
+                VerifyResult verifyResult = verifier.verifyEdit(session, skill);
+                if (verifyResult.isApplicable()) {
+                    sessionStore.appendEvent(SessionEventFactory.verification(session.getSessionId(), verifyResult));
+                }
+                if (verifyResult.isPassed()) {
+                    session.appendSystemFeedback(
+                            "最近写工具已执行成功并通过校验；如果用户目标已经满足，请直接输出 FINISH，不要为了确认结果重复读取同一文件。"
+                    );
+                } else if (verifyResult.isFailed()) {
+                    replanService.appendFeedbackAndRequestReplan(session, verifyResult.getMessage());
+                }
+                continue;
+            }
+
+            session.appendToolResult(result.getContentForModel());
+        }
+
+        flushParallelBatch(parallelBatch, parallelSignatures, parallelToolCalls, session, executedToolCalls, toolResultMessages);
+        flushExecutedToolTranscript(session, assistantContent, assistantReasoningContent, executedToolCalls, toolResultMessages);
+    }
+
+    private ToolInvocation toToolInvocation(ModelToolCall toolCall) {
+        ToolInvocation request = new ToolInvocation();
+        request.setToolName(toolCall.getName() == null ? null : toolCall.getName().trim());
+        request.setArguments(toolCall.getArguments());
+        return request;
+    }
+
+    private ToolInvocation toToolInvocation(ModelToolCall toolCall, AgentSession session) {
+        ToolInvocation request = toToolInvocation(toolCall);
+        normalizeToolArguments(request, session);
+        return request;
+    }
+
+    private void normalizeToolArguments(ToolInvocation request, AgentSession session) {
+        if (request == null || request.getArguments() == null || session == null) {
+            return;
+        }
+        String tool = request.getToolName();
+        if (isBlank(tool)) {
+            return;
+        }
+        if ("read_file".equals(tool)) {
+            normalizePathArg(request, session, "path");
+            normalizeReadFileArgs(request, session);
+            return;
+        }
+        if ("write_file".equals(tool) || "edit_file".equals(tool)) {
+            normalizePathArg(request, session, "path");
+            return;
+        }
+        if ("edit_code".equals(tool)) {
+            normalizePathArg(request, session, "file");
+        }
+    }
+
+    private void normalizeReadFileArgs(ToolInvocation request, AgentSession session) {
+        if (request == null || request.getArguments() == null || session == null) {
+            return;
+        }
+        Object pathValue = request.getArguments().get("path");
+        String path = pathValue == null ? "" : String.valueOf(pathValue).trim();
+        Integer offset = readIntegerArg(request, "offset");
+        Integer limit = readIntegerArg(request, "limit");
+        int normalizedOffset = offset == null ? 1 : Math.max(1, offset.intValue());
+        if (offset == null || offset.intValue() != normalizedOffset) {
+            request.getArguments().put("offset", normalizedOffset);
+        }
+
+        boolean firstRead = !isBlank(path) && !session.hasReadFileRanges(path);
+        if (firstRead && normalizedOffset <= 1) {
+            int normalizedLimit = limit == null ? 0 : Math.max(0, limit.intValue());
+            if (normalizedLimit == 0 || normalizedLimit < 600) {
+                request.getArguments().put("limit", 1200);
+            }
+        }
+    }
+
+    private void normalizePathArg(ToolInvocation request, AgentSession session, String key) {
+        Object value = request.getArguments().get(key);
+        if (value == null) {
+            return;
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return;
+        }
+        String workingDirectory = session.getWorkingDirectory();
+        if (isBlank(workingDirectory)) {
+            return;
+        }
+        try {
+            Path workingDirectoryPath = Paths.get(workingDirectory).normalize();
+            Path root = Paths.get(workingDirectory).toAbsolutePath().normalize();
+            Path candidate = Paths.get(text);
+            if (!candidate.isAbsolute()) {
+                // 模型经常只返回相对文件名，这里统一补齐到当前会话工作目录下，
+                // 避免工具层再按更上层的 workspaceRoot 解析，最终写错目录。
+                Path normalizedCandidate = candidate.normalize();
+                if (startsWithPath(normalizedCandidate, workingDirectoryPath)) {
+                    request.getArguments().put(
+                            key,
+                            resolveWorkingDirectoryBase(root, workingDirectoryPath).resolve(normalizedCandidate).normalize().toString()
+                    );
+                    return;
+                }
+                request.getArguments().put(key, root.resolve(normalizedCandidate).normalize().toString());
+                return;
+            }
+            Path normalized = candidate.toAbsolutePath().normalize();
+            if (normalized.startsWith(root)) {
+                request.getArguments().put(key, normalized.toString());
+            }
+        } catch (Exception ignored) {
+            // 忽略路径标准化失败。
+        }
+    }
+
+    private boolean startsWithPath(Path path, Path prefix) {
+        if (path == null || prefix == null) {
+            return false;
+        }
+        if (prefix.getNameCount() == 0 || path.getNameCount() < prefix.getNameCount()) {
+            return false;
+        }
+        for (int index = 0; index < prefix.getNameCount(); index++) {
+            if (!String.valueOf(path.getName(index)).equals(String.valueOf(prefix.getName(index)))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Path resolveWorkingDirectoryBase(Path absoluteWorkingDirectory, Path configuredWorkingDirectory) {
+        Path base = absoluteWorkingDirectory;
+        if (absoluteWorkingDirectory == null || configuredWorkingDirectory == null || configuredWorkingDirectory.isAbsolute()) {
+            return base;
+        }
+        for (int index = 0; index < configuredWorkingDirectory.getNameCount(); index++) {
+            if (base.getParent() == null) {
+                break;
+            }
+            base = base.getParent();
+        }
+        return base;
+    }
+
+    private String buildHumanDecisionMessage(ToolInvocation request, FinalResult turn, HumanDecision decision) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("人工决策[").append(decision.getDecisionLabel()).append("]: ");
+        builder.append(request.getToolName());
+        String file = readStringArg(request, "file");
+        if (!isBlank(file)) {
+            builder.append(" -> ").append(file);
+        }
+        if (!isBlank(turn.getUncertaintyReason())) {
+            builder.append(" | 不确定原因: ").append(turn.getUncertaintyReason());
+        }
+        if (!isBlank(decision.getFeedback())) {
+            builder.append(" | ").append(decision.getFeedback());
+        }
+        return builder.toString();
+    }
+
+    private boolean shouldRequireHumanConfirmation(FinalResult turn, ToolInvocation request, AgentSession session) {
+        if (Boolean.TRUE.equals(turn.getRequiresHumanConfirmation())) {
+            return true;
+        }
+        if (!isBlank(turn.getUncertaintyReason())) {
+            return true;
+        }
+        if (request == null) {
+            return true;
+        }
+        String toolName = request.getToolName();
+        if ("delete_file".equals(toolName) || "apply_structured_patch".equals(toolName)) {
+            return true;
+        }
+        return isBlank(resolveWriteTargetPath(request));
+    }
+
+    private FinalResult toConfirmationState(ToolInvocation request) {
+        FinalResult finalResult = new FinalResult();
+        finalResult.setStatus("TOOL_CALL");
+        finalResult.setSummary("准备执行文件修改");
+        Object requiresHumanConfirmation = request.getArguments().get("requiresHumanConfirmation");
+        if (requiresHumanConfirmation instanceof Boolean) {
+            finalResult.setRequiresHumanConfirmation((Boolean) requiresHumanConfirmation);
+        } else if (requiresHumanConfirmation != null) {
+            finalResult.setRequiresHumanConfirmation(Boolean.valueOf(String.valueOf(requiresHumanConfirmation)));
+        }
+        Object uncertaintyReason = request.getArguments().get("uncertaintyReason");
+        if (uncertaintyReason != null) {
+            finalResult.setUncertaintyReason(String.valueOf(uncertaintyReason));
+        }
+        return finalResult;
+    }
+
+    private boolean flushParallelBatch(List<ToolInvocation> parallelBatch,
+                                       List<String> parallelSignatures,
+                                       List<ModelToolCall> parallelToolCalls,
+                                       AgentSession session,
+                                       List<ModelToolCall> executedToolCalls,
+                                       List<ModelMessage> toolResultMessages) {
+        if (parallelBatch.isEmpty()) {
+            return true;
+        }
+
+        List<ToolExecutionRecord> records = toolExecutor.executeBatch(new ArrayList<ToolInvocation>(parallelBatch));
+        parallelBatch.clear();
+        for (int index = 0; index < records.size(); index++) {
+            ToolExecutionRecord record = records.get(index);
+            String requestSignature = parallelSignatures.size() > index
+                    ? parallelSignatures.get(index)
+                    : ToolRequestSignature.from(record.getRequest());
+            sessionStore.appendEvent(SessionEventFactory.toolCall(session.getSessionId(), record.getRequest(), record.getResult()));
+            rememberExecutedToolCall(executedToolCalls, parallelToolCalls.size() > index ? parallelToolCalls.get(index) : null);
+            if (!record.getResult().isSuccess()) {
+                loopGuard.recordFailure(session, requestSignature);
+                session.appendSystemFeedback(record.getResult().getErrorMessage());
+                appendParallelToolResultMessage(parallelToolCalls, index, toolResultMessages, record.getResult().getErrorMessage());
+                replanService.requestReplan(session, record.getResult().getErrorMessage());
+                parallelSignatures.clear();
+                parallelToolCalls.clear();
+                return false;
+            }
+
+            loopGuard.recordSuccess(session, requestSignature, false);
+            rememberContextAfterToolSuccess(session, record.getRequest());
+            appendParallelToolResultMessage(parallelToolCalls, index, toolResultMessages, record.getResult().getContentForModel());
+            rememberReadFileSnippetIfAny(session, record.getRequest(), record.getResult().getContentForModel());
+            session.appendToolResult(record.getResult().getContentForModel());
+        }
+        parallelSignatures.clear();
+        parallelToolCalls.clear();
+        return true;
+    }
+
+    private void rememberContextAfterToolSuccess(AgentSession session, ToolInvocation request) {
+        if (session == null || request == null || request.getArguments() == null) {
+            return;
+        }
+        String tool = request.getToolName();
+        if ("read_file".equals(tool)) {
+            String path = readStringArg(request, "path");
+            if (!isBlank(path)) {
+                session.appendContextFile(path);
+                Integer offset = readIntegerArg(request, "offset");
+                Integer limit = readIntegerArg(request, "limit");
+                if (offset != null && limit != null) {
+                    session.rememberReadFileRange(path, offset, limit);
+                }
+            }
+            return;
+        }
+        if ("edit_file".equals(tool) || "write_file".equals(tool)) {
+            String path = readStringArg(request, "path");
+            if (!isBlank(path)) {
+                session.appendContextFile(path);
+            }
+            return;
+        }
+        if ("edit_code".equals(tool)) {
+            String file = readStringArg(request, "file");
+            if (!isBlank(file)) {
+                session.appendContextFile(file);
+            }
+            return;
+        }
+        if ("search_in_files".equals(tool) || "global_search".equals(tool)) {
+            String dir = readStringArg(request, "path");
+            if (isBlank(dir)) {
+                dir = readStringArg(request, "directory");
+            }
+        }
+    }
+
+    private Integer readIntegerArg(ToolInvocation request, String key) {
+        Object value = request.getArguments().get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(text);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String readStringArg(ToolInvocation request, String key) {
+        Object value = request.getArguments().get(key);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private void appendParallelToolResultMessage(List<ModelToolCall> parallelToolCalls,
+                                                 int index,
+                                                 List<ModelMessage> toolResultMessages,
+                                                 String content) {
+        if (parallelToolCalls == null || parallelToolCalls.size() <= index) {
+            return;
+        }
+        ModelToolCall toolCall = parallelToolCalls.get(index);
+        if (toolCall == null) {
+            return;
+        }
+        appendToolResultMessage(toolResultMessages, toolCall, content);
+    }
+
+    private void appendToolResultMessage(List<ModelMessage> toolResultMessages,
+                                         ModelToolCall toolCall,
+                                         String content) {
+        if (toolResultMessages == null || toolCall == null || isBlank(content)) {
+            return;
+        }
+        toolResultMessages.add(ModelMessage.toolResult(toolCall.getId(), toolCall.getName(), content));
+    }
+
+    private void rememberReadFileSnippetIfAny(AgentSession session, ToolInvocation request, String contentForModel) {
+        if (session == null || request == null || contentForModel == null) {
+            return;
+        }
+        if (!"read_file".equals(request.getToolName())) {
+            return;
+        }
+        String path = readStringArg(request, "path");
+        Integer offset = readIntegerArg(request, "offset");
+        Integer limit = readIntegerArg(request, "limit");
+        if (isBlank(path) || offset == null || limit == null) {
+            return;
+        }
+        String snippet = extractPreview(contentForModel);
+        if (!isBlank(snippet)) {
+            session.rememberReadFileSnippet(path, offset, limit, snippet);
+        }
+    }
+
+    private String extractPreview(String contentForModel) {
+        String normalized = contentForModel.replace("\r", "");
+        int index = normalized.indexOf("\npreview:\n");
+        if (index < 0) {
+            return "";
+        }
+        return normalized.substring(index + "\npreview:\n".length()).trim();
+    }
+
+    private void rememberExecutedToolCall(List<ModelToolCall> executedToolCalls, ModelToolCall toolCall) {
+        if (executedToolCalls == null || toolCall == null || isBlank(toolCall.getId()) || isBlank(toolCall.getName())) {
+            return;
+        }
+        for (ModelToolCall existing : executedToolCalls) {
+            if (existing != null && toolCall.getId().equals(existing.getId())) {
+                return;
+            }
+        }
+        executedToolCalls.add(toolCall);
+    }
+
+    private void flushExecutedToolTranscript(AgentSession session,
+                                             String assistantContent,
+                                             String assistantReasoningContent,
+                                             List<ModelToolCall> executedToolCalls,
+                                             List<ModelMessage> toolResultMessages) {
+        if (session == null) {
+            return;
+        }
+        if (executedToolCalls != null && !executedToolCalls.isEmpty()) {
+            session.appendAssistantToolCalls(assistantContent, assistantReasoningContent, executedToolCalls);
+            if (toolResultMessages != null) {
+                for (ModelMessage toolResultMessage : toolResultMessages) {
+                    if (toolResultMessage == null || !toolResultMessage.isToolResult()) {
+                        continue;
+                    }
+                    session.appendToolResultMessage(
+                            toolResultMessage.getToolCallId(),
+                            toolResultMessage.getToolName(),
+                            toolResultMessage.getContent()
+                    );
+                }
+            }
+            return;
+        }
+        if (!isBlank(assistantContent) || !isBlank(assistantReasoningContent)) {
+            session.appendAssistantMessage(assistantContent, assistantReasoningContent);
+        }
+    }
+
+    private void assignMissingToolCallIds(List<ModelToolCall> toolCalls) {
+        if (toolCalls == null) {
+            return;
+        }
+        int sequence = 1;
+        for (ModelToolCall toolCall : toolCalls) {
+            if (toolCall != null && isBlank(toolCall.getId())) {
+                toolCall.setId("tool-call-" + sequence);
+            }
+            sequence++;
+        }
+    }
+
+    private String resolveWriteTargetPath(ToolInvocation request) {
+        String file = readStringArg(request, "file");
+        if (!isBlank(file)) {
+            return file;
+        }
+        String path = readStringArg(request, "path");
+        if (!isBlank(path)) {
+            return path;
+        }
+        return "";
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+}

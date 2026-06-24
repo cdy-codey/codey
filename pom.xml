@@ -1,0 +1,34 @@
+﻿<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.codey</groupId>
+    <artifactId>codey</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>codey</name>
+    <description>Parent build for the codey common and core modules.</description>
+
+    <properties>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <spring.boot.version>2.7.18</spring.boot.version>
+        <picocli.version>4.7.6</picocli.version>
+        <jackson.version>2.18.2</jackson.version>
+        <slf4j.version>1.7.36</slf4j.version>
+        <logback.version>1.2.13</logback.version>
+        <junit.version>5.11.4</junit.version>
+        <assertj.version>3.27.2</assertj.version>
+        <mockito.version>5.15.2</mockito.version>
+    </properties>
+
+    <modules>
+        <module>codey-common</module>
+        <module>codey-core</module>
+        <module>codey-console</module>
+        <module>codey-boot-starter</module>
+        <module>codey-demo-api</module>
+    </modules>
+</project>

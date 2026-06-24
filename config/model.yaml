@@ -1,0 +1,11 @@
+﻿provider: http
+endpoint: "https://api.deepseek.com/chat/completions"
+modelName: "deepseek-v4-pro"
+apiKey: "sk-d24de3ac58ed46fe901e89caf5c92ec4"
+apiKeyEnv: _MODEL_API_KEY
+temperature: 0.2
+debugEnabled: false
+debugDir: sessions/model-debug
+connectTimeoutMillis: 10000
+readTimeoutMillis: 30000
+maxRetries: 2

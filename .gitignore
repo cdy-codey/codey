@@ -1,0 +1,18 @@
+# Build outputs
+**/target/**
+
+# Log files
+*.log
+**/*.log
+logs/
+**/logs/
+# Local runtime logs/artifacts (do not commit)
+**/sessions/
+**/workspace/
+**/node_modules/
+**/.vscode/
+.idea/
+**/.idea/
+# Claude Code
+/.claude/
+sessions/
