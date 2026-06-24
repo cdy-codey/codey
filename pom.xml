@@ -1,19 +1,44 @@
-﻿<project xmlns="http://maven.apache.org/POM/4.0.0"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.codey</groupId>
+    <groupId>io.github.cdy-codey</groupId>
     <artifactId>codey</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
     <name>codey</name>
-    <description>Parent build for the codey common and core modules.</description>
+    <description>Codey parent build and public release definition for common, core and Spring Boot starter modules.</description>
+    <url>https://github.com/cdy-codey/codey</url>
+
+    <licenses>
+        <license>
+            <name>Apache License 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>cdy</id>
+            <name>cdy</name>
+            <email>273797002@qq.com</email>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/cdy-codey/codey.git</connection>
+        <developerConnection>scm:git:https://github.com/cdy-codey/codey.git</developerConnection>
+        <url>https://github.com/cdy-codey/codey</url>
+        <tag>v0.1.0</tag>
+    </scm>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <spring.boot.version>2.7.18</spring.boot.version>
         <picocli.version>4.7.6</picocli.version>
         <jackson.version>2.18.2</jackson.version>
@@ -22,6 +47,14 @@
         <junit.version>5.11.4</junit.version>
         <assertj.version>3.27.2</assertj.version>
         <mockito.version>5.15.2</mockito.version>
+        <maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
+        <maven.surefire.plugin.version>2.22.2</maven.surefire.plugin.version>
+        <maven.source.plugin.version>3.3.1</maven.source.plugin.version>
+        <maven.javadoc.plugin.version>3.6.3</maven.javadoc.plugin.version>
+        <maven.gpg.plugin.version>1.6</maven.gpg.plugin.version>
+        <maven.deploy.plugin.version>3.1.2</maven.deploy.plugin.version>
+        <central.publishing.plugin.version>0.7.0</central.publishing.plugin.version>
+        <gpg.keyname>${env.GPG_KEY_ID}</gpg.keyname>
     </properties>
 
     <modules>
@@ -31,4 +64,108 @@
         <module>codey-boot-starter</module>
         <module>codey-demo-api</module>
     </modules>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven.compiler.plugin.version}</version>
+                    <configuration>
+                        <encoding>${project.build.sourceEncoding}</encoding>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${maven.surefire.plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>${maven.deploy.plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <!-- 正式发布时同时附带源码包，便于第三方在 IDE 中查看源码。 -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>${maven.source.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- Central 要求提供 javadoc 产物，doclint 关闭可以兼容现有 Java 8 代码。 -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven.javadoc.plugin.version}</version>
+                        <configuration>
+                            <encoding>${project.build.sourceEncoding}</encoding>
+                            <source>${maven.compiler.source}</source>
+                            <doclint>none</doclint>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- GPG 签名是公共 Maven 仓库发布的基础要求。 -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>${maven.gpg.plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <keyname>${gpg.keyname}</keyname>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <!-- 使用 Sonatype Central Portal 插件上传到公共 Maven 仓库。 -->
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central.publishing.plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <tokenAuth>true</tokenAuth>
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>published</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
