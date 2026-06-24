@@ -184,9 +184,42 @@ Codey 的价值就在于把这些信息组织起来，让 AI 真正进入业务�
 - 当前仓库已经包含演示用途的前后端示例，适合用于产品讨论、原型验证和技术预研。
 - 如需对接企业内模型、内网 API、业务系统或低代码平台，可以在现有模块基础上扩展集成。
 
-## demo示例
-- demo 是实际项目剥离出来，力求简洁易懂
-![导航页面](image%E5%AF%BC%E8%88%AA%E9%A1%B5.png)
-![底代码平台表单](image%E5%BA%95%E4%BB%A3%E7%A0%81%E5%B9%B3%E5%8F%B0%E4%BD%BF%E7%94%A8%E7%A4%BA%E4%BE%8B.png)
-![业务表单业务处理](image%E4%B8%9A%E5%8A%A1%E7%A4%BA%E4%BE%8B.png)
+## Demo示例
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <a href="./docs/images/image导航页.png">
+        <img src="./docs/images/image导航页.png" alt="Codey 示例导航页面" width="100%" />
+      </a>
+    </td>
+    <td align="center" width="33%">
+      <a href="./docs/images/image底代码平台使用示例.png">
+        <img src="./docs/images/image底代码平台使用示例.png" alt="Codey 低代码平台表单示例" width="100%" />
+      </a>
+    </td>
+    <td align="center" width="33%">
+      <a href="./docs/images/image业务示例.png">
+        <img src="./docs/images/image业务示例.png" alt="Codey 业务表单处理示例" width="100%" />
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <strong>导航页面</strong><br/>
+      统一展示全部 Demo 入口，便于快速选择业务示例、源码示例和表单示例。 <br/>
+      <a href="./docs/images/image导航页.png">点击查看大图</a>
+    </td>
+    <td align="center">
+      <strong>低代码平台表单示例</strong><br/>
+      展示 AI 在低代码表单场景中的字段理解、表单回填和页面协同能力。 <br/>
+      <a href="./docs/images/image底代码平台使用示例.png">点击查看大图</a>
+    </td>
+    <td align="center">
+      <strong>业务表单处理示例</strong><br/>
+      展示结合业务上下文进行表单处理、业务补全和协作执行的实际效果。 <br/>
+      <a href="./docs/images/image业务示例.png">点击查看大图</a>
+    </td>
+  </tr>
+</table>
 
