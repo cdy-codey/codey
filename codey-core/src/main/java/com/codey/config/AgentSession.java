@@ -15,6 +15,7 @@ public class AgentSession {
     private static final int MAX_MODEL_TRANSCRIPT = 24;
 
     private final String sessionId;
+    private ModelProperties modelConfig;
     private final SessionContextState sessionContext = new SessionContextState();
     private final ConversationState conversationState = new ConversationState(MAX_CHAT_HISTORY);
     private final ExecutionState executionState = new ExecutionState(MAX_MODEL_TRANSCRIPT);
@@ -30,6 +31,15 @@ public class AgentSession {
 
     public String getSessionId() {
         return sessionId;
+    }
+
+    public ModelProperties getModelConfig() {
+        return copyModelConfig(modelConfig);
+    }
+
+    public void setModelConfig(ModelProperties modelConfig) {
+        // 会话创建时冻结一份模型配置快照，后续轮次只读这份内存态配置。
+        this.modelConfig = copyModelConfig(modelConfig);
     }
 
     public String getSkillName() {
@@ -293,5 +303,22 @@ public class AgentSession {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private ModelProperties copyModelConfig(ModelProperties source) {
+        if (source == null) {
+            return null;
+        }
+        ModelProperties copy = new ModelProperties();
+        copy.setProvider(source.getProvider());
+        copy.setEndpoint(source.getEndpoint());
+        copy.setModelName(source.getModelName());
+        copy.setApiKey(source.getApiKey());
+        copy.setApiKeyEnv(source.getApiKeyEnv());
+        copy.setTemperature(source.getTemperature());
+        copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
+        copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
+        copy.setMaxRetries(source.getMaxRetries());
+        return copy;
     }
 }

@@ -1,5 +1,6 @@
 package com.codey.infra;
 
+import com.codey.config.ModelProperties;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ public class ModelRequest {
     private String sessionId;
     private List<ModelMessage> messages = new ArrayList<ModelMessage>();
     private List<ModelToolDefinition> tools = new ArrayList<ModelToolDefinition>();
+    private ModelProperties modelConfig;
     private ModelStreamListener streamListener;
 
     public String getSessionId() {
@@ -38,6 +40,15 @@ public class ModelRequest {
         this.tools = tools == null ? new ArrayList<ModelToolDefinition>() : new ArrayList<ModelToolDefinition>(tools);
     }
 
+    @JsonIgnore
+    public ModelProperties getModelConfig() {
+        return copyModelConfig(modelConfig);
+    }
+
+    public void setModelConfig(ModelProperties modelConfig) {
+        this.modelConfig = copyModelConfig(modelConfig);
+    }
+
     /**
      * 流式监听器只用于运行期回调，不应进入落盘日志或模型输入快照。
      */
@@ -48,5 +59,22 @@ public class ModelRequest {
 
     public void setStreamListener(ModelStreamListener streamListener) {
         this.streamListener = streamListener;
+    }
+
+    private ModelProperties copyModelConfig(ModelProperties source) {
+        if (source == null) {
+            return null;
+        }
+        ModelProperties copy = new ModelProperties();
+        copy.setProvider(source.getProvider());
+        copy.setEndpoint(source.getEndpoint());
+        copy.setModelName(source.getModelName());
+        copy.setApiKey(source.getApiKey());
+        copy.setApiKeyEnv(source.getApiKeyEnv());
+        copy.setTemperature(source.getTemperature());
+        copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
+        copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
+        copy.setMaxRetries(source.getMaxRetries());
+        return copy;
     }
 }

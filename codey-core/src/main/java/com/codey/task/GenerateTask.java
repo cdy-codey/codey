@@ -1,5 +1,7 @@
 package com.codey.task;
 
+import com.codey.config.ModelProperties;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,6 +20,7 @@ public class GenerateTask {
     private List<String> contextNotes = new ArrayList<String>();
     private List<String> chatHistory = new ArrayList<String>();
     private List<String> identities = new ArrayList<String>();
+    private ModelProperties modelConfig;
 
     public String getSessionId() {
         return sessionId;
@@ -97,5 +100,30 @@ public class GenerateTask {
 
     public void setIdentities(List<String> identities) {
         this.identities = identities == null ? new ArrayList<String>() : new ArrayList<String>(identities);
+    }
+
+    public ModelProperties getModelConfig() {
+        return copyModelConfig(modelConfig);
+    }
+
+    public void setModelConfig(ModelProperties modelConfig) {
+        this.modelConfig = copyModelConfig(modelConfig);
+    }
+
+    private ModelProperties copyModelConfig(ModelProperties source) {
+        if (source == null) {
+            return null;
+        }
+        ModelProperties copy = new ModelProperties();
+        copy.setProvider(source.getProvider());
+        copy.setEndpoint(source.getEndpoint());
+        copy.setModelName(source.getModelName());
+        copy.setApiKey(source.getApiKey());
+        copy.setApiKeyEnv(source.getApiKeyEnv());
+        copy.setTemperature(source.getTemperature());
+        copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
+        copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
+        copy.setMaxRetries(source.getMaxRetries());
+        return copy;
     }
 }

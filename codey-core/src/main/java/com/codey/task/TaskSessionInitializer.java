@@ -16,6 +16,7 @@ public class TaskSessionInitializer {
         if (skill != null && skill.definition() != null) {
             session.setSkillName(skill.definition().getName());
         }
+        session.setModelConfig(task.getModelConfig());
         session.setWorkingDirectory(task.getWorkingDirectory());
         session.setTargetPagePath(task.getPagePath());
         session.setApiSpecPath(task.getApiSpecPath());

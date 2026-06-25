@@ -26,6 +26,8 @@
 - 当前 POM 使用 `GitHub` 作为主 `SCM` 地址
 - 当前发布坐标使用 `io.github.cdy-codey`
 - 如果后续变更 GitHub 组织名或仓库名，需要同步更新 `groupId` 和 `SCM`
+- 当前多模块版本由根 POM 的 `revision` 统一管理，发版时只需要修改根 `pom.xml` 这一处
+- `SCM tag` 也已联动为 `v${revision}`，避免发布前再单独修改标签版本
 
 ## Maven settings.xml
 

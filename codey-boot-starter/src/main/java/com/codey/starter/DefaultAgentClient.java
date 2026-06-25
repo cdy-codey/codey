@@ -11,6 +11,9 @@ import java.nio.file.Path;
 class DefaultAgentClient extends TaskRunnerAgentClient {
 
     DefaultAgentClient(TaskRunner taskRunner, SpringProperties properties, Path workspaceRoot) {
-        super(taskRunner, properties.getDefaultSkillName(), workspaceRoot == null ? null : workspaceRoot.toString());
+        super(taskRunner,
+                properties.getDefaultSkillName(),
+                workspaceRoot == null ? null : workspaceRoot.toString(),
+                properties == null ? null : properties.getModel());
     }
 }

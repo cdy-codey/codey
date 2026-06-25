@@ -4,6 +4,7 @@ import com.codey.client.AgentClient;
 import com.codey.client.ChatSession;
 import com.codey.client.RunRequest;
 import com.codey.client.RunResult;
+import com.codey.config.ModelProperties;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -16,15 +17,24 @@ public class TaskRunnerAgentClient implements AgentClient {
     private final TaskRunner taskRunner;
     private final String defaultSkillName;
     private final String defaultWorkingDirectory;
+    private final ModelProperties defaultModelConfig;
     private final ConcurrentMap<String, TaskRunner.ChatSessionHandle> sessions =
             new ConcurrentHashMap<String, TaskRunner.ChatSessionHandle>();
 
     public TaskRunnerAgentClient(TaskRunner taskRunner,
                                  String defaultSkillName,
                                  String defaultWorkingDirectory) {
+        this(taskRunner, defaultSkillName, defaultWorkingDirectory, null);
+    }
+
+    public TaskRunnerAgentClient(TaskRunner taskRunner,
+                                 String defaultSkillName,
+                                 String defaultWorkingDirectory,
+                                 ModelProperties defaultModelConfig) {
         this.taskRunner = taskRunner;
         this.defaultSkillName = defaultSkillName;
         this.defaultWorkingDirectory = defaultWorkingDirectory;
+        this.defaultModelConfig = copyModelConfig(defaultModelConfig);
     }
 
     @Override
@@ -82,6 +92,7 @@ public class TaskRunnerAgentClient implements AgentClient {
         task.setContextNotes(source.getContextNotes());
         task.setChatHistory(source.getChatHistory());
         task.setIdentities(source.getIdentities());
+        task.setModelConfig(resolveModelConfig(source));
         return task;
     }
 
@@ -111,5 +122,29 @@ public class TaskRunnerAgentClient implements AgentClient {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private ModelProperties resolveModelConfig(RunRequest request) {
+        if (request != null && request.getModelConfig() != null) {
+            return request.getModelConfig();
+        }
+        return copyModelConfig(defaultModelConfig);
+    }
+
+    private ModelProperties copyModelConfig(ModelProperties source) {
+        if (source == null) {
+            return null;
+        }
+        ModelProperties copy = new ModelProperties();
+        copy.setProvider(source.getProvider());
+        copy.setEndpoint(source.getEndpoint());
+        copy.setModelName(source.getModelName());
+        copy.setApiKey(source.getApiKey());
+        copy.setApiKeyEnv(source.getApiKeyEnv());
+        copy.setTemperature(source.getTemperature());
+        copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
+        copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
+        copy.setMaxRetries(source.getMaxRetries());
+        return copy;
     }
 }

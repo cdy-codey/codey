@@ -1,5 +1,7 @@
 package com.codey.client;
 
+import com.codey.config.ModelProperties;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,6 +19,7 @@ public class RunRequest {
     private List<String> contextNotes = new ArrayList<String>();
     private List<String> chatHistory = new ArrayList<String>();
     private List<String> identities = new ArrayList<String>();
+    private ModelProperties modelConfig;
     private boolean includeThinking = true;
 
     public static RunRequest ofGoal(String goal) {
@@ -105,6 +108,14 @@ public class RunRequest {
         this.identities = copyList(identities);
     }
 
+    public ModelProperties getModelConfig() {
+        return copyModelConfig(modelConfig);
+    }
+
+    public void setModelConfig(ModelProperties modelConfig) {
+        this.modelConfig = copyModelConfig(modelConfig);
+    }
+
     public boolean isIncludeThinking() {
         return includeThinking;
     }
@@ -115,5 +126,22 @@ public class RunRequest {
 
     private List<String> copyList(List<String> source) {
         return source == null ? new ArrayList<String>() : new ArrayList<String>(source);
+    }
+
+    private ModelProperties copyModelConfig(ModelProperties source) {
+        if (source == null) {
+            return null;
+        }
+        ModelProperties copy = new ModelProperties();
+        copy.setProvider(source.getProvider());
+        copy.setEndpoint(source.getEndpoint());
+        copy.setModelName(source.getModelName());
+        copy.setApiKey(source.getApiKey());
+        copy.setApiKeyEnv(source.getApiKeyEnv());
+        copy.setTemperature(source.getTemperature());
+        copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
+        copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
+        copy.setMaxRetries(source.getMaxRetries());
+        return copy;
     }
 }

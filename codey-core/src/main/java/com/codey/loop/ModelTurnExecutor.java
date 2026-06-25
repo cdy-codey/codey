@@ -91,6 +91,7 @@ final class ModelTurnExecutor {
         ModelRequest request = new ModelRequest();
         final String sessionId = session == null ? null : session.getSessionId();
         request.setSessionId(sessionId);
+        request.setModelConfig(session == null ? null : session.getModelConfig());
         request.setMessages(promptPackage == null ? null : promptPackage.getMessages());
         request.setTools(toolRegistry.getToolDefinitions(visibleTools));
         request.setStreamListener(new ModelStreamListener() {

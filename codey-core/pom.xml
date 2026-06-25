@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.github.cdy-codey</groupId>
         <artifactId>codey</artifactId>
-        <version>0.1.1</version>
+        <version>${revision}</version>
     </parent>
 
     <artifactId>codey-core</artifactId>

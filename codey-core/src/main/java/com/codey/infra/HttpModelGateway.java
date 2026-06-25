@@ -1,5 +1,6 @@
 package com.codey.infra;
 
+import com.codey.config.ModelProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -48,11 +49,12 @@ public class HttpModelGateway implements ModelGateway {
 
     @Override
     public ModelResponse chat(ModelRequest request) {
+        ModelConfig effectiveConfig = resolveConfig(request);
         Exception lastException = null;
-        int attempts = Math.max(1, config.getMaxRetries() + 1);
+        int attempts = Math.max(1, effectiveConfig.getMaxRetries() + 1);
         for (int attempt = 1; attempt <= attempts; attempt++) {
             try {
-                return doChat(request);
+                return doChat(request, effectiveConfig);
             } catch (Exception exception) {
                 lastException = exception;
                 LOGGER.warn("HTTP model call failed on attempt {}/{}: {}", Integer.valueOf(attempt),
@@ -62,22 +64,22 @@ public class HttpModelGateway implements ModelGateway {
         throw new IllegalStateException("Failed to call HTTP model gateway after retries", lastException);
     }
 
-    private ModelResponse doChat(ModelRequest request) throws Exception {
+    private ModelResponse doChat(ModelRequest request, ModelConfig effectiveConfig) throws Exception {
         HttpURLConnection connection = null;
         String requestBody = null;
         try {
-            URL url = new URL(config.getEndpoint());
+            URL url = new URL(effectiveConfig.getEndpoint());
             connection = (HttpURLConnection) url.openConnection();
-            connection.setConnectTimeout(config.getConnectTimeoutMillis());
-            connection.setReadTimeout(config.getReadTimeoutMillis());
+            connection.setConnectTimeout(effectiveConfig.getConnectTimeoutMillis());
+            connection.setReadTimeout(effectiveConfig.getReadTimeoutMillis());
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
-            if (config.getApiKey() != null && !config.getApiKey().trim().isEmpty()) {
-                connection.setRequestProperty("Authorization", "Bearer " + config.getApiKey());
+            if (effectiveConfig.getApiKey() != null && !effectiveConfig.getApiKey().trim().isEmpty()) {
+                connection.setRequestProperty("Authorization", "Bearer " + effectiveConfig.getApiKey());
             }
 
-            requestBody = buildRequestBody(request);
+            requestBody = buildRequestBody(request, effectiveConfig);
             writeWireRequestLog(request, requestBody);
             byte[] body = requestBody.getBytes(StandardCharsets.UTF_8);
             OutputStream outputStream = connection.getOutputStream();
@@ -89,19 +91,19 @@ public class HttpModelGateway implements ModelGateway {
             InputStream inputStream = statusCode >= 400 ? connection.getErrorStream() : connection.getInputStream();
             if (statusCode >= 400) {
                 String response = readAll(inputStream);
-                writeDebugLog("error", requestBody, response);
+                writeDebugLog("error", requestBody, response, effectiveConfig);
                 throw new IllegalStateException("Model HTTP error " + statusCode + ": " + response);
             }
 
             String contentType = connection.getHeaderField("Content-Type");
             if (contentType != null && contentType.toLowerCase().contains("text/event-stream")) {
-                ModelResponse streamedResponse = readStreamingResponse(inputStream, request.getStreamListener());
-                writeDebugLog("success", requestBody, streamedResponse.getRawResponse());
+                ModelResponse streamedResponse = readStreamingResponse(inputStream, request.getStreamListener(), effectiveConfig);
+                writeDebugLog("success", requestBody, streamedResponse.getRawResponse(), effectiveConfig);
                 return streamedResponse;
             }
 
             String response = readAll(inputStream);
-            writeDebugLog("success", requestBody, response);
+            writeDebugLog("success", requestBody, response, effectiveConfig);
             return parseModelResponse(response);
         } finally {
             if (connection != null) {
@@ -140,10 +142,12 @@ public class HttpModelGateway implements ModelGateway {
         return modelResponse;
     }
 
-    private ModelResponse readStreamingResponse(InputStream inputStream, ModelStreamListener streamListener) throws Exception {
+    private ModelResponse readStreamingResponse(InputStream inputStream,
+                                               ModelStreamListener streamListener,
+                                               ModelConfig effectiveConfig) throws Exception {
         BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
         HttpStreamingResponseAssembler assembler =
-                new HttpStreamingResponseAssembler(objectMapper, config.getModelName(), streamListener);
+                new HttpStreamingResponseAssembler(objectMapper, effectiveConfig.getModelName(), streamListener);
         String line;
         while ((line = reader.readLine()) != null) {
             if (!line.startsWith("data: ")) {
@@ -178,12 +182,13 @@ public class HttpModelGateway implements ModelGateway {
         return normalized;
     }
 
-    private String buildRequestBody(ModelRequest request) throws Exception {
+    private String buildRequestBody(ModelRequest request, ModelConfig effectiveConfig) throws Exception {
         Map<String, Object> body = new LinkedHashMap<String, Object>();
-        body.put("model", config.getModelName());
+        body.put("model", effectiveConfig.getModelName());
         List<Map<String, Object>> messages = buildWireMessages(request);
         body.put("messages", messages);
-        body.put("temperature", config.getTemperature() == null ? Double.valueOf(0.2d) : config.getTemperature());
+        body.put("temperature",
+                effectiveConfig.getTemperature() == null ? Double.valueOf(0.2d) : effectiveConfig.getTemperature());
         body.put("stream", Boolean.TRUE);
         if (request.getTools() != null && !request.getTools().isEmpty()) {
             body.put("tools", buildOpenAiTools(request.getTools()));
@@ -550,35 +555,109 @@ public class HttpModelGateway implements ModelGateway {
         return builder.toString();
     }
 
-    private void writeDebugLog(String status, String requestBody, String responseBody) {
-        if (!config.isDebugEnabled()) {
+    private void writeDebugLog(String status, String requestBody, String responseBody, ModelConfig effectiveConfig) {
+        if (effectiveConfig == null || !effectiveConfig.isDebugEnabled()) {
             return;
         }
         try {
-            Path debugDir = Paths.get(config.getDebugDir());
+            Path debugDir = Paths.get(effectiveConfig.getDebugDir());
             Files.createDirectories(debugDir);
             String fileName = System.currentTimeMillis() + "-" + status + "-" + UUID.randomUUID().toString() + ".log";
             Path file = debugDir.resolve(fileName);
             StringBuilder builder = new StringBuilder();
-            builder.append("endpoint: ").append(config.getEndpoint()).append(System.lineSeparator());
-            builder.append("model: ").append(config.getModelName()).append(System.lineSeparator());
-            builder.append("request: ").append(maskApiKey(requestBody)).append(System.lineSeparator());
-            builder.append("response: ").append(maskApiKey(responseBody)).append(System.lineSeparator());
+            builder.append("endpoint: ").append(effectiveConfig.getEndpoint()).append(System.lineSeparator());
+            builder.append("model: ").append(effectiveConfig.getModelName()).append(System.lineSeparator());
+            builder.append("request: ").append(maskApiKey(requestBody, effectiveConfig)).append(System.lineSeparator());
+            builder.append("response: ").append(maskApiKey(responseBody, effectiveConfig)).append(System.lineSeparator());
             Files.write(file, builder.toString().getBytes(StandardCharsets.UTF_8));
         } catch (Exception exception) {
             LOGGER.warn("Failed to write model debug log: {}", exception.getMessage());
         }
     }
 
-    private String maskApiKey(String content) {
+    private String maskApiKey(String content, ModelConfig effectiveConfig) {
         if (content == null) {
             return "";
         }
         String masked = content;
-        if (config.getApiKey() != null && !config.getApiKey().trim().isEmpty()) {
-            masked = masked.replace(config.getApiKey(), "***");
+        if (effectiveConfig != null
+                && effectiveConfig.getApiKey() != null
+                && !effectiveConfig.getApiKey().trim().isEmpty()) {
+            masked = masked.replace(effectiveConfig.getApiKey(), "***");
         }
         return masked;
+    }
+
+    /**
+     * 启动期配置提供默认值，会话内模型配置快照只覆盖当前会话显式指定的字段。
+     */
+    private ModelConfig resolveConfig(ModelRequest request) {
+        ModelConfig resolved = copyBaseConfig();
+        applySessionOverrides(resolved, request == null ? null : request.getModelConfig());
+        return resolved;
+    }
+
+    private ModelConfig copyBaseConfig() {
+        ModelConfig copy = new ModelConfig();
+        copy.setProvider(config.getProvider());
+        copy.setEndpoint(config.getEndpoint());
+        copy.setApiKey(config.getApiKey());
+        copy.setApiKeyEnv(config.getApiKeyEnv());
+        copy.setModelName(config.getModelName());
+        copy.setTemperature(config.getTemperature());
+        copy.setDebugEnabled(config.isDebugEnabled());
+        copy.setDebugDir(config.getDebugDir());
+        copy.setConnectTimeoutMillis(config.getConnectTimeoutMillis());
+        copy.setReadTimeoutMillis(config.getReadTimeoutMillis());
+        copy.setMaxRetries(config.getMaxRetries());
+        return copy;
+    }
+
+    private void applySessionOverrides(ModelConfig target, ModelProperties sessionConfig) {
+        if (target == null || sessionConfig == null) {
+            return;
+        }
+        if (!isBlank(sessionConfig.getProvider())) {
+            target.setProvider(sessionConfig.getProvider());
+        }
+        if (!isBlank(sessionConfig.getEndpoint())) {
+            target.setEndpoint(sessionConfig.getEndpoint());
+        }
+        if (!isBlank(sessionConfig.getModelName())) {
+            target.setModelName(sessionConfig.getModelName());
+        }
+        if (!isBlank(sessionConfig.getApiKey())) {
+            target.setApiKey(sessionConfig.getApiKey());
+        }
+        if (!isBlank(sessionConfig.getApiKeyEnv())) {
+            target.setApiKeyEnv(sessionConfig.getApiKeyEnv());
+        }
+        if (sessionConfig.getTemperature() != null) {
+            target.setTemperature(sessionConfig.getTemperature());
+        }
+        if (sessionConfig.getConnectTimeoutMillis() != null) {
+            target.setConnectTimeoutMillis(sessionConfig.getConnectTimeoutMillis().intValue());
+        }
+        if (sessionConfig.getReadTimeoutMillis() != null) {
+            target.setReadTimeoutMillis(sessionConfig.getReadTimeoutMillis().intValue());
+        }
+        if (sessionConfig.getMaxRetries() != null) {
+            target.setMaxRetries(sessionConfig.getMaxRetries().intValue());
+        }
+        target.setApiKey(resolveApiKey(target));
+    }
+
+    private String resolveApiKey(ModelConfig target) {
+        if (target == null) {
+            return null;
+        }
+        if (!isBlank(target.getApiKey())) {
+            return target.getApiKey();
+        }
+        if (!isBlank(target.getApiKeyEnv())) {
+            return System.getenv(target.getApiKeyEnv());
+        }
+        return null;
     }
 
     private List<Map<String, Object>> buildOpenAiTools(List<ModelToolDefinition> definitions) {
