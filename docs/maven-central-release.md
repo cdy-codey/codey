@@ -103,13 +103,13 @@ mvn -Prelease clean deploy
 <dependency>
     <groupId>io.github.cdy-codey</groupId>
     <artifactId>codey-boot-starter</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
 </dependency>
 ```
 
 ## 建议的发布顺序
 
-1. 在仓库中打 Tag：`v0.1.0`
+1. 在仓库中打 Tag：`v0.1.1`
 2. 执行 `mvn -Prelease clean verify`
 3. 执行 `mvn -Prelease clean deploy`
 4. 在 Central Portal 中确认发布状态

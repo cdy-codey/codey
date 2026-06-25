@@ -5,7 +5,7 @@
 
     <groupId>io.github.cdy-codey</groupId>
     <artifactId>codey</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.1</version>
     <packaging>pom</packaging>
     <name>codey</name>
     <description>Codey parent build and public release definition for common, core and Spring Boot starter modules.</description>
@@ -31,7 +31,7 @@
         <connection>scm:git:https://github.com/cdy-codey/codey.git</connection>
         <developerConnection>scm:git:https://github.com/cdy-codey/codey.git</developerConnection>
         <url>https://github.com/cdy-codey/codey</url>
-        <tag>v0.1.0</tag>
+        <tag>v0.1.1</tag>
     </scm>
 
     <properties>

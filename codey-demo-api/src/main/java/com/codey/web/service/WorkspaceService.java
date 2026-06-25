@@ -26,7 +26,7 @@ public class WorkspaceService {
 
     private final WorkspaceDirectoryService delegate;
 
-    public WorkspaceService(WebDemoProperties properties) {
+    public WorkspaceService(WebDemoPoperties properties) {
         this.delegate = new WorkspaceDirectoryService(
                 properties.resolveWorkingDirectoryRoot(),
                 buildIgnoredEntryNames(properties.getSessionDirectory()),
