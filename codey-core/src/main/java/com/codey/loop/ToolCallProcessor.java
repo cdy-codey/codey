@@ -6,10 +6,10 @@ import com.codey.config.AgentSession;
 import com.codey.session.SessionEventFactory;
 import com.codey.session.SessionStore;
 import com.codey.skill.SkillDefinition;
+import com.codey.tool.ToolInvocation;
+import com.codey.tool.ToolResult;
 import com.codey.tools.ToolExecutionRecord;
 import com.codey.tools.ToolExecutor;
-import com.codey.tools.ToolInvocation;
-import com.codey.tools.ToolResult;
 import com.codey.verify.Verifier;
 import com.codey.verify.VerifyResult;
 

@@ -4,10 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.codey.infra.LocalWorkspaceGateway;
 import com.codey.infra.ModelToolDefinition;
 import com.codey.infra.WorkspaceGateway;
+import com.codey.tool.ToolCapability;
+import com.codey.tool.ToolInvocation;
+import com.codey.tool.ToolResult;
 import com.codey.tools.AbstractWorkspaceTool;
-import com.codey.tools.ToolCapability;
-import com.codey.tools.ToolInvocation;
-import com.codey.tools.ToolResult;
 import com.codey.tools.WorkspaceToolContext;
 
 import java.io.IOException;

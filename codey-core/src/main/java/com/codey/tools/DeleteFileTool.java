@@ -1,6 +1,9 @@
 package com.codey.tools;
 
 import com.codey.infra.ModelToolDefinition;
+import com.codey.tool.ToolCapability;
+import com.codey.tool.ToolInvocation;
+import com.codey.tool.ToolResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;

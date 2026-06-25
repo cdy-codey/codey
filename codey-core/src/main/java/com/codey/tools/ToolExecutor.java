@@ -1,5 +1,8 @@
 package com.codey.tools;
 
+import com.codey.tool.ToolInvocation;
+import com.codey.tool.ToolResult;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

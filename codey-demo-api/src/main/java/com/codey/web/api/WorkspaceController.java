@@ -1,5 +1,6 @@
 package com.codey.web.api;
 
+import com.codey.workspace.WorkspaceSnapshot;
 import com.codey.web.common.ApiResponse;
 import com.codey.web.service.WorkspaceService;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,14 +25,14 @@ public class WorkspaceController {
      * path 为空时返回整棵目录树；path 指向文件时额外回传文件内容。
      */
     @PostMapping("/query")
-    public ApiResponse<WorkspaceService.WorkspaceSnapshot> query(@RequestBody(required = false) QueryRequest request) {
-        WorkspaceService.WorkspaceSnapshot snapshot = workspaceService.query(request == null ? null : request.getPath());
+    public ApiResponse<WorkspaceSnapshot> query(@RequestBody(required = false) QueryRequest request) {
+        WorkspaceSnapshot snapshot = workspaceService.query(request == null ? null : request.getPath());
         return ApiResponse.success("工作目录查询成功", snapshot);
     }
 
     @PostMapping("/create")
-    public ApiResponse<WorkspaceService.WorkspaceSnapshot> create(@RequestBody CreateRequest request) {
-        WorkspaceService.WorkspaceSnapshot snapshot = workspaceService.createEntry(
+    public ApiResponse<WorkspaceSnapshot> create(@RequestBody CreateRequest request) {
+        WorkspaceSnapshot snapshot = workspaceService.createEntry(
                 request == null ? null : request.getPath(),
                 request != null && request.isDirectory(),
                 request == null ? null : request.getContent()
@@ -40,8 +41,8 @@ public class WorkspaceController {
     }
 
     @PostMapping("/update")
-    public ApiResponse<WorkspaceService.WorkspaceSnapshot> update(@RequestBody UpdateRequest request) {
-        WorkspaceService.WorkspaceSnapshot snapshot;
+    public ApiResponse<WorkspaceSnapshot> update(@RequestBody UpdateRequest request) {
+        WorkspaceSnapshot snapshot;
         if (request != null && request.getNewName() != null && !request.getNewName().trim().isEmpty()) {
             snapshot = workspaceService.renameEntry(
                     request.getPath(),
@@ -57,8 +58,8 @@ public class WorkspaceController {
     }
 
     @PostMapping("/delete")
-    public ApiResponse<WorkspaceService.WorkspaceSnapshot> delete(@RequestBody DeleteRequest request) {
-        WorkspaceService.WorkspaceSnapshot snapshot = workspaceService.deleteEntry(request == null ? null : request.getPath());
+    public ApiResponse<WorkspaceSnapshot> delete(@RequestBody DeleteRequest request) {
+        WorkspaceSnapshot snapshot = workspaceService.deleteEntry(request == null ? null : request.getPath());
         return ApiResponse.success("工作目录删除成功", snapshot);
     }
 

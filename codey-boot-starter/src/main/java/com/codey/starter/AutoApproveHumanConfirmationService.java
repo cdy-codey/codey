@@ -4,7 +4,7 @@ import com.codey.loop.FinalResult;
 import com.codey.loop.HumanConfirmationService;
 import com.codey.loop.HumanDecision;
 import com.codey.config.AgentSession;
-import com.codey.tools.ToolInvocation;
+import com.codey.tool.ToolInvocation;
 
 /**
  * 基于 Spring 的默认自动批准策略，避免依赖控制台交互。

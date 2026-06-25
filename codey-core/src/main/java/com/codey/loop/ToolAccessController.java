@@ -1,8 +1,8 @@
 package com.codey.loop;
 
-import com.codey.tools.ToolInvocation;
 import com.codey.config.AgentSession;
 import com.codey.skill.SkillDefinition;
+import com.codey.tool.ToolInvocation;
 
 /**
  * 在工具执行前只做技能侧的可见工具校验。

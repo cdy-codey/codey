@@ -2,8 +2,8 @@ package com.codey.session;
 
 import com.codey.client.SessionEvent;
 import com.codey.client.SessionEventType;
-import com.codey.tools.ToolInvocation;
-import com.codey.tools.ToolResult;
+import com.codey.tool.ToolInvocation;
+import com.codey.tool.ToolResult;
 import com.codey.verify.VerifyResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

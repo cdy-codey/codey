@@ -1,5 +1,8 @@
 package com.codey.tools;
 
+import com.codey.tool.ToolInvocation;
+import com.codey.tool.ToolResult;
+
 /**
  * 记录一次工具调用及其执行结果。
  */

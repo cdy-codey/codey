@@ -73,11 +73,7 @@ public class AutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(name = "WorkspaceRoot")
     public Path WorkspaceRoot(SpringProperties properties) {
-        String configured = properties.getWorkingDirectory();
-        if (isBlank(configured)) {
-            return Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
-        }
-        return Paths.get(configured).toAbsolutePath().normalize();
+        return properties.resolveWorkingDirectoryRoot();
     }
 
     @Bean
@@ -110,7 +106,7 @@ public class AutoConfiguration {
                                      SpringProperties springProperties,
                                      ObjectMapper objectMapper,
                                      Path WorkspaceRoot) {
-        Path sessionDirectory = resolveSessionDirectory(springProperties, WorkspaceRoot);
+        Path sessionDirectory = springProperties.resolveSessionDirectoryRoot(WorkspaceRoot);
         // 模型输入与模型输出统一挂到同一个会话根目录下，避免历史恢复读写分散在不同位置。
         return new ModelGatewayFactory().create(
                 toModelConfig(properties),
@@ -242,7 +238,7 @@ public class AutoConfiguration {
     public SessionStore sessionStore(SpringProperties properties,
                                      Path WorkspaceRoot,
                                      SessionEventPublisher sessionEventPublisher) {
-        Path sessionDirectory = resolveSessionDirectory(properties, WorkspaceRoot);
+        Path sessionDirectory = properties.resolveSessionDirectoryRoot(WorkspaceRoot);
         return new CompositeSessionStore(
                 // Web Demo 也需要保留模型输入/输出归档，历史恢复才能补回最后一轮模型结果。
                 new JsonlSessionStore(sessionDirectory),
@@ -345,22 +341,6 @@ public class AutoConfiguration {
             return System.getenv(properties.getApiKeyEnv());
         }
         return null;
-    }
-
-    /**
-     * session-directory 与 working-directory 是平级配置。
-     * 未显式配置时才默认落到 working-directory 下的 .codey/sessions；
-     * 一旦用户显式配置了相对路径，就按应用启动目录解析，而不是按 working-directory 解析。
-     */
-    private Path resolveSessionDirectory(SpringProperties properties, Path workspaceRoot) {
-        if (isBlank(properties.getSessionDirectory())) {
-            return workspaceRoot.resolve(".codey").resolve("sessions");
-        }
-        Path configured = Paths.get(properties.getSessionDirectory());
-        if (configured.isAbsolute()) {
-            return configured.normalize();
-        }
-        return configured.toAbsolutePath().normalize();
     }
 
     private boolean isBlank(String value) {

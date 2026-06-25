@@ -1,17 +1,18 @@
 # Codey Maven Central Release Guide
 
-本文档用于把 `codey-common`、`codey-core` 和 `codey-boot-starter` 作为正式产物发布到公共 Maven 仓库。
+本文档用于把 `codey-common`、`codey-core`、`codey-console` 和 `codey-boot-starter` 作为正式产物发布到公共 Maven 仓库。
 
 ## 发布范围
 
 - `codey-common`：公共 DTO、工具协议和元数据模型
 - `codey-core`：核心运行时能力
+- `codey-console`：命令行运行时与可执行打包产物
 - `codey-boot-starter`：给 Spring Boot 项目直接接入的 starter
 
 说明：
 
-- `codey-console` 和 `codey-demo-api` 已在 POM 中配置 `maven.deploy.skip=true`
-- 这两个模块仍会参与本地构建，但不会上传到公共仓库
+- `codey-demo-api` 已在 POM 中配置 `maven.deploy.skip=true`
+- 正式发布时仅排除 `codey-demo-api`
 
 ## 发布前置条件
 
@@ -73,10 +74,10 @@ $env:GPG_PASSPHRASE="你的 GPG passphrase"
 mvn -Prelease clean verify
 ```
 
-如果只想验证 Starter 以及其依赖模块，可以执行：
+如果只想验证正式发布模块，可以执行：
 
 ```bash
-mvn -Prelease -pl codey-boot-starter -am clean verify
+mvn -Prelease -pl codey-console,codey-boot-starter -am clean verify
 ```
 
 ## 正式发布

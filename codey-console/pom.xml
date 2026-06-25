@@ -14,11 +14,6 @@
     <description>Console runtime for local interactive Codey sessions.</description>
     <packaging>jar</packaging>
 
-    <properties>
-        <!-- 控制台模块用于本地运行，不作为公共 Maven 依赖发布。 -->
-        <maven.deploy.skip>true</maven.deploy.skip>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>io.github.cdy-codey</groupId>

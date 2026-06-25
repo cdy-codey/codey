@@ -1,7 +1,7 @@
 package com.codey.loop;
 
-import com.codey.tools.ToolInvocation;
-import com.codey.tools.ToolResult;
+import com.codey.tool.ToolInvocation;
+import com.codey.tool.ToolResult;
 
 import java.nio.file.Path;
 

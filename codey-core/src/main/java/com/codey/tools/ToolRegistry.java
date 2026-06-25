@@ -2,6 +2,7 @@ package com.codey.tools;
 
 import com.codey.infra.ModelToolDefinition;
 import com.codey.tool.ToolDescriptor;
+import com.codey.tool.ToolResult;
 import com.codey.tool.ToolSpec;
 
 import java.util.ArrayList;
@@ -111,23 +112,10 @@ public class ToolRegistry {
         return toolName.trim();
     }
 
-    static ToolResult adaptResult(com.codey.tool.ToolResult result) {
-        if (result instanceof ToolResult) {
-            return (ToolResult) result;
-        }
+    static ToolResult adaptResult(ToolResult result) {
         if (result == null) {
             return ToolResult.fail("tool returned null result");
         }
-        ToolResult adapted = result.isSuccess()
-                ? ToolResult.ok(result.getContent(), result.getSummary())
-                : ToolResult.fail(result.getErrorMessage(), result.getSummary());
-        if (result.isCompactedForContext()) {
-            adapted.withContextContent(
-                    result.getContentForModel(),
-                    result.getSpilloverPath(),
-                    result.getOriginalContentLength()
-            );
-        }
-        return adapted;
+        return result;
     }
 }

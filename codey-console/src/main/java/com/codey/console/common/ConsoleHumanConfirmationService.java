@@ -3,8 +3,8 @@ package com.codey.console.common;
 import com.codey.loop.HumanConfirmationService;
 import com.codey.loop.HumanDecision;
 import com.codey.loop.FinalResult;
-import com.codey.tools.ToolInvocation;
 import com.codey.config.AgentSession;
+import com.codey.tool.ToolInvocation;
 
 import java.io.BufferedReader;
 import java.io.IOException;

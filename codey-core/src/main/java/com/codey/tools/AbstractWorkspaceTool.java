@@ -1,9 +1,12 @@
 package com.codey.tools;
 
 import com.codey.infra.ModelToolDefinition;
+import com.codey.tool.ToolCapability;
 import com.codey.tool.ToolContext;
 import com.codey.tool.ToolDescriptor;
+import com.codey.tool.ToolInvocation;
 import com.codey.tool.ToolMetadata;
+import com.codey.tool.ToolResult;
 import com.codey.tool.ToolSpec;
 
 /**
@@ -55,9 +58,6 @@ public abstract class AbstractWorkspaceTool implements ToolSpec {
     @Override
     public com.codey.tool.ToolResult execute(com.codey.tool.ToolInvocation invocation,
                                              ToolContext context) {
-        ToolInvocation coreInvocation = invocation instanceof ToolInvocation
-                ? (ToolInvocation) invocation
-                : toCoreInvocation(invocation);
         WorkspaceToolContext workspaceContext = context instanceof WorkspaceToolContext
                 ? (WorkspaceToolContext) context
                 : new WorkspaceToolContext(
@@ -67,21 +67,12 @@ public abstract class AbstractWorkspaceTool implements ToolSpec {
                 context == null ? null : context.getSessionId(),
                 context == null ? null : context.getAttributes()
         );
-        return execute(coreInvocation, workspaceContext);
+        return execute(invocation, workspaceContext);
     }
 
     @Override
     public com.codey.tool.ToolCapability capability() {
         return ToolCapability.standard();
-    }
-
-    protected ToolInvocation toCoreInvocation(com.codey.tool.ToolInvocation invocation) {
-        ToolInvocation coreInvocation = new ToolInvocation();
-        if (invocation != null) {
-            coreInvocation.setToolName(invocation.getToolName());
-            coreInvocation.setArguments(invocation.getArguments());
-        }
-        return coreInvocation;
     }
 
     private String resolveGroup(String toolName) {

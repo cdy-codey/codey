@@ -1,6 +1,7 @@
 package com.codey.starter;
 
 import com.codey.config.ModelProperties;
+import com.codey.workspace.WorkspaceDirectoryProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
@@ -8,31 +9,13 @@ import org.springframework.boot.context.properties.NestedConfigurationProperty;
  * 基于 Spring 的接入配置项。
  */
 @ConfigurationProperties(prefix = "codey")
-public class SpringProperties {
-    private String workingDirectory;
-    private String sessionDirectory;
+public class SpringProperties extends WorkspaceDirectoryProperties {
     private String skillsDirectory;
     private String defaultSkillName;
     private Integer eventBufferSize = Integer.valueOf(200);
 
     @NestedConfigurationProperty
     private ModelProperties model = new ModelProperties();
-
-    public String getWorkingDirectory() {
-        return workingDirectory;
-    }
-
-    public void setWorkingDirectory(String workingDirectory) {
-        this.workingDirectory = workingDirectory;
-    }
-
-    public String getSessionDirectory() {
-        return sessionDirectory;
-    }
-
-    public void setSessionDirectory(String sessionDirectory) {
-        this.sessionDirectory = sessionDirectory;
-    }
 
     public String getSkillsDirectory() {
         return skillsDirectory;

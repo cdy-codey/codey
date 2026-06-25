@@ -1,5 +1,8 @@
 package com.codey.mcp;
 
+import com.codey.tool.ToolCapability;
+import com.codey.tool.ToolInvocation;
+import com.codey.tool.ToolResult;
 import com.codey.tools.*;
 
 import com.codey.infra.ModelToolDefinition;

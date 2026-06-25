@@ -1,7 +1,7 @@
 package com.codey.loop;
 
-import com.codey.tools.ToolInvocation;
 import com.codey.config.AgentSession;
+import com.codey.tool.ToolInvocation;
 
 /**
  * 参考成熟引擎的 loop guard，阻止重复成功请求和连续失败抖动。
