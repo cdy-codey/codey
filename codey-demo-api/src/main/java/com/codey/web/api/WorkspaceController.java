@@ -3,6 +3,7 @@ package com.codey.web.api;
 import com.codey.workspace.WorkspaceSnapshot;
 import com.codey.web.common.ApiResponse;
 import com.codey.web.service.WorkspaceService;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,6 +29,16 @@ public class WorkspaceController {
     public ApiResponse<WorkspaceSnapshot> query(@RequestBody(required = false) QueryRequest request) {
         WorkspaceSnapshot snapshot = workspaceService.query(request == null ? null : request.getPath());
         return ApiResponse.success("工作目录查询成功", snapshot);
+    }
+
+    /**
+     * 查询指定 JSON 文件并直接返回解析后的结果。
+     * 入参与 create/update 保持一致，仍然只接收 path。
+     */
+    @PostMapping("/query-json")
+    public ApiResponse<JsonNode> queryJson(@RequestBody(required = false) QueryRequest request) {
+        JsonNode json = workspaceService.queryFileContentAsJson(request == null ? null : request.getPath());
+        return ApiResponse.success("JSON 工作结果查询成功", json);
     }
 
     @PostMapping("/create")

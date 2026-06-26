@@ -1,10 +1,20 @@
-﻿import { fetchJson } from './http'
+import { fetchJson } from './http'
 
 // 工作目录接口统一使用 POST，便于后续继续扩展批量操作。
 export function createWorkspaceApi(baseUrl = '/api/workspace') {
   return {
     query(path = '') {
       return fetchJson(`${baseUrl}/query`, {
+        method: 'POST',
+        body: JSON.stringify({
+          path,
+        }),
+      })
+    },
+
+    // 直接读取 JSON 文件内容，避免前端再从快照里手动提取 currentFile.content。
+    queryJson(path = '') {
+      return fetchJson(`${baseUrl}/query-json`, {
         method: 'POST',
         body: JSON.stringify({
           path,

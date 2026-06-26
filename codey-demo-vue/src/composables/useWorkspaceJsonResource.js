@@ -19,12 +19,11 @@ export function createWorkspaceJsonResource(options = {}) {
     const allowMissing = options.allowMissing !== false
     const initializeWithFallbackOnMissing = options.initializeWithFallbackOnMissing === true
     try {
-      const snapshot = await workspaceApi.query(workspacePath)
-      const content = snapshot?.currentFile?.content?.trim() || ''
-      if (!content) {
+      const payload = await workspaceApi.queryJson(workspacePath)
+      if (payload == null) {
         return fallback
       }
-      return JSON.parse(content)
+      return payload
     } catch (error) {
       if (allowMissing && isWorkspaceMissingFileError(error)) {
         // 低代码场景需要在缺少配置文件时自动初始化一个默认 JSON，避免后续再次 query 继续报 404。

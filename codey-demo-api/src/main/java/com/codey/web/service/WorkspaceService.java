@@ -1,13 +1,17 @@
 package com.codey.web.service;
 
 import com.codey.workspace.WorkspaceDirectoryException;
+import com.codey.workspace.WorkspaceFile;
 import com.codey.workspace.WorkspaceSnapshot;
 import com.codey.workspace.WorkspaceDirectoryService;
 import com.codey.web.config.WebDemoProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -25,13 +29,15 @@ public class WorkspaceService {
     ));
 
     private final WorkspaceDirectoryService delegate;
+    private final ObjectMapper objectMapper;
 
-    public WorkspaceService(WebDemoProperties properties) {
+    public WorkspaceService(WebDemoProperties properties, ObjectMapper objectMapper) {
         this.delegate = new WorkspaceDirectoryService(
                 properties.resolveWorkingDirectoryRoot(),
                 buildIgnoredEntryNames(properties.getSessionDirectory()),
                 properties::toVisiblePath
         );
+        this.objectMapper = objectMapper;
     }
 
     public WorkspaceSnapshot query(String relativePath) {
@@ -77,6 +83,27 @@ public class WorkspaceService {
             return delegate.deleteEntry(relativePath);
         } catch (WorkspaceDirectoryException exception) {
             throw toResponseStatusException(exception);
+        }
+    }
+
+    /**
+     * 供 AI 工作结果等 JSON 文件读取场景使用。
+     * 直接返回解析后的 JSON，避免前端再从快照里手动提取 currentFile.content。
+     */
+    public JsonNode queryFileContentAsJson(String relativePath) {
+        WorkspaceSnapshot snapshot = query(relativePath);
+        WorkspaceFile currentFile = snapshot.getCurrentFile();
+        if (currentFile == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请传入 JSON 文件路径");
+        }
+        String content = currentFile.getContent();
+        if (content == null || content.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(content);
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "文件内容不是有效的 JSON", exception);
         }
     }
 
