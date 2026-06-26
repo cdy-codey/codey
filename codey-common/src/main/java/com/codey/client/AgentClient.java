@@ -11,6 +11,11 @@ public interface AgentClient {
 
     RunResult runTurn(String sessionId, RunRequest request);
 
+    /**
+     * 只负责把消息提交到会话执行队列，具体结果通过事件流异步返回。
+     */
+    void submitTurn(String sessionId, RunRequest request);
+
     void closeSession(String sessionId);
 
     default String run(String goal) {

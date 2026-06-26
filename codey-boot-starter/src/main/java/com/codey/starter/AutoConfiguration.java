@@ -288,9 +288,10 @@ public class AutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public AgentClient AgentClient(TaskRunner taskRunner,
-                                             SpringProperties properties,
-                                             Path WorkspaceRoot) {
-        return new DefaultAgentClient(taskRunner, properties, WorkspaceRoot);
+                                   SpringProperties properties,
+                                   Path WorkspaceRoot,
+                                   SessionEventPublisher sessionEventPublisher) {
+        return new DefaultAgentClient(taskRunner, properties, WorkspaceRoot, sessionEventPublisher);
     }
 
     private ModelConfig toModelConfig(ModelProperties properties) {

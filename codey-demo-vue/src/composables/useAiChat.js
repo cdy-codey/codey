@@ -17,6 +17,7 @@ const STREAM_EVENT_TYPES = [
   'tool_call',
   'verification',
   'human_decision',
+  'task_status',
   'final_summary',
   'model_output',
   'debug_trace',
@@ -148,14 +149,26 @@ export function useAiChat(options = {}) {
     isSending.value = false
   }
 
+  function isEmptyAssistantMessage(message) {
+    if (!message || message.role !== 'assistant') {
+      return false
+    }
+    return !normalizeContent(message.content).trim()
+  }
+
   function closeActiveAssistantMessage() {
     const currentId = activeAssistantId.value
     if (!currentId) {
       return
     }
-    const existing = messages.value.find((item) => item.id === currentId)
-    if (existing) {
+    const messageIndex = messages.value.findIndex((item) => item.id === currentId)
+    if (messageIndex >= 0) {
+      const existing = messages.value[messageIndex]
       existing.live = false
+      // 只有思考过程、没有最终正文的临时消息在结束后直接移除，避免界面残留空白回复。
+      if (isEmptyAssistantMessage(existing)) {
+        messages.value.splice(messageIndex, 1)
+      }
     }
     activeAssistantId.value = ''
   }
@@ -308,6 +321,38 @@ export function useAiChat(options = {}) {
     if (eventType === 'model_tool_call_started') {
       const message = ensureActiveAssistantMessage()
       mergeToolCalls(message, [normalizeContent(payload?.payload?.displayName || payload?.message)])
+      return
+    }
+
+    if (eventType === 'task_status') {
+      const status = payload?.payload?.status || payload?.message || ''
+      const terminal = payload?.payload?.terminal === true
+      const success = payload?.payload?.success === true
+      if (status === 'accepted') {
+        invokeHook('onTaskAccepted', {
+          sessionId: sessionId.value,
+          payload,
+        })
+        return
+      }
+      if (terminal && success) {
+        invokeHook('onTaskCompleted', {
+          sessionId: sessionId.value,
+          payload,
+        })
+        return
+      }
+      if (terminal) {
+        const message = payload?.payload?.message || payload?.message || '任务执行失败'
+        errorMessage.value = message
+        closeActiveAssistantMessage()
+        isSending.value = false
+        invokeHook('onTaskFailed', {
+          sessionId: sessionId.value,
+          message,
+          payload,
+        })
+      }
       return
     }
 

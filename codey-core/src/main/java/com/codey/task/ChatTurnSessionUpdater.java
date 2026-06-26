@@ -38,6 +38,9 @@ public class ChatTurnSessionUpdater {
         if (isBlank(goal)) {
             return;
         }
+        // 用户重新发起一条新消息时，本轮应从干净的循环态开始，
+        // 避免继承上一轮因为 stagnation / replan 退出时留下的短期执行状态。
+        session.resetForNextTurn();
         String rawGoal = goal;
         String normalized = rawGoal.trim();
         if (session.hasPendingChoice() && isChoiceAnswer(normalized)) {

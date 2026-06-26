@@ -2,6 +2,7 @@ package com.codey.starter;
 
 import com.codey.task.TaskRunner;
 import com.codey.task.TaskRunnerAgentClient;
+import com.codey.client.SessionEventPublisher;
 
 import java.nio.file.Path;
 
@@ -10,10 +11,14 @@ import java.nio.file.Path;
  */
 class DefaultAgentClient extends TaskRunnerAgentClient {
 
-    DefaultAgentClient(TaskRunner taskRunner, SpringProperties properties, Path workspaceRoot) {
+    DefaultAgentClient(TaskRunner taskRunner,
+                       SpringProperties properties,
+                       Path workspaceRoot,
+                       SessionEventPublisher sessionEventPublisher) {
         super(taskRunner,
                 properties.getDefaultSkillName(),
                 workspaceRoot == null ? null : workspaceRoot.toString(),
-                properties == null ? null : properties.getModel());
+                properties == null ? null : properties.getModel(),
+                sessionEventPublisher);
     }
 }

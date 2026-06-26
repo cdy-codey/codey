@@ -13,6 +13,7 @@ public enum SessionEventType {
     TOOL_CALL("tool_call"),
     HUMAN_DECISION("human_decision"),
     VERIFICATION("verification"),
+    TASK_STATUS("task_status"),
     SECURITY_EVENT("security_event"),
     FINAL_SUMMARY("final_summary"),
     DEBUG_TRACE("debug_trace");

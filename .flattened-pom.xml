@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.cdy-codey</groupId>
   <artifactId>codey</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
   <packaging>pom</packaging>
   <name>codey</name>
   <description>Codey parent build and public release definition for common, core and Spring Boot starter modules.</description>
@@ -33,7 +33,7 @@
   <scm>
     <connection>scm:git:https://github.com/cdy-codey/codey.git</connection>
     <developerConnection>scm:git:https://github.com/cdy-codey/codey.git</developerConnection>
-    <tag>v0.1.1</tag>
+    <tag>v0.1.2</tag>
     <url>https://github.com/cdy-codey/codey</url>
   </scm>
   <properties>
@@ -44,7 +44,7 @@
     <spring.boot.version>2.7.18</spring.boot.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.surefire.plugin.version>2.22.2</maven.surefire.plugin.version>
-    <revision>0.1.1</revision>
+    <revision>0.1.2</revision>
     <maven.compiler.source>1.8</maven.compiler.source>
     <junit.version>5.11.4</junit.version>
     <logback.version>1.2.13</logback.version>

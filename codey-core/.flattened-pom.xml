@@ -5,11 +5,11 @@
   <parent>
     <groupId>io.github.cdy-codey</groupId>
     <artifactId>codey</artifactId>
-    <version>0.1.1</version>
+    <version>0.1.2</version>
   </parent>
   <groupId>io.github.cdy-codey</groupId>
   <artifactId>codey-core</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
   <name>codey-core</name>
   <description>Skill-driven Java console AI code agent.</description>
   <licenses>

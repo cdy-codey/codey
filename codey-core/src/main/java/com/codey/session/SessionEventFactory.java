@@ -128,6 +128,21 @@ public final class SessionEventFactory {
         );
     }
 
+    public static SessionEvent taskStatus(String sessionId, String status, boolean terminal, boolean success, String message) {
+        Map<String, Object> payload = new LinkedHashMap<String, Object>();
+        payload.put("status", status);
+        payload.put("terminal", Boolean.valueOf(terminal));
+        payload.put("success", Boolean.valueOf(success));
+        payload.put("message", message);
+        return new SessionEvent(
+                sessionId,
+                SessionEventType.TASK_STATUS,
+                null,
+                message,
+                payload
+        );
+    }
+
     public static SessionEvent securityEvent(String sessionId, String message) {
         return new SessionEvent(
                 sessionId,

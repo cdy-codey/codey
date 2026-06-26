@@ -76,8 +76,11 @@ public class PromptContractValidator {
         }
 
         if (skill != null && toolExposurePlanner.selectVisibleTools(session, skill).isEmpty()) {
-            return PromptValidationResult.failed(
-                    "Prompt contract failed: visible tools are empty; configure allowedToolGroups or allowedToolBundles",
+            // 无文件/无命中文件时，某些 skill 可能暂时算不出可用工具。
+            // 这里不再硬拦截主流程，允许模型先继续纯对话；如果模型后续发起工具调用，
+            // 仍由 ToolAccessController 按当前 skill 的可见工具集合做最终兜底校验。
+            return PromptValidationResult.passed(
+                    "Prompt contract warning: visible tools are empty; continue with conversation-only turn",
                     budgetDiagnostic
             );
         }

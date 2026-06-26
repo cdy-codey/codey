@@ -481,6 +481,15 @@ function shouldShowReasoning(message) {
   )
 }
 
+function hasAssistantContent(message) {
+  return !!messageBlockMap.value[message?.id]?.length
+}
+
+function shouldShowAssistantThinkingPlaceholder(message) {
+  // 不展示思考明细且正文尚未返回时，用轻量状态提示替代大块空白区域。
+  return !!(message?.live && !hasAssistantContent(message) && !shouldShowReasoning(message))
+}
+
 function isToolMessage(role) {
   return role === 'tool'
 }
@@ -636,49 +645,49 @@ watch(
                 <template v-if="isAssistantMessage(message.role)">
                   <div :style="getAssistantBubbleStyle()">
                     <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
-                    <transition name="reasoning-fade">
-                      <div
-                        v-if="shouldShowReasoning(message)"
-                        class="reasoning-panel"
-                      >
-                        <div class="reasoning-header">
-                          <div class="reasoning-title">
-                            <el-icon class="reasoning-loading-icon"><Loading /></el-icon>
-                            <span>思考中</span>
+                      <transition name="reasoning-fade">
+                        <div
+                          v-if="shouldShowReasoning(message)"
+                          class="reasoning-panel"
+                        >
+                          <div class="reasoning-header">
+                            <div class="reasoning-title">
+                              <el-icon class="reasoning-loading-icon"><Loading /></el-icon>
+                              <span>思考中</span>
+                            </div>
+                            <span class="reasoning-tip">完成后自动收起</span>
                           </div>
-                          <span class="reasoning-tip">完成后自动收起</span>
-                        </div>
-                        <template v-if="reasoningBlockMap[message.id]?.length">
-                          <div class="reasoning-body">
-                            <template
-                              v-for="(block, blockIndex) in reasoningBlockMap[message.id]"
-                              :key="`reasoning-${message.id}-${blockIndex}`"
-                            >
-                              <div
-                                v-if="block.type === 'text'"
-                                class="reasoning-text-block"
+                          <template v-if="reasoningBlockMap[message.id]?.length">
+                            <div class="reasoning-body">
+                              <template
+                                v-for="(block, blockIndex) in reasoningBlockMap[message.id]"
+                                :key="`reasoning-${message.id}-${blockIndex}`"
                               >
                                 <div
-                                  v-for="(paragraph, paragraphIndex) in block.paragraphs"
-                                  :key="`reasoning-${message.id}-${blockIndex}-${paragraphIndex}`"
-                                  class="reasoning-paragraph"
+                                  v-if="block.type === 'text'"
+                                  class="reasoning-text-block"
                                 >
-                                  {{ paragraph }}
+                                  <div
+                                    v-for="(paragraph, paragraphIndex) in block.paragraphs"
+                                    :key="`reasoning-${message.id}-${blockIndex}-${paragraphIndex}`"
+                                    class="reasoning-paragraph"
+                                  >
+                                    {{ paragraph }}
+                                  </div>
                                 </div>
-                              </div>
 
-                              <el-card v-else shadow="never" class="reasoning-code-card">
-                                <template #header>{{ block.language || 'text' }}</template>
-                                <el-scrollbar max-height="200px">
-                                  <pre style="margin: 0;">{{ block.content }}</pre>
-                                </el-scrollbar>
-                              </el-card>
-                            </template>
-                          </div>
-                        </template>
-                      </div>
-                    </transition>
-                    <template v-if="messageBlockMap[message.id]?.length">
+                                <el-card v-else shadow="never" class="reasoning-code-card">
+                                  <template #header>{{ block.language || 'text' }}</template>
+                                  <el-scrollbar max-height="200px">
+                                    <pre style="margin: 0;">{{ block.content }}</pre>
+                                  </el-scrollbar>
+                                </el-card>
+                              </template>
+                            </div>
+                          </template>
+                        </div>
+                      </transition>
+                      <template v-if="hasAssistantContent(message)">
                       <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
                         <template
                           v-for="(block, blockIndex) in messageBlockMap[message.id]"
@@ -705,9 +714,12 @@ watch(
                           </el-card>
                         </template>
                       </div>
-                    </template>
+                      </template>
 
-                    <el-text v-else type="info">...</el-text>
+                      <div v-else-if="shouldShowAssistantThinkingPlaceholder(message)" class="assistant-thinking-placeholder">
+                        <el-icon class="reasoning-loading-icon"><Loading /></el-icon>
+                        <span>正在思考中...</span>
+                      </div>
                     </div>
                   </div>
                 </template>
@@ -1026,6 +1038,17 @@ watch(
 
 .reasoning-code-card :deep(.el-card__body) {
   padding: 10px 12px;
+}
+
+.assistant-thinking-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 2px 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .reasoning-fade-enter-active,

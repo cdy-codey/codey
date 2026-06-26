@@ -3,7 +3,6 @@ package com.codey.web.api;
 import com.codey.client.AgentClient;
 import com.codey.client.ChatSession;
 import com.codey.client.RunRequest;
-import com.codey.client.RunResult;
 import com.codey.client.SessionEventHub;
 import com.codey.web.common.ApiResponse;
 import org.springframework.http.HttpStatus;
@@ -12,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -70,12 +70,15 @@ public class ChatController {
     }
 
     @PostMapping("/sessions/{sessionId}/messages")
-    public ApiResponse<RunResult> sendMessage(@PathVariable("sessionId") String sessionId,
-                                                   @RequestBody(required = false) RunRequest request) {
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public ApiResponse<MessageAcceptedResponse> sendMessage(@PathVariable("sessionId") String sessionId,
+                                                            @RequestBody(required = false) RunRequest request) {
         try {
             RunRequest normalized = normalize(request);
             saveDisplayOptions(sessionId, normalized);
-            return ApiResponse.success("消息已发送", agentClient.runTurn(sessionId, normalized));
+            agentClient.submitTurn(sessionId, normalized);
+            return ApiResponse.success("消息已送达，处理结果将通过事件流返回",
+                    new MessageAcceptedResponse(sessionId, "accepted"));
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
         } catch (IllegalStateException ex) {
@@ -121,5 +124,26 @@ public class ChatController {
             return HttpStatus.NOT_FOUND;
         }
         return HttpStatus.INTERNAL_SERVER_ERROR;
+    }
+
+    /**
+     * 只回给前端“消息已受理”的确认，真正模型输出继续走 SSE。
+     */
+    static final class MessageAcceptedResponse {
+        private final String sessionId;
+        private final String status;
+
+        MessageAcceptedResponse(String sessionId, String status) {
+            this.sessionId = sessionId;
+            this.status = status;
+        }
+
+        public String getSessionId() {
+            return sessionId;
+        }
+
+        public String getStatus() {
+            return status;
+        }
     }
 }
