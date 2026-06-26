@@ -92,6 +92,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
     @Override
     public String listWorkspace(String pathHint) {
         Path root = isBlank(pathHint) ? workspaceRoot : resolvePath(pathHint);
+        String visibleRoot = relativize(root);
         try (Stream<Path> stream = Files.list(root)) {
             List<String> entries = stream
                     .sorted()
@@ -105,7 +106,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
                     + System.lineSeparator()
                     + String.join(System.lineSeparator(), entries);
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to list workspace under: " + root, exception);
+            throw new IllegalStateException("Failed to list workspace under: " + visibleRoot, exception);
         }
     }
 
@@ -113,6 +114,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
     public WorkspaceListResult listWorkspaceResult(WorkspaceListRequest request) {
         String pathHint = request == null ? null : request.getPathHint();
         Path root = isBlank(pathHint) ? workspaceRoot : resolvePath(pathHint);
+        String visibleRoot = relativize(root);
         int maxDepth = request == null ? DEFAULT_LIST_DEPTH : normalizePositive(request.getMaxDepth(), DEFAULT_LIST_DEPTH);
         int limit = request == null ? DEFAULT_LIST_LIMIT : normalizePositive(request.getLimit(), DEFAULT_LIST_LIMIT);
         boolean includeHidden = request != null && Boolean.TRUE.equals(request.getIncludeHidden());
@@ -154,13 +156,14 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
             result.setEntries(entries);
             return result;
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to list workspace under: " + root, exception);
+            throw new IllegalStateException("Failed to list workspace under: " + visibleRoot, exception);
         }
     }
 
     @Override
     public String searchCode(String keyword, String pathHint) {
         Path root = isBlank(pathHint) ? workspaceRoot : resolvePath(pathHint);
+        String visibleRoot = relativize(root);
         try (Stream<Path> stream = Files.walk(root)) {
             return stream
                     .filter(Files::isRegularFile)
@@ -171,7 +174,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
                     .map(LegacySearchResult::format)
                     .orElse("No code match for keyword: " + keyword);
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to search code under: " + root, exception);
+            throw new IllegalStateException("Failed to search code under: " + visibleRoot, exception);
         }
     }
 
@@ -181,6 +184,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
             throw new IllegalArgumentException("keyword must not be blank");
         }
         Path root = isBlank(request.getPathHint()) ? workspaceRoot : resolvePath(request.getPathHint());
+        String visibleRoot = relativize(root);
         int contextLines = normalizePositive(request.getContextLines(), DEFAULT_SEARCH_CONTEXT);
         int maxResults = normalizePositive(request.getMaxResults(), DEFAULT_SEARCH_MAX_RESULTS);
         boolean useRegex = Boolean.TRUE.equals(request.getRegex());
@@ -220,7 +224,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
                 }
             }
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to search code under: " + root, exception);
+            throw new IllegalStateException("Failed to search code under: " + visibleRoot, exception);
         }
 
         SearchCodeResult result = new SearchCodeResult();
@@ -480,26 +484,12 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
     }
 
     private Path resolvePath(String path) {
-        if (isBlank(path)) {
-            throw new IllegalArgumentException("Path must not be blank");
-        }
-        Path candidate = Paths.get(path.trim());
-        Path resolved = candidate.isAbsolute()
-                ? candidate.toAbsolutePath().normalize()
-                : workspaceRoot.resolve(candidate).normalize();
-        if (!resolved.startsWith(workspaceRoot)) {
-            throw new IllegalArgumentException("Path escapes workspace root: " + path);
-        }
-        return resolved;
+        return WorkspacePathSupport.resolveRelativePath(workspaceRoot, path);
     }
 
     private String relativize(Path path) {
         try {
-            Path normalized = path.toAbsolutePath().normalize();
-            if (workspaceRoot.equals(normalized)) {
-                return ".";
-            }
-            return normalizeSeparators(workspaceRoot.relativize(normalized).toString());
+            return WorkspacePathSupport.relativize(workspaceRoot, path);
         } catch (Exception exception) {
             return normalizeSeparators(path.toString());
         }

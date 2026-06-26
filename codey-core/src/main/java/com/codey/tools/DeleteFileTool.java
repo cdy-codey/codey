@@ -87,16 +87,10 @@ public class DeleteFileTool extends AbstractWorkspaceTool {
     }
 
     private String relativize(WorkspaceToolContext context, Path target) {
-        Path root = context.getWorkspaceRoot();
-        if (root == null) {
-            return target.toString();
+        if (context == null) {
+            return target == null ? "." : target.toString();
         }
-        Path normalizedRoot = root.toAbsolutePath().normalize();
-        Path normalizedTarget = target.toAbsolutePath().normalize();
-        if (normalizedRoot.equals(normalizedTarget)) {
-            return ".";
-        }
-        return normalizedRoot.relativize(normalizedTarget).toString();
+        return context.relativize(target);
     }
 
     @Override
@@ -129,8 +123,8 @@ public class DeleteFileTool extends AbstractWorkspaceTool {
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
         Map<String, Object> arrayProperty = new LinkedHashMap<String, Object>();
         arrayProperty.put("type", "array");
-        arrayProperty.put("description", "List of file or directory paths to delete.");
-        arrayProperty.put("items", stringProperty("File or directory path."));
+        arrayProperty.put("description", "List of file or directory paths relative to the current working directory.");
+        arrayProperty.put("items", stringProperty("File or directory path relative to the current working directory."));
         properties.put("paths", arrayProperty);
 
         parameters.put("properties", properties);

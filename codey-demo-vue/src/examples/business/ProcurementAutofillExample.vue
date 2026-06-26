@@ -48,7 +48,7 @@ const totalAmount = computed(() =>
 
 const businessAiWorkspace = createBusinessAiWorkspace({
   workspaceId: 'business-procurement',
-  workingDirectory: './workspace/business-procurement',
+  workingDirectory: './business-procurement',
 })
 const aiWorkspaceId = businessAiWorkspace.workspaceId
 const aiWorkingDirectory = businessAiWorkspace.workingDirectory

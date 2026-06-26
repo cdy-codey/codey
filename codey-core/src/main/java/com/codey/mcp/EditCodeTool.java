@@ -2,7 +2,6 @@ package com.codey.mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.codey.infra.ModelToolDefinition;
-import com.codey.infra.WorkspaceGateway;
 import com.codey.tool.ToolInvocation;
 import com.codey.tool.ToolResult;
 import com.codey.tools.AbstractWorkspaceTool;
@@ -10,6 +9,9 @@ import com.codey.tools.FileMutationSupport;
 import com.codey.tools.WorkspaceToolContext;
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,14 +23,12 @@ import java.util.Map;
 public class EditCodeTool extends AbstractWorkspaceTool {
     private static final int MAX_PREVIEW_LINES = 12;
 
-    private final WorkspaceGateway workspaceGateway;
     private final EditStrategy editStrategy;
     private final String backupDirectory;
     private final EditCodeRequestParser requestParser;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public EditCodeTool(WorkspaceGateway workspaceGateway, EditStrategy editStrategy, String backupDirectory) {
-        this.workspaceGateway = workspaceGateway;
+    public EditCodeTool(com.codey.infra.WorkspaceGateway workspaceGateway, EditStrategy editStrategy, String backupDirectory) {
         this.editStrategy = editStrategy;
         this.backupDirectory = backupDirectory;
         this.requestParser = new EditCodeRequestParser();
@@ -63,15 +63,19 @@ public class EditCodeTool extends AbstractWorkspaceTool {
         try {
             EditCodeRequest editRequest = requestParser.parse(request);
             validate(editRequest);
+            Path targetPath = context.resolvePath(editRequest.getFile());
 
-            String original = loadOriginalContent(editRequest);
-            String backupPath = backupOriginalIfPresent(editRequest);
+            String original = loadOriginalContent(editRequest, targetPath);
+            String backupPath = backupOriginalIfPresent(editRequest, targetPath, context);
 
             EditStrategyResult strategyResult = editStrategy.apply(original, editRequest);
-            String target = workspaceGateway.writeFile(editRequest.getFile(), strategyResult.getUpdatedContent());
+            if (targetPath.getParent() != null) {
+                Files.createDirectories(targetPath.getParent());
+            }
+            Files.write(targetPath, strategyResult.getUpdatedContent().getBytes(StandardCharsets.UTF_8));
             return ToolResult.ok("Edit code success:\n" + buildStructuredResult(
                     editRequest,
-                    target,
+                    context.relativize(targetPath),
                     backupPath,
                     original,
                     strategyResult
@@ -95,28 +99,39 @@ public class EditCodeTool extends AbstractWorkspaceTool {
         }
     }
 
-    private String loadOriginalContent(EditCodeRequest request) {
+    private String loadOriginalContent(EditCodeRequest request, Path targetPath) {
         try {
-            return workspaceGateway.readFile(request.getFile());
+            return new String(Files.readAllBytes(targetPath), StandardCharsets.UTF_8);
         } catch (RuntimeException exception) {
             // `REPLACE_FILE` 允许直接创建原本不存在的目标文件。
             if (request.getMode() == EditMode.REPLACE_FILE) {
                 return "";
             }
             throw exception;
+        } catch (Exception exception) {
+            if (request.getMode() == EditMode.REPLACE_FILE && !Files.exists(targetPath)) {
+                return "";
+            }
+            throw new IllegalStateException(exception.getMessage(), exception);
         }
     }
 
-    private String backupOriginalIfPresent(EditCodeRequest request) {
+    private String backupOriginalIfPresent(EditCodeRequest request, Path targetPath, WorkspaceToolContext context) {
         try {
-            String backupPath = buildBackupPath(request.getFile());
-            workspaceGateway.copyFile(request.getFile(), backupPath);
-            return backupPath;
-        } catch (RuntimeException exception) {
+            if (!Files.exists(targetPath)) {
+                return null;
+            }
+            Path backupPath = context.resolvePath(buildBackupPath(request.getFile()));
+            if (backupPath.getParent() != null) {
+                Files.createDirectories(backupPath.getParent());
+            }
+            Files.copy(targetPath, backupPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            return context.relativize(backupPath);
+        } catch (Exception exception) {
             if (request.getMode() == EditMode.REPLACE_FILE) {
                 return null;
             }
-            throw exception;
+            throw new IllegalStateException(exception.getMessage(), exception);
         }
     }
 
@@ -149,7 +164,7 @@ public class EditCodeTool extends AbstractWorkspaceTool {
         parameters.put("type", "object");
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
-        properties.put("file", stringProperty("Target file path to edit."));
+        properties.put("file", stringProperty("Target file path to edit, relative to the current working directory."));
         properties.put("mode", enumProperty("Edit mode.", Arrays.asList(
                 "APPEND", "INSERT_BEFORE", "INSERT_AFTER", "REPLACE_TEXT", "REPLACE_BETWEEN_MARKERS", "REPLACE_FILE"
         )));
@@ -189,5 +204,3 @@ public class EditCodeTool extends AbstractWorkspaceTool {
         return property;
     }
 }
-
-

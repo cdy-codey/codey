@@ -107,7 +107,8 @@ public class RunCommand implements Callable<Integer> {
 
         RunRequest request = new RunRequest();
         request.setSkillName(skillName);
-        request.setWorkingDirectory(workspaceRoot.toString());
+        // 会话对模型只暴露工作区内的相对路径，真实根目录只保留在后端执行上下文里。
+        request.setWorkingDirectory(".");
         request.setGoal(goal);
         request.setContextFiles(mergeLegacyContextFiles());
         request.setContextNotes(contextNotes);

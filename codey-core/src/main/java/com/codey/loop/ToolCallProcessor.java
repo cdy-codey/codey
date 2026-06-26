@@ -2,6 +2,7 @@ package com.codey.loop;
 
 import com.codey.infra.ModelMessage;
 import com.codey.infra.ModelToolCall;
+import com.codey.infra.WorkspacePathSupport;
 import com.codey.config.AgentSession;
 import com.codey.session.SessionEventFactory;
 import com.codey.session.SessionStore;
@@ -12,9 +13,6 @@ import com.codey.tools.ToolExecutionRecord;
 import com.codey.tools.ToolExecutor;
 import com.codey.verify.Verifier;
 import com.codey.verify.VerifyResult;
-
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -114,7 +112,7 @@ final class ToolCallProcessor {
             }
 
             sessionStore.appendEvent(SessionEventFactory.toolExecutionStarted(session.getSessionId(), request));
-            ToolResult result = toolExecutor.execute(request);
+            ToolResult result = toolExecutor.execute(request, session.getWorkingDirectory());
             sessionStore.appendEvent(SessionEventFactory.toolCall(session.getSessionId(), request, result));
             rememberExecutedToolCall(executedToolCalls, toolCall);
             if (!result.isSuccess()) {
@@ -182,6 +180,23 @@ final class ToolCallProcessor {
             normalizePathArg(request, session, "path");
             return;
         }
+        if ("delete_file".equals(tool)) {
+            normalizePathArrayArg(request, session, "paths");
+            return;
+        }
+        if ("list_workspace".equals(tool)
+                || "project_map".equals(tool)
+                || "search_code".equals(tool)
+                || "query_api_info".equals(tool)) {
+            normalizePathArg(request, session, "pathHint");
+            return;
+        }
+        if ("read_api_spec".equals(tool)
+                || "validate_procurement_context_json".equals(tool)
+                || "validate_vform_json".equals(tool)) {
+            normalizePathArg(request, session, "path");
+            return;
+        }
         if ("edit_code".equals(tool)) {
             normalizePathArg(request, session, "file");
         }
@@ -218,64 +233,53 @@ final class ToolCallProcessor {
         if (text.isEmpty()) {
             return;
         }
-        String workingDirectory = session.getWorkingDirectory();
-        if (isBlank(workingDirectory)) {
-            return;
-        }
         try {
-            Path workingDirectoryPath = Paths.get(workingDirectory).normalize();
-            Path root = Paths.get(workingDirectory).toAbsolutePath().normalize();
-            Path candidate = Paths.get(text);
-            if (!candidate.isAbsolute()) {
-                // 模型经常只返回相对文件名，这里统一补齐到当前会话工作目录下，
-                // 避免工具层再按更上层的 workspaceRoot 解析，最终写错目录。
-                Path normalizedCandidate = candidate.normalize();
-                if (startsWithPath(normalizedCandidate, workingDirectoryPath)) {
-                    request.getArguments().put(
-                            key,
-                            resolveWorkingDirectoryBase(root, workingDirectoryPath).resolve(normalizedCandidate).normalize().toString()
-                    );
-                    return;
-                }
-                request.getArguments().put(key, root.resolve(normalizedCandidate).normalize().toString());
+            if (toolExecutor.getWorkspaceRoot() == null) {
                 return;
             }
-            Path normalized = candidate.toAbsolutePath().normalize();
-            if (normalized.startsWith(root)) {
-                request.getArguments().put(key, normalized.toString());
-            }
+            // 会话对模型始终只暴露相对路径；执行前也保持相对语义，避免绝对路径继续进入 transcript。
+            String normalized = WorkspacePathSupport.normalizeToolPathArgument(
+                    text,
+                    session.getWorkingDirectory(),
+                    toolExecutor.getWorkspaceRoot()
+            );
+            request.getArguments().put(key, normalized);
         } catch (Exception ignored) {
             // 忽略路径标准化失败。
         }
     }
 
-    private boolean startsWithPath(Path path, Path prefix) {
-        if (path == null || prefix == null) {
-            return false;
+    private void normalizePathArrayArg(ToolInvocation request, AgentSession session, String key) {
+        Object value = request.getArguments().get(key);
+        if (!(value instanceof List)) {
+            return;
         }
-        if (prefix.getNameCount() == 0 || path.getNameCount() < prefix.getNameCount()) {
-            return false;
-        }
-        for (int index = 0; index < prefix.getNameCount(); index++) {
-            if (!String.valueOf(path.getName(index)).equals(String.valueOf(prefix.getName(index)))) {
-                return false;
+        @SuppressWarnings("unchecked")
+        List<Object> rawValues = (List<Object>) value;
+        List<String> normalized = new ArrayList<String>();
+        for (Object item : rawValues) {
+            if (item == null) {
+                continue;
+            }
+            String text = String.valueOf(item).trim();
+            if (text.isEmpty()) {
+                continue;
+            }
+            try {
+                if (toolExecutor.getWorkspaceRoot() == null) {
+                    normalized.add(text);
+                    continue;
+                }
+                normalized.add(WorkspacePathSupport.normalizeToolPathArgument(
+                        text,
+                        session.getWorkingDirectory(),
+                        toolExecutor.getWorkspaceRoot()
+                ));
+            } catch (Exception ignored) {
+                normalized.add(text);
             }
         }
-        return true;
-    }
-
-    private Path resolveWorkingDirectoryBase(Path absoluteWorkingDirectory, Path configuredWorkingDirectory) {
-        Path base = absoluteWorkingDirectory;
-        if (absoluteWorkingDirectory == null || configuredWorkingDirectory == null || configuredWorkingDirectory.isAbsolute()) {
-            return base;
-        }
-        for (int index = 0; index < configuredWorkingDirectory.getNameCount(); index++) {
-            if (base.getParent() == null) {
-                break;
-            }
-            base = base.getParent();
-        }
-        return base;
+        request.getArguments().put(key, normalized);
     }
 
     private String buildHumanDecisionMessage(ToolInvocation request, FinalResult turn, HumanDecision decision) {
@@ -339,7 +343,8 @@ final class ToolCallProcessor {
             return true;
         }
 
-        List<ToolExecutionRecord> records = toolExecutor.executeBatch(new ArrayList<ToolInvocation>(parallelBatch));
+        List<ToolExecutionRecord> records =
+                toolExecutor.executeBatch(new ArrayList<ToolInvocation>(parallelBatch), session.getWorkingDirectory());
         parallelBatch.clear();
         for (int index = 0; index < records.size(); index++) {
             ToolExecutionRecord record = records.get(index);
@@ -377,7 +382,6 @@ final class ToolCallProcessor {
         if ("read_file".equals(tool)) {
             String path = readStringArg(request, "path");
             if (!isBlank(path)) {
-                session.appendContextFile(path);
                 Integer offset = readIntegerArg(request, "offset");
                 Integer limit = readIntegerArg(request, "limit");
                 if (offset != null && limit != null) {
@@ -389,14 +393,15 @@ final class ToolCallProcessor {
         if ("edit_file".equals(tool) || "write_file".equals(tool)) {
             String path = readStringArg(request, "path");
             if (!isBlank(path)) {
-                session.appendContextFile(path);
+                // 写工具只更新最近编辑目标，不污染前端原始上下文文件列表。
+                session.setLastEditedFilePath(path);
             }
             return;
         }
         if ("edit_code".equals(tool)) {
             String file = readStringArg(request, "file");
             if (!isBlank(file)) {
-                session.appendContextFile(file);
+                session.setLastEditedFilePath(file);
             }
             return;
         }

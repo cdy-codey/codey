@@ -60,7 +60,8 @@ public class ChatTurnSessionUpdater {
         }
         for (String item : additions) {
             if (!isBlank(item)) {
-                session.appendContextFile(item);
+                // 当前轮前端补充的文件保持“用户原始输入”语义，避免被工具执行路径覆盖。
+                session.appendUserContextFile(item);
             }
         }
     }
@@ -71,7 +72,7 @@ public class ChatTurnSessionUpdater {
         }
         for (String item : additions) {
             if (!isBlank(item)) {
-                session.appendContextNote(item);
+                session.appendUserContextNote(item);
             }
         }
     }

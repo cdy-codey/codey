@@ -12,7 +12,6 @@ import com.codey.meta.IdentityMatchMode;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -78,7 +77,7 @@ public class ValidateVFormJsonTool extends AbstractTool {
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
         properties.put("path", stringProperty(
-                "待校验的 v-form-designer JSON 文件路径。工具会读取文件内容并校验，最外层必须直接是 widgetList 和 formConfig。"
+                "待校验的 v-form-designer JSON 文件路径，相对于当前工作目录。工具会读取文件内容并校验，最外层必须直接是 widgetList 和 formConfig。"
         ));
 
         parameters.put("properties", properties);
@@ -88,13 +87,13 @@ public class ValidateVFormJsonTool extends AbstractTool {
     }
 
     /**
-     * 优先复用工作区上下文的路径解析，保证工具仍然受当前项目目录边界约束。
+     * 该工具必须运行在工作区上下文中，避免绕过当前项目目录边界。
      */
     private Path resolveFilePath(String path, ToolContext context) {
-        if (context instanceof WorkspaceToolContext) {
-            return ((WorkspaceToolContext) context).resolvePath(path);
+        if (!(context instanceof WorkspaceToolContext)) {
+            throw new IllegalStateException("workspace tool context is required");
         }
-        return Paths.get(path).toAbsolutePath().normalize();
+        return ((WorkspaceToolContext) context).resolvePath(path);
     }
 
     private Map<String, Object> stringProperty(String description) {

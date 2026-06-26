@@ -128,14 +128,15 @@ public class PromptAssembler {
         if (builder == null || session == null) {
             return;
         }
-        List<String> contextFiles = distinctNonBlank(session.getContextFiles());
+        // system prompt 只暴露前端/用户显式给出的上下文，不回灌工具执行过程中出现的路径。
+        List<String> contextFiles = distinctNonBlank(session.getUserContextFiles());
         if (!contextFiles.isEmpty()) {
             builder.append("\n补充文件:\n");
             for (String file : contextFiles) {
                 builder.append("- ").append(file).append("\n");
             }
         }
-        List<String> contextNotes = distinctNonBlank(session.getContextNotes());
+        List<String> contextNotes = distinctNonBlank(session.getUserContextNotes());
         if (!contextNotes.isEmpty()) {
             builder.append("补充说明:\n");
             for (String note : contextNotes) {

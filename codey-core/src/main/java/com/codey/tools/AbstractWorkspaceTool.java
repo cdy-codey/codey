@@ -63,6 +63,7 @@ public abstract class AbstractWorkspaceTool implements ToolSpec {
                 : new WorkspaceToolContext(
                 null,
                 null,
+                null,
                 context == null ? null : context.getRequestId(),
                 context == null ? null : context.getSessionId(),
                 context == null ? null : context.getAttributes()

@@ -6,23 +6,24 @@ import com.codey.tool.ToolResult;
 import com.codey.tools.*;
 
 import com.codey.infra.ModelToolDefinition;
-import com.codey.infra.ReadFileRequest;
-import com.codey.infra.ReadFileResult;
-import com.codey.infra.WorkspaceGateway;
+import com.codey.infra.NumberedLine;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * 读取文件内容，并支持按行范围截取结果。
  */
 public class ReadFileTool extends AbstractWorkspaceTool {
-    private final WorkspaceGateway workspaceGateway;
     private final WorkspaceToolPayloadFormatter payloadFormatter = new WorkspaceToolPayloadFormatter();
 
-    public ReadFileTool(WorkspaceGateway workspaceGateway) {
-        this.workspaceGateway = workspaceGateway;
+    public ReadFileTool(com.codey.infra.WorkspaceGateway workspaceGateway) {
     }
 
     @Override
@@ -52,12 +53,24 @@ public class ReadFileTool extends AbstractWorkspaceTool {
     @Override
     public ToolResult execute(ToolInvocation request, WorkspaceToolContext context) {
         try {
-            ReadFileRequest readRequest = new ReadFileRequest();
-            readRequest.setPath(readRequiredString(request, "path"));
-            readRequest.setOffset(readInteger(request, "offset"));
-            readRequest.setLimit(readInteger(request, "limit"));
+            String pathValue = readRequiredString(request, "path");
+            Path target = context.resolvePath(pathValue);
+            List<String> lines = Files.readAllLines(target, StandardCharsets.UTF_8);
+            int totalLines = lines.size();
+            int startLine = normalizePositive(readInteger(request, "offset"), 1);
+            int maxLines = readInteger(request, "limit") == null
+                    ? Math.max(totalLines - startLine + 1, 0)
+                    : Math.max(0, readInteger(request, "limit"));
+            int fromIndex = Math.min(Math.max(startLine - 1, 0), totalLines);
+            int toIndex = Math.min(fromIndex + maxLines, totalLines);
 
-            ReadFileResult result = workspaceGateway.readFileResult(readRequest);
+            com.codey.infra.ReadFileResult result = new com.codey.infra.ReadFileResult();
+            result.setPath(context.relativize(target));
+            result.setStartLine(totalLines == 0 ? 0 : fromIndex + 1);
+            result.setEndLine(totalLines == 0 ? 0 : toIndex);
+            result.setTotalLines(totalLines);
+            result.setTruncated(toIndex < totalLines);
+            result.setLines(toNumberedLines(lines.subList(fromIndex, toIndex), fromIndex + 1));
             return ToolResult.ok(
                     "Read file success:\n" + payloadFormatter.formatReadFileResult(result),
                     "已读取文件内容"
@@ -77,7 +90,7 @@ public class ReadFileTool extends AbstractWorkspaceTool {
         parameters.put("type", "object");
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
-        properties.put("path", stringProperty("File path to read."));
+        properties.put("path", stringProperty("File path to read, relative to the current working directory."));
         properties.put("offset", integerProperty("Start line number, minimum 1."));
         properties.put("limit", integerProperty("Maximum number of lines to read."));
 
@@ -106,6 +119,22 @@ public class ReadFileTool extends AbstractWorkspaceTool {
         return Integer.valueOf(String.valueOf(value));
     }
 
+    private int normalizePositive(Integer value, int defaultValue) {
+        return value == null || value.intValue() <= 0 ? defaultValue : value.intValue();
+    }
+
+    private List<NumberedLine> toNumberedLines(List<String> lines, int startLine) {
+        List<NumberedLine> numberedLines = new ArrayList<NumberedLine>();
+        int lineNumber = startLine;
+        for (String line : lines) {
+            NumberedLine item = new NumberedLine();
+            item.setLineNumber(lineNumber++);
+            item.setContent(line);
+            numberedLines.add(item);
+        }
+        return numberedLines;
+    }
+
     private Map<String, Object> stringProperty(String description) {
         Map<String, Object> property = new LinkedHashMap<String, Object>();
         property.put("type", "string");
@@ -120,4 +149,3 @@ public class ReadFileTool extends AbstractWorkspaceTool {
         return property;
     }
 }
-

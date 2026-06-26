@@ -23,9 +23,8 @@ public class CliInteractiveChatFactory {
                                   List<String> contextNotes,
                                   List<String> identities) {
         ChatSessionState state = new ChatSessionState(skillName, identities);
-        if (workspaceRoot != null) {
-            state.setWorkingDirectory(workspaceRoot.toString());
-        }
+        // 交互式会话默认只暴露工作区内的相对根目录，不回显宿主机绝对路径。
+        state.setWorkingDirectory(".");
         appendContextFiles(state, contextFiles);
         appendContextNotes(state, contextNotes);
         return new InteractiveChatConsole(

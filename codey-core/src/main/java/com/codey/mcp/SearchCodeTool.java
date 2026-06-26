@@ -7,7 +7,9 @@ import com.codey.tools.*;
 
 import com.codey.infra.ModelToolDefinition;
 import com.codey.infra.SearchCodeRequest;
+import com.codey.infra.SearchCodeMatch;
 import com.codey.infra.SearchCodeResult;
+import com.codey.infra.WorkspacePathSupport;
 import com.codey.infra.WorkspaceGateway;
 
 import java.util.Arrays;
@@ -52,9 +54,10 @@ public class SearchCodeTool extends AbstractWorkspaceTool {
     @Override
     public ToolResult execute(ToolInvocation request, WorkspaceToolContext context) {
         try {
+            String pathHint = readString(request, "pathHint");
             SearchCodeRequest searchRequest = new SearchCodeRequest();
             searchRequest.setKeyword(readRequiredString(request, "keyword"));
-            searchRequest.setPathHint(readString(request, "pathHint"));
+            searchRequest.setPathHint(toWorkspaceRelativePath(context, pathHint));
             searchRequest.setRegex(readBoolean(request, "regex"));
             searchRequest.setCaseSensitive(readBoolean(request, "caseSensitive"));
             searchRequest.setContextLines(readInteger(request, "contextLines"));
@@ -62,6 +65,12 @@ public class SearchCodeTool extends AbstractWorkspaceTool {
             searchRequest.setFilePattern(readString(request, "filePattern"));
 
             SearchCodeResult result = workspaceGateway.searchCodeResult(searchRequest);
+            result.setRoot(".");
+            if (result.getMatches() != null) {
+                for (SearchCodeMatch match : result.getMatches()) {
+                    match.setPath(context.relativize(context.resolvePath(match.getPath())));
+                }
+            }
             return ToolResult.ok(
                     "Search code result:\n" + payloadFormatter.formatSearchCodeResult(result),
                     "已返回搜索结果"
@@ -82,7 +91,7 @@ public class SearchCodeTool extends AbstractWorkspaceTool {
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
         properties.put("keyword", stringProperty("Keyword or regular expression to search for."));
-        properties.put("pathHint", stringProperty("Optional subdirectory path hint. Defaults to the whole workspace."));
+        properties.put("pathHint", stringProperty("Optional subdirectory path hint relative to the current working directory. Defaults to the current working directory."));
         properties.put("regex", booleanProperty("Whether the keyword is treated as a regular expression."));
         properties.put("caseSensitive", booleanProperty("Whether the search is case sensitive."));
         properties.put("contextLines", integerProperty("Number of context lines to keep around each match."));
@@ -130,6 +139,16 @@ public class SearchCodeTool extends AbstractWorkspaceTool {
         return Boolean.valueOf(String.valueOf(value));
     }
 
+    private String toWorkspaceRelativePath(WorkspaceToolContext context, String pathHint) {
+        if (context == null || context.getWorkspaceRoot() == null) {
+            return pathHint;
+        }
+        return WorkspacePathSupport.relativize(
+                context.getWorkspaceRoot(),
+                context.resolvePath(pathHint == null || pathHint.trim().isEmpty() ? "." : pathHint)
+        );
+    }
+
     private Map<String, Object> stringProperty(String description) {
         Map<String, Object> property = new LinkedHashMap<String, Object>();
         property.put("type", "string");
@@ -151,4 +170,3 @@ public class SearchCodeTool extends AbstractWorkspaceTool {
         return property;
     }
 }
-

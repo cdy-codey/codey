@@ -17,8 +17,9 @@ class DefaultAgentClient extends TaskRunnerAgentClient {
                        SessionEventPublisher sessionEventPublisher) {
         super(taskRunner,
                 properties.getDefaultSkillName(),
-                workspaceRoot == null ? null : workspaceRoot.toString(),
+                ".",
                 properties == null ? null : properties.getModel(),
-                sessionEventPublisher);
+                sessionEventPublisher,
+                workspaceRoot);
     }
 }

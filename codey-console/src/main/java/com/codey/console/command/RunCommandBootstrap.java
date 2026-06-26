@@ -102,7 +102,10 @@ final class RunCommandBootstrap {
         AgentClient agentClient = new TaskRunnerAgentClient(
                 taskRunner,
                 options.getSkillName(),
-                workspaceRoot == null ? null : workspaceRoot.toString()
+                ".",
+                null,
+                null,
+                workspaceRoot
         );
         InteractiveChatConsole interactiveChatConsole = options.isInteractiveMode()
                 ? interactiveChatFactory.create(

@@ -1,10 +1,10 @@
 package com.codey.tools;
 
+import com.codey.infra.WorkspacePathSupport;
 import com.codey.infra.WorkspaceGateway;
 import com.codey.tool.ToolContext;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.Map;
 
@@ -14,21 +14,24 @@ import java.util.Map;
  */
 public class WorkspaceToolContext implements ToolContext {
     private final Path workspaceRoot;
+    private final String workingDirectory;
     private final WorkspaceGateway workspaceGateway;
     private final String requestId;
     private final String sessionId;
     private final Map<String, Object> attributes;
 
     public WorkspaceToolContext(Path workspaceRoot, WorkspaceGateway workspaceGateway) {
-        this(workspaceRoot, workspaceGateway, null, null, Collections.<String, Object>emptyMap());
+        this(workspaceRoot, null, workspaceGateway, null, null, Collections.<String, Object>emptyMap());
     }
 
     public WorkspaceToolContext(Path workspaceRoot,
+                                String workingDirectory,
                                 WorkspaceGateway workspaceGateway,
                                 String requestId,
                                 String sessionId,
                                 Map<String, Object> attributes) {
         this.workspaceRoot = workspaceRoot;
+        this.workingDirectory = workingDirectory;
         this.workspaceGateway = workspaceGateway;
         this.requestId = requestId;
         this.sessionId = sessionId;
@@ -41,6 +44,21 @@ public class WorkspaceToolContext implements ToolContext {
 
     public WorkspaceGateway getWorkspaceGateway() {
         return workspaceGateway;
+    }
+
+    public String getWorkingDirectory() {
+        return workingDirectory;
+    }
+
+    public WorkspaceToolContext withWorkingDirectory(String currentWorkingDirectory) {
+        return new WorkspaceToolContext(
+                workspaceRoot,
+                currentWorkingDirectory,
+                workspaceGateway,
+                requestId,
+                sessionId,
+                attributes
+        );
     }
 
     @Override
@@ -63,15 +81,18 @@ public class WorkspaceToolContext implements ToolContext {
             throw new IllegalArgumentException("path must not be blank");
         }
         if (workspaceRoot == null) {
-            return Paths.get(path.trim()).toAbsolutePath().normalize();
+            throw new IllegalStateException("workspace root is required for path resolution");
         }
-        Path candidate = Paths.get(path.trim());
-        Path resolved = candidate.isAbsolute()
-                ? candidate.toAbsolutePath().normalize()
-                : workspaceRoot.resolve(candidate).normalize();
-        if (!resolved.startsWith(workspaceRoot)) {
-            throw new IllegalArgumentException("Path escapes workspace root: " + path);
+        return WorkspacePathSupport.resolveToolPath(workspaceRoot, workingDirectory, path);
+    }
+
+    /**
+     * 对外回显路径时统一裁剪成工作区根目录下的相对路径。
+     */
+    public String relativize(Path path) {
+        if (workspaceRoot == null) {
+            return path == null ? "." : path.toString();
         }
-        return resolved;
+        return WorkspacePathSupport.relativizeToolPath(workspaceRoot, workingDirectory, path);
     }
 }

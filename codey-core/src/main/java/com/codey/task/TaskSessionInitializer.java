@@ -22,14 +22,15 @@ public class TaskSessionInitializer {
         session.setApiSpecPath(task.getApiSpecPath());
         session.setUserGoal(task.getGoal());
         session.setIdentities(task.getIdentities());
-        // 页面/API/上下文文件属于稳定运行环境，进入 system context，不伪装成用户输入。
+        // 页面/API 仍属于运行时上下文，但前端主动传入的文件与说明要单独记为 userContext，
+        // 这样后续工具读写不会把脏路径反灌回提示词。
         session.appendContextFile(task.getPagePath());
         session.appendContextFile(task.getApiSpecPath());
         for (String contextFile : task.getContextFiles()) {
-            session.appendContextFile(contextFile);
+            session.appendUserContextFile(contextFile);
         }
         for (String contextNote : task.getContextNotes()) {
-            session.appendContextNote(contextNote);
+            session.appendUserContextNote(contextNote);
         }
         for (String chatHistoryEntry : task.getChatHistory()) {
             session.appendChatHistory(chatHistoryEntry);

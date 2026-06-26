@@ -132,6 +132,12 @@ public class CanonicalStateBuilder {
         if (session == null) {
             return "";
         }
+        if (!session.getUserContextFiles().isEmpty()) {
+            return session.getUserContextFiles().get(session.getUserContextFiles().size() - 1);
+        }
+        if (!isBlank(session.getLastEditedFilePath())) {
+            return session.getLastEditedFilePath();
+        }
         if (!isBlank(session.getTargetPagePath())) {
             return session.getTargetPagePath();
         }

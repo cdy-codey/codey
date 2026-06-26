@@ -210,6 +210,7 @@ public class PromptLayerComposer {
         if (session != null && !isBlank(session.getWorkingDirectory())) {
             return session.getWorkingDirectory().trim();
         }
-        return Paths.get(System.getProperty("user.dir", ".")).toAbsolutePath().normalize().toString();
+        // 模型只需要看到工作区内的相对位置，不应暴露宿主机真实绝对目录。
+        return ".";
     }
 }

@@ -91,6 +91,10 @@ public class InteractiveChatConsole {
         }
         if (input.startsWith("/workdir ")) {
             String path = input.substring("/workdir ".length()).trim();
+            if (isAbsolutePath(path)) {
+                out.println("工作目录只允许使用相对工作区根目录的路径。");
+                return true;
+            }
             state.setWorkingDirectory(path);
             out.println("已设置工作目录: " + path);
             return true;
@@ -147,5 +151,13 @@ public class InteractiveChatConsole {
 
     private String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private boolean isAbsolutePath(String path) {
+        if (path == null) {
+            return false;
+        }
+        String normalized = path.trim();
+        return normalized.matches("^[A-Za-z]:[\\\\/].*") || normalized.startsWith("/");
     }
 }

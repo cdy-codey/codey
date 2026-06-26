@@ -296,16 +296,10 @@ public class ApplyPatchTool extends AbstractWorkspaceTool {
     }
 
     private String relativize(WorkspaceToolContext context, Path target) {
-        Path root = context.getWorkspaceRoot();
-        if (root == null) {
-            return target.toString();
+        if (context == null) {
+            return target == null ? "." : target.toString();
         }
-        Path normalizedRoot = root.toAbsolutePath().normalize();
-        Path normalizedTarget = target.toAbsolutePath().normalize();
-        if (normalizedRoot.equals(normalizedTarget)) {
-            return ".";
-        }
-        return normalizedRoot.relativize(normalizedTarget).toString();
+        return context.relativize(target);
     }
 
     private boolean safeEquals(String left, String right) {
@@ -322,7 +316,7 @@ public class ApplyPatchTool extends AbstractWorkspaceTool {
         parameters.put("type", "object");
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
-        properties.put("patch", stringProperty("Structured patch DSL content. It must start with *** Begin Patch and end with *** End Patch. Only *** Add File, *** Update File and @@ syntax are supported."));
+        properties.put("patch", stringProperty("Structured patch DSL content. File paths inside the patch must be relative to the current working directory. It must start with *** Begin Patch and end with *** End Patch. Only *** Add File, *** Update File and @@ syntax are supported."));
 
         parameters.put("properties", properties);
         parameters.put("required", Arrays.asList("patch"));

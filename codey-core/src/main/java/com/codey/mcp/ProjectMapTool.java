@@ -1,7 +1,6 @@
 package com.codey.mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.codey.infra.LocalWorkspaceGateway;
 import com.codey.infra.ModelToolDefinition;
 import com.codey.infra.WorkspaceGateway;
 import com.codey.tool.ToolCapability;
@@ -121,7 +120,7 @@ public class ProjectMapTool extends AbstractWorkspaceTool {
         parameters.put("type", "object");
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
-        properties.put("pathHint", stringProperty("Optional subdirectory path hint. Defaults to the whole workspace."));
+        properties.put("pathHint", stringProperty("Optional subdirectory path hint relative to the current working directory. Defaults to the current working directory."));
         properties.put("maxDepth", integerProperty("Maximum traversal depth. Default is 3."));
         properties.put("maxEntries", integerProperty("Maximum number of tree entries to return."));
         properties.put("maxKeyFiles", integerProperty("Maximum number of key files to include."));
@@ -134,21 +133,10 @@ public class ProjectMapTool extends AbstractWorkspaceTool {
 
     private Path resolveRoot(ToolInvocation request, WorkspaceToolContext context) {
         String pathHint = readString(request, "pathHint");
-        if (context != null && context.getWorkspaceRoot() != null) {
-            return isBlank(pathHint) ? context.getWorkspaceRoot() : context.resolvePath(pathHint);
+        if (context == null || context.getWorkspaceRoot() == null) {
+            throw new IllegalStateException("workspace tool context is required");
         }
-        if (workspaceGateway instanceof LocalWorkspaceGateway) {
-            Path workspaceRoot = ((LocalWorkspaceGateway) workspaceGateway).getWorkspaceRoot();
-            if (isBlank(pathHint)) {
-                return workspaceRoot;
-            }
-            Path resolved = workspaceRoot.resolve(pathHint).normalize();
-            if (!resolved.startsWith(workspaceRoot)) {
-                throw new IllegalArgumentException("Path escapes workspace root: " + pathHint);
-            }
-            return resolved;
-        }
-        throw new IllegalStateException("project_map requires local workspace access");
+        return isBlank(pathHint) ? context.resolvePath(".") : context.resolvePath(pathHint);
     }
 
     private List<Path> discover(Path root, int maxDepth) throws IOException {
@@ -322,4 +310,3 @@ public class ProjectMapTool extends AbstractWorkspaceTool {
         return property;
     }
 }
-

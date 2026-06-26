@@ -6,8 +6,12 @@ import com.codey.client.RunRequest;
 import com.codey.client.RunResult;
 import com.codey.client.SessionEventPublisher;
 import com.codey.config.ModelProperties;
+import com.codey.infra.WorkspacePathSupport;
 import com.codey.session.SessionEventFactory;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CompletableFuture;
@@ -24,6 +28,7 @@ public class TaskRunnerAgentClient implements AgentClient {
     private final TaskRunner taskRunner;
     private final String defaultSkillName;
     private final String defaultWorkingDirectory;
+    private final Path workspaceRoot;
     private final ModelProperties defaultModelConfig;
     private final SessionEventPublisher sessionEventPublisher;
     private final ConcurrentMap<String, TaskRunner.ChatSessionHandle> sessions =
@@ -38,14 +43,14 @@ public class TaskRunnerAgentClient implements AgentClient {
     public TaskRunnerAgentClient(TaskRunner taskRunner,
                                  String defaultSkillName,
                                  String defaultWorkingDirectory) {
-        this(taskRunner, defaultSkillName, defaultWorkingDirectory, null, null);
+        this(taskRunner, defaultSkillName, defaultWorkingDirectory, null, null, null);
     }
 
     public TaskRunnerAgentClient(TaskRunner taskRunner,
                                  String defaultSkillName,
                                  String defaultWorkingDirectory,
                                  ModelProperties defaultModelConfig) {
-        this(taskRunner, defaultSkillName, defaultWorkingDirectory, defaultModelConfig, null);
+        this(taskRunner, defaultSkillName, defaultWorkingDirectory, defaultModelConfig, null, null);
     }
 
     public TaskRunnerAgentClient(TaskRunner taskRunner,
@@ -53,9 +58,19 @@ public class TaskRunnerAgentClient implements AgentClient {
                                  String defaultWorkingDirectory,
                                  ModelProperties defaultModelConfig,
                                  SessionEventPublisher sessionEventPublisher) {
+        this(taskRunner, defaultSkillName, defaultWorkingDirectory, defaultModelConfig, sessionEventPublisher, null);
+    }
+
+    public TaskRunnerAgentClient(TaskRunner taskRunner,
+                                 String defaultSkillName,
+                                 String defaultWorkingDirectory,
+                                 ModelProperties defaultModelConfig,
+                                 SessionEventPublisher sessionEventPublisher,
+                                 Path workspaceRoot) {
         this.taskRunner = taskRunner;
         this.defaultSkillName = defaultSkillName;
         this.defaultWorkingDirectory = defaultWorkingDirectory;
+        this.workspaceRoot = workspaceRoot;
         this.defaultModelConfig = copyModelConfig(defaultModelConfig);
         this.sessionEventPublisher = sessionEventPublisher;
     }
@@ -130,11 +145,12 @@ public class TaskRunnerAgentClient implements AgentClient {
         task.setSessionId(source.getSessionId());
         task.setGoal(source.getGoal());
         task.setSkillName(resolveSkillName(source));
-        task.setWorkingDirectory(resolveWorkingDirectory(source));
+        String sanitizedWorkingDirectory = resolveWorkingDirectory(source);
+        task.setWorkingDirectory(sanitizedWorkingDirectory);
         task.setPagePath(source.getPagePath());
         task.setApiSpecPath(source.getApiSpecPath());
-        task.setContextFiles(source.getContextFiles());
-        task.setContextNotes(source.getContextNotes());
+        task.setContextFiles(sanitizeContextFiles(source.getContextFiles()));
+        task.setContextNotes(sanitizeContextNotes(source.getContextNotes()));
         task.setChatHistory(source.getChatHistory());
         task.setIdentities(source.getIdentities());
         task.setModelConfig(resolveModelConfig(source));
@@ -160,9 +176,37 @@ public class TaskRunnerAgentClient implements AgentClient {
 
     private String resolveWorkingDirectory(RunRequest request) {
         if (request != null && !isBlank(request.getWorkingDirectory())) {
-            return request.getWorkingDirectory();
+            return WorkspacePathSupport.sanitizeWorkingDirectory(request.getWorkingDirectory(), workspaceRoot);
         }
-        return defaultWorkingDirectory;
+        return WorkspacePathSupport.sanitizeWorkingDirectory(defaultWorkingDirectory, workspaceRoot);
+    }
+
+    private List<String> sanitizeContextFiles(List<String> contextFiles) {
+        List<String> sanitized = new ArrayList<String>();
+        if (contextFiles == null) {
+            return sanitized;
+        }
+        for (String item : contextFiles) {
+            if (isBlank(item)) {
+                continue;
+            }
+            sanitized.add(WorkspacePathSupport.sanitizeContextText(item, workspaceRoot));
+        }
+        return sanitized;
+    }
+
+    private List<String> sanitizeContextNotes(List<String> contextNotes) {
+        List<String> sanitized = new ArrayList<String>();
+        if (contextNotes == null) {
+            return sanitized;
+        }
+        for (String item : contextNotes) {
+            if (isBlank(item)) {
+                continue;
+            }
+            sanitized.add(WorkspacePathSupport.sanitizeContextText(item, workspaceRoot));
+        }
+        return sanitized;
     }
 
     private boolean isBlank(String value) {

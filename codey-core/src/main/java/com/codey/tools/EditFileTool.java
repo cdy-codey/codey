@@ -75,16 +75,10 @@ public class EditFileTool extends AbstractWorkspaceTool {
     }
 
     private String relativize(WorkspaceToolContext context, Path target) {
-        Path root = context.getWorkspaceRoot();
-        if (root == null) {
-            return target.toString();
+        if (context == null) {
+            return target == null ? "." : target.toString();
         }
-        Path normalizedRoot = root.toAbsolutePath().normalize();
-        Path normalizedTarget = target.toAbsolutePath().normalize();
-        if (normalizedRoot.equals(normalizedTarget)) {
-            return ".";
-        }
-        return normalizedRoot.relativize(normalizedTarget).toString();
+        return context.relativize(target);
     }
 
     @Override
@@ -97,7 +91,7 @@ public class EditFileTool extends AbstractWorkspaceTool {
         parameters.put("type", "object");
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
-        properties.put("path", stringProperty("Target file path."));
+        properties.put("path", stringProperty("Target file path relative to the current working directory."));
         properties.put("search", stringProperty("Original text to search for."));
         properties.put("replace", stringProperty("Replacement text."));
 

@@ -12,7 +12,6 @@ import com.codey.tools.WorkspaceToolContext;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -77,7 +76,7 @@ public class ValidateProcurementContextJsonTool extends AbstractTool {
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
         properties.put("path", stringProperty(
-                "待校验的采购 context.json 文件路径。工具会读取文件内容并校验查询接口结构、价格、目录内外和预算一致性。"
+                "待校验的采购 context.json 文件路径，相对于当前工作目录。工具会读取文件内容并校验查询接口结构、价格、目录内外和预算一致性。"
         ));
 
         parameters.put("properties", properties);
@@ -87,10 +86,10 @@ public class ValidateProcurementContextJsonTool extends AbstractTool {
     }
 
     private Path resolveFilePath(String path, ToolContext context) {
-        if (context instanceof WorkspaceToolContext) {
-            return ((WorkspaceToolContext) context).resolvePath(path);
+        if (!(context instanceof WorkspaceToolContext)) {
+            throw new IllegalStateException("workspace tool context is required");
         }
-        return Paths.get(path).toAbsolutePath().normalize();
+        return ((WorkspaceToolContext) context).resolvePath(path);
     }
 
     private Map<String, Object> stringProperty(String description) {
