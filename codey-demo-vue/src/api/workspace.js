@@ -22,15 +22,15 @@ export function createWorkspaceApi(baseUrl = '/api/workspace') {
       })
     },
 
-    create(payload = {}) {
-      return fetchJson(`${baseUrl}/create`, {
+    push(payload = {}) {
+      return fetchJson(`${baseUrl}/push`, {
         method: 'POST',
         body: JSON.stringify(payload),
       })
     },
 
     createFile(path, content = '') {
-      return this.create({
+      return this.push({
         path,
         directory: false,
         content,
@@ -38,28 +38,21 @@ export function createWorkspaceApi(baseUrl = '/api/workspace') {
     },
 
     createDirectory(path) {
-      return this.create({
+      return this.push({
         path,
         directory: true,
       })
     },
 
-    update(payload = {}) {
-      return fetchJson(`${baseUrl}/update`, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
-    },
-
     updateFileContent(path, content) {
-      return this.update({
+      return this.push({
         path,
         content,
       })
     },
 
     rename(path, newName) {
-      return this.update({
+      return this.push({
         path,
         newName,
       })

@@ -49,30 +49,11 @@ public class WorkspaceService {
     }
 
     /**
-     * create 接口同时支持创建文件和目录，便于后续扩展目录管理能力。
+     * 统一收口工作区写操作，供 Web 层通过一个 push 接口处理创建、保存和重命名。
      */
-    public WorkspaceSnapshot createEntry(String relativePath, boolean directory, String content) {
+    public WorkspaceSnapshot push(String relativePath, boolean directory, String content, String newName) {
         try {
-            return delegate.createEntry(relativePath, directory, content);
-        } catch (WorkspaceDirectoryException exception) {
-            throw toResponseStatusException(exception);
-        }
-    }
-
-    public WorkspaceSnapshot updateFile(String relativePath, String content) {
-        try {
-            return delegate.updateFile(relativePath, content);
-        } catch (WorkspaceDirectoryException exception) {
-            throw toResponseStatusException(exception);
-        }
-    }
-
-    /**
-     * update 接口除了保存文件内容，也支持只修改当前节点名称，避免继续膨胀新路由。
-     */
-    public WorkspaceSnapshot renameEntry(String relativePath, String newName) {
-        try {
-            return delegate.renameEntry(relativePath, newName);
+            return delegate.push(relativePath, directory, content, newName);
         } catch (WorkspaceDirectoryException exception) {
             throw toResponseStatusException(exception);
         }

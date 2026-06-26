@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 单工作目录控制器。
- * 只保留查询、创建、编辑、删除四个最小操作。
+ * 只保留查询、push 写入和删除三个最小操作。
  */
 @RestController
 @RequestMapping("/api/workspace")
@@ -33,7 +33,7 @@ public class WorkspaceController {
 
     /**
      * 查询指定 JSON 文件并直接返回解析后的结果。
-     * 入参与 create/update 保持一致，仍然只接收 path。
+     * 入参与 push 保持一致，仍然只接收 path。
      */
     @PostMapping("/query-json")
     public ApiResponse<JsonNode> queryJson(@RequestBody(required = false) QueryRequest request) {
@@ -41,31 +41,15 @@ public class WorkspaceController {
         return ApiResponse.success("JSON 工作结果查询成功", json);
     }
 
-    @PostMapping("/create")
-    public ApiResponse<WorkspaceSnapshot> create(@RequestBody CreateRequest request) {
-        WorkspaceSnapshot snapshot = workspaceService.createEntry(
+    @PostMapping("/push")
+    public ApiResponse<WorkspaceSnapshot> push(@RequestBody(required = false) PushRequest request) {
+        WorkspaceSnapshot snapshot = workspaceService.push(
                 request == null ? null : request.getPath(),
                 request != null && request.isDirectory(),
-                request == null ? null : request.getContent()
+                request == null ? null : request.getContent(),
+                request == null ? null : request.getNewName()
         );
-        return ApiResponse.success("工作目录创建成功", snapshot);
-    }
-
-    @PostMapping("/update")
-    public ApiResponse<WorkspaceSnapshot> update(@RequestBody UpdateRequest request) {
-        WorkspaceSnapshot snapshot;
-        if (request != null && request.getNewName() != null && !request.getNewName().trim().isEmpty()) {
-            snapshot = workspaceService.renameEntry(
-                    request.getPath(),
-                    request.getNewName()
-            );
-            return ApiResponse.success("工作目录重命名成功", snapshot);
-        }
-        snapshot = workspaceService.updateFile(
-                request == null ? null : request.getPath(),
-                request == null ? null : request.getContent()
-        );
-        return ApiResponse.success("工作目录保存成功", snapshot);
+        return ApiResponse.success(resolvePushSuccessMessage(request), snapshot);
     }
 
     @PostMapping("/delete")
@@ -86,9 +70,10 @@ public class WorkspaceController {
         }
     }
 
-    public static class CreateRequest extends QueryRequest {
+    public static class PushRequest extends QueryRequest {
         private boolean directory;
         private String content;
+        private String newName;
 
         public boolean isDirectory() {
             return directory;
@@ -97,19 +82,6 @@ public class WorkspaceController {
         public void setDirectory(boolean directory) {
             this.directory = directory;
         }
-
-        public String getContent() {
-            return content;
-        }
-
-        public void setContent(String content) {
-            this.content = content;
-        }
-    }
-
-    public static class UpdateRequest extends QueryRequest {
-        private String content;
-        private String newName;
 
         public String getContent() {
             return content;
@@ -129,5 +101,16 @@ public class WorkspaceController {
     }
 
     public static class DeleteRequest extends QueryRequest {
+    }
+
+    private String resolvePushSuccessMessage(PushRequest request) {
+        if (request == null) {
+            return "工作目录保存成功";
+        }
+        String newName = request.getNewName();
+        if (newName != null && !newName.trim().isEmpty()) {
+            return "工作目录重命名成功";
+        }
+        return request.isDirectory() ? "工作目录创建成功" : "工作目录保存成功";
     }
 }

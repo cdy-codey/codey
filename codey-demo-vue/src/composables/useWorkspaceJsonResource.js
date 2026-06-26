@@ -5,7 +5,7 @@ export function isWorkspaceMissingFileError(error) {
 }
 
 /**
- * 将工作区中的 JSON 文件读写收口成统一资源对象，避免业务页重复处理 query/create/update 细节。
+ * 将工作区中的 JSON 文件读写收口成统一资源对象，避免业务页重复处理 query/push 细节。
  */
 export function createWorkspaceJsonResource(options = {}) {
   const workspacePath = typeof options.workspacePath === 'string' ? options.workspacePath.trim() : ''
@@ -38,14 +38,11 @@ export function createWorkspaceJsonResource(options = {}) {
 
   async function save(payload) {
     const content = JSON.stringify(payload, null, 2)
-    try {
-      await workspaceApi.updateFileContent(workspacePath, content)
-    } catch (error) {
-      if (!isWorkspaceMissingFileError(error)) {
-        throw error
-      }
-      await workspaceApi.createFile(workspacePath, content)
-    }
+    // push 已经在后端统一处理创建和保存，这里不再区分 create/update。
+    await workspaceApi.push({
+      path: workspacePath,
+      content,
+    })
     return payload
   }
 

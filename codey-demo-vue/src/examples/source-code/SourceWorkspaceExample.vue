@@ -160,7 +160,10 @@ async function saveWorkspaceFile() {
       ? workspaceEditorRef.value.getValue()
       : editorContent.value
     editorContent.value = latestEditorContent
-    const snapshot = await workspaceApi.updateFileContent(activeFileKey.value, latestEditorContent)
+    const snapshot = await workspaceApi.push({
+      path: activeFileKey.value,
+      content: latestEditorContent,
+    })
     await applySnapshot(snapshot, activeFileKey.value, {
       syncAiContext: true,
     })
@@ -248,9 +251,11 @@ async function createWorkspaceEntry(options = {}) {
 
   creatingEntry.value = true
   try {
-    const snapshot = directory
-      ? await workspaceApi.createDirectory(path)
-      : await workspaceApi.createFile(path, '')
+    const snapshot = await workspaceApi.push({
+      path,
+      directory,
+      content: directory ? undefined : '',
+    })
     await applySnapshot(snapshot, directory ? activeFileKey.value : path, {
       syncAiContext: true,
     })
@@ -305,7 +310,10 @@ async function renameWorkspaceEntry(node) {
   creatingEntry.value = true
   try {
     const preferredPath = remapPathAfterRename(activeFileKey.value, sourcePath, nextName)
-    const snapshot = await workspaceApi.rename(sourcePath, nextName)
+    const snapshot = await workspaceApi.push({
+      path: sourcePath,
+      newName: nextName,
+    })
     await applySnapshot(snapshot, preferredPath, {
       syncAiContext: true,
     })
