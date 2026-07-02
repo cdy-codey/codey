@@ -1,2 +1,15 @@
 # codey-console 默认应用配置。
 # 需要时可在这里补充默认工作目录等控制台专属配置。
+#
+# logging.file-enabled 默认关闭，开启后才会将日志写入文件。
+# archive-file-name-pattern 使用 logback 的 %d 语法控制滚动周期：
+# - %d{yyyy-MM-dd} 表示按天滚动
+# - %d{yyyy-MM-dd_HH} 表示按小时滚动
+
+logging:
+  file-enabled: false
+  directory: logs
+  file-name: codey.log
+  archive-file-name-pattern: codey.%d{yyyy-MM-dd}.log
+  max-history-days: 30
+  pattern: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

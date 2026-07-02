@@ -10,6 +10,7 @@ import com.codey.console.common.WorkspaceRootResolver;
 import com.codey.infra.AppConfig;
 import com.codey.infra.AppConfigLoader;
 import com.codey.infra.LocalWorkspaceGateway;
+import com.codey.infra.LogbackConfigurator;
 import com.codey.infra.ModelConfig;
 import com.codey.infra.ModelConfigLoader;
 import com.codey.infra.ModelGateway;
@@ -41,6 +42,7 @@ final class RunCommandBootstrap {
     private final CliInteractiveChatFactory interactiveChatFactory;
     private final VerifierFactory verifierFactory;
     private final TaskRunnerFactory taskRunnerFactory;
+    private final LogbackConfigurator logbackConfigurator;
 
     RunCommandBootstrap() {
         this(
@@ -49,7 +51,8 @@ final class RunCommandBootstrap {
                 new CliSessionStoreFactory(),
                 new CliInteractiveChatFactory(),
                 new VerifierFactory(),
-                new TaskRunnerFactory()
+                new TaskRunnerFactory(),
+                new LogbackConfigurator()
         );
     }
 
@@ -58,17 +61,21 @@ final class RunCommandBootstrap {
                         CliSessionStoreFactory sessionStoreFactory,
                         CliInteractiveChatFactory interactiveChatFactory,
                         VerifierFactory verifierFactory,
-                        TaskRunnerFactory taskRunnerFactory) {
+                        TaskRunnerFactory taskRunnerFactory,
+                        LogbackConfigurator logbackConfigurator) {
         this.workspaceRootResolver = workspaceRootResolver;
         this.toolRegistryFactory = toolRegistryFactory;
         this.sessionStoreFactory = sessionStoreFactory;
         this.interactiveChatFactory = interactiveChatFactory;
         this.verifierFactory = verifierFactory;
         this.taskRunnerFactory = taskRunnerFactory;
+        this.logbackConfigurator = logbackConfigurator;
     }
 
     RunCommandRuntime bootstrap(RunCommandOptions options) {
         AppConfig appConfig = new AppConfigLoader().load(resolveConfigPath(options.getAppConfigPath()));
+        // 在创建其他组件前先初始化日志，保证后续运行都使用统一格式与落盘策略。
+        logbackConfigurator.configure(appConfig);
         Path workspaceRoot = resolveWorkspaceRoot(options, appConfig);
         LocalWorkspaceGateway workspaceGateway = new LocalWorkspaceGateway(workspaceRoot);
         ObjectMapper objectMapper = new ObjectMapper();

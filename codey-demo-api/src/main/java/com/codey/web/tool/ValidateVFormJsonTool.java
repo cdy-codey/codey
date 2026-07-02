@@ -1,6 +1,6 @@
 package com.codey.web.tool;
 
-import com.codey.tools.WorkspaceToolContext;
+import com.codey.infra.WorkspacePathSupport;
 import com.codey.tool.AbstractTool;
 import com.codey.tool.ToolCapability;
 import com.codey.tool.ToolContext;
@@ -8,6 +8,7 @@ import com.codey.tool.ToolDescriptor;
 import com.codey.tool.ToolInvocation;
 import com.codey.tool.ToolMetadata;
 import com.codey.tool.ToolResult;
+import com.codey.tools.WorkspaceToolContext;
 import com.codey.meta.IdentityMatchMode;
 import org.springframework.stereotype.Component;
 
@@ -87,13 +88,19 @@ public class ValidateVFormJsonTool extends AbstractTool {
     }
 
     /**
-     * 该工具必须运行在工作区上下文中，避免绕过当前项目目录边界。
+     * 该工具必须运行在工作区上下文中，并显式按当前 workingDirectory 解析文件路径。
      */
     private Path resolveFilePath(String path, ToolContext context) {
         if (!(context instanceof WorkspaceToolContext)) {
             throw new IllegalStateException("workspace tool context is required");
         }
-        return ((WorkspaceToolContext) context).resolvePath(path);
+        WorkspaceToolContext workspaceContext = (WorkspaceToolContext) context;
+        // ToolContext 只暴露工作目录字段，实际解析仍由 core 的工作区边界规则统一处理。
+        return WorkspacePathSupport.resolveToolPath(
+                workspaceContext.getWorkspaceRoot(),
+                context.getWorkingDirectory(),
+                path
+        );
     }
 
     private Map<String, Object> stringProperty(String description) {

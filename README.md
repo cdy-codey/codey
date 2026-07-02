@@ -96,9 +96,9 @@ codey/
 
 正式发布后，可通过公共 Maven 仓库引入以下核心模块：
 
-- `io.github.cdy-codey:codey-common:0.1.2`
-- `io.github.cdy-codey:codey-core:0.1.2`
-- `io.github.cdy-codey:codey-boot-starter:0.1.2`
+- `io.github.cdy-codey:codey-common:0.1.3`
+- `io.github.cdy-codey:codey-core:0.1.3`
+- `io.github.cdy-codey:codey-boot-starter:0.1.3`
 
 其中，业务系统接入 Spring Boot 时，通常只需要引入 Starter：
 
@@ -106,7 +106,7 @@ codey/
 <dependency>
     <groupId>io.github.cdy-codey</groupId>
     <artifactId>codey-boot-starter</artifactId>
-    <version>0.1.2</version>
+    <version>0.1.3</version>
 </dependency>
 ```
 

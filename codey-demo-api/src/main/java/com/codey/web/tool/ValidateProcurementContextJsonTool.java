@@ -1,5 +1,6 @@
 package com.codey.web.tool;
 
+import com.codey.infra.WorkspacePathSupport;
 import com.codey.meta.IdentityMatchMode;
 import com.codey.tool.AbstractTool;
 import com.codey.tool.ToolCapability;
@@ -89,7 +90,13 @@ public class ValidateProcurementContextJsonTool extends AbstractTool {
         if (!(context instanceof WorkspaceToolContext)) {
             throw new IllegalStateException("workspace tool context is required");
         }
-        return ((WorkspaceToolContext) context).resolvePath(path);
+        WorkspaceToolContext workspaceContext = (WorkspaceToolContext) context;
+        // ToolContext 只暴露工作目录字段，实际解析仍由 core 的工作区边界规则统一处理。
+        return WorkspacePathSupport.resolveToolPath(
+                workspaceContext.getWorkspaceRoot(),
+                context.getWorkingDirectory(),
+                path
+        );
     }
 
     private Map<String, Object> stringProperty(String description) {

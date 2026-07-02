@@ -46,6 +46,7 @@ public class WorkspaceToolContext implements ToolContext {
         return workspaceGateway;
     }
 
+    @Override
     public String getWorkingDirectory() {
         return workingDirectory;
     }
