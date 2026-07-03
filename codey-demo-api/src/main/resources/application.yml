@@ -13,7 +13,3 @@ codey:
     connect-timeout-millis: 10000
     read-timeout-millis: 30000
     max-retries: 2
-  # 工作目录。
-  working-directory: ./workspace/
-  # 会话日志。
-  session-directory: ./logs/

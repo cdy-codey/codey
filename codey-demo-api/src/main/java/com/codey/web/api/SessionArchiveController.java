@@ -1,10 +1,10 @@
 package com.codey.web.api;
 
 import com.codey.web.common.ApiResponse;
+import com.codey.web.config.WebDemoProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.codey.tools.ToolRegistry;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -44,10 +44,11 @@ public class SessionArchiveController {
 
     public SessionArchiveController(ObjectMapper objectMapper,
                                     ToolRegistry toolRegistry,
-                                    @Value("${codey.session-directory:}") String configuredSessionDirectory) {
+                                    WebDemoProperties properties) {
         this.objectMapper = objectMapper;
         this.toolRegistry = toolRegistry;
-        this.configuredSessionDirectory = configuredSessionDirectory;
+        // 历史归档目录与 Web Demo 其他目录配置统一收口到 WebDemoProperties，避免默认值失效。
+        this.configuredSessionDirectory = properties.getSessionDirectory();
     }
 
     @GetMapping("/sessions")

@@ -17,6 +17,12 @@ public class SpringProperties extends WorkspaceDirectoryProperties {
     @NestedConfigurationProperty
     private ModelProperties model = new ModelProperties();
 
+    public SpringProperties() {
+        // 统一提供基础默认目录，避免 Spring Boot 接入方必须显式声明工作区与会话归档目录。
+        setWorkingDirectory("./workspace");
+        setSessionDirectory("./sessions");
+    }
+
     public String getSkillsDirectory() {
         return skillsDirectory;
     }
