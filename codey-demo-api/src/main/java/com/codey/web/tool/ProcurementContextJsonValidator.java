@@ -12,8 +12,8 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -181,8 +181,10 @@ public class ProcurementContextJsonValidator {
         String requestDate = requireNonBlankText(header, "requestDate", "$.header.requestDate", report);
         if (!isBlank(requestDate)) {
             try {
-                LocalDate.parse(requestDate);
-            } catch (DateTimeParseException exception) {
+                SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+                dateFormat.setLenient(false);
+                dateFormat.parse(requestDate);
+            } catch (ParseException exception) {
                 report.addError("$.header.requestDate", "requestDate 必须是 YYYY-MM-DD 格式。");
             }
         }

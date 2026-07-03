@@ -9,4 +9,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "codey")
 public class WebDemoProperties extends WorkspaceDirectoryProperties {
+    public WebDemoProperties() {
+        // Demo 场景保留明确默认值，避免必须在 application.yml 中重复声明。
+        setWorkingDirectory("./workspace");
+        setSessionDirectory("./sessions");
+    }
 }

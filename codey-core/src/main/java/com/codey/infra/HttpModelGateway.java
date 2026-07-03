@@ -592,73 +592,95 @@ public class HttpModelGateway implements ModelGateway {
      * 启动期配置提供默认值，会话内模型配置快照只覆盖当前会话显式指定的字段。
      */
     private ModelConfig resolveConfig(ModelRequest request) {
-        ModelConfig resolved = copyBaseConfig();
-        applySessionOverrides(resolved, request == null ? null : request.getModelConfig());
+        // 启动期默认配置与会话级覆盖统一走同一套底层归一化逻辑，
+        // 避免不同入口各自 merge 导致最终运行态配置不一致。
+        ModelConfig resolved = ModelConfigResolver.merge(config, request == null ? null : request.getModelConfig());
+        // #region debug-point D:effective-model-config
+        debugReport(
+                "pre-fix",
+                "D",
+                "HttpModelGateway.resolveConfig",
+                "[DEBUG] 模型网关已解析本次请求的最终模型配置",
+                "{"
+                        + "\"sessionId\":\"" + escapeDebug(request == null ? null : request.getSessionId()) + "\","
+                        + "\"messageCount\":\"" + String.valueOf(request == null || request.getMessages() == null ? 0 : request.getMessages().size()) + "\","
+                        + "\"toolCount\":\"" + String.valueOf(request == null || request.getTools() == null ? 0 : request.getTools().size()) + "\","
+                        + "\"provider\":\"" + escapeDebug(resolved == null ? null : resolved.getProvider()) + "\","
+                        + "\"endpoint\":\"" + escapeDebug(resolved == null ? null : resolved.getEndpoint()) + "\","
+                        + "\"modelName\":\"" + escapeDebug(resolved == null ? null : resolved.getModelName()) + "\","
+                        + "\"temperature\":\"" + escapeDebug(String.valueOf(resolved == null ? null : resolved.getTemperature())) + "\","
+                        + "\"connectTimeoutMillis\":\"" + escapeDebug(String.valueOf(resolved == null ? null : resolved.getConnectTimeoutMillis())) + "\","
+                        + "\"readTimeoutMillis\":\"" + escapeDebug(String.valueOf(resolved == null ? null : resolved.getReadTimeoutMillis())) + "\","
+                        + "\"maxRetries\":\"" + escapeDebug(String.valueOf(resolved == null ? null : resolved.getMaxRetries())) + "\","
+                        + "\"apiKeyTail\":\"" + escapeDebug(maskApiKey(resolved == null ? null : resolved.getApiKey())) + "\""
+                        + "}",
+                request == null ? null : request.getSessionId()
+        );
+        // #endregion
         return resolved;
     }
 
-    private ModelConfig copyBaseConfig() {
-        ModelConfig copy = new ModelConfig();
-        copy.setProvider(config.getProvider());
-        copy.setEndpoint(config.getEndpoint());
-        copy.setApiKey(config.getApiKey());
-        copy.setApiKeyEnv(config.getApiKeyEnv());
-        copy.setModelName(config.getModelName());
-        copy.setTemperature(config.getTemperature());
-        copy.setDebugEnabled(config.isDebugEnabled());
-        copy.setDebugDir(config.getDebugDir());
-        copy.setConnectTimeoutMillis(config.getConnectTimeoutMillis());
-        copy.setReadTimeoutMillis(config.getReadTimeoutMillis());
-        copy.setMaxRetries(config.getMaxRetries());
-        return copy;
+    // #region debug-point D:effective-model-config
+    private void debugReport(String runId, String hypothesisId, String location, String msg, String dataJson, String traceId) {
+        try {
+            String serverUrl = "http://127.0.0.1:7777/event";
+            String sessionId = "db-model-stagnation";
+            Path envPath = Paths.get(".dbg", "db-model-stagnation.env");
+            if (Files.exists(envPath)) {
+                List<String> lines = Files.readAllLines(envPath, StandardCharsets.UTF_8);
+                for (String line : lines) {
+                    if (line.startsWith("DEBUG_SERVER_URL=")) {
+                        serverUrl = line.substring("DEBUG_SERVER_URL=".length()).trim();
+                    } else if (line.startsWith("DEBUG_SESSION_ID=")) {
+                        sessionId = line.substring("DEBUG_SESSION_ID=".length()).trim();
+                    }
+                }
+            }
+            String payload = "{"
+                    + "\"sessionId\":\"" + escapeDebug(sessionId) + "\","
+                    + "\"runId\":\"" + escapeDebug(runId) + "\","
+                    + "\"hypothesisId\":\"" + escapeDebug(hypothesisId) + "\","
+                    + "\"location\":\"" + escapeDebug(location) + "\","
+                    + "\"msg\":\"" + escapeDebug(msg) + "\","
+                    + "\"traceId\":\"" + escapeDebug(traceId) + "\","
+                    + "\"data\":" + (dataJson == null ? "{}" : dataJson)
+                    + "}";
+            HttpURLConnection connection = (HttpURLConnection) new URL(serverUrl).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+            byte[] body = payload.getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(body.length);
+            OutputStream outputStream = connection.getOutputStream();
+            try {
+                outputStream.write(body);
+                outputStream.flush();
+            } finally {
+                outputStream.close();
+            }
+            connection.getInputStream().close();
+        } catch (Exception ignored) {
+        }
     }
 
-    private void applySessionOverrides(ModelConfig target, ModelProperties sessionConfig) {
-        if (target == null || sessionConfig == null) {
-            return;
+    private String escapeDebug(String value) {
+        if (value == null) {
+            return "";
         }
-        if (!isBlank(sessionConfig.getProvider())) {
-            target.setProvider(sessionConfig.getProvider());
-        }
-        if (!isBlank(sessionConfig.getEndpoint())) {
-            target.setEndpoint(sessionConfig.getEndpoint());
-        }
-        if (!isBlank(sessionConfig.getModelName())) {
-            target.setModelName(sessionConfig.getModelName());
-        }
-        if (!isBlank(sessionConfig.getApiKey())) {
-            target.setApiKey(sessionConfig.getApiKey());
-        }
-        if (!isBlank(sessionConfig.getApiKeyEnv())) {
-            target.setApiKeyEnv(sessionConfig.getApiKeyEnv());
-        }
-        if (sessionConfig.getTemperature() != null) {
-            target.setTemperature(sessionConfig.getTemperature());
-        }
-        if (sessionConfig.getConnectTimeoutMillis() != null) {
-            target.setConnectTimeoutMillis(sessionConfig.getConnectTimeoutMillis().intValue());
-        }
-        if (sessionConfig.getReadTimeoutMillis() != null) {
-            target.setReadTimeoutMillis(sessionConfig.getReadTimeoutMillis().intValue());
-        }
-        if (sessionConfig.getMaxRetries() != null) {
-            target.setMaxRetries(sessionConfig.getMaxRetries().intValue());
-        }
-        target.setApiKey(resolveApiKey(target));
+        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", "\\r").replace("\n", "\\n");
     }
 
-    private String resolveApiKey(ModelConfig target) {
-        if (target == null) {
-            return null;
+    private String maskApiKey(String apiKey) {
+        if (isBlank(apiKey)) {
+            return "";
         }
-        if (!isBlank(target.getApiKey())) {
-            return target.getApiKey();
+        String trimmed = apiKey.trim();
+        if (trimmed.length() <= 4) {
+            return trimmed;
         }
-        if (!isBlank(target.getApiKeyEnv())) {
-            return System.getenv(target.getApiKeyEnv());
-        }
-        return null;
+        return "***" + trimmed.substring(trimmed.length() - 4);
     }
+    // #endregion
 
     private List<Map<String, Object>> buildOpenAiTools(List<ModelToolDefinition> definitions) {
         List<Map<String, Object>> tools = new ArrayList<Map<String, Object>>();

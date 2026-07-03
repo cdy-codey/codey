@@ -48,9 +48,13 @@ public class DemoSessionModelConfigService {
         }
         // 这里模拟“数据库记录”覆盖统一配置对象，后续 openSession 只接收这一份 modelConfig。
         databaseConfig.setProvider("http");
+        databaseConfig.setEndpoint("https://api.deepseek.com/chat/completions");
         databaseConfig.setModelName("deepseek-v4-pro");
-        databaseConfig.setTemperature(Double.valueOf(0.1d));
-        databaseConfig.setMaxRetries(Integer.valueOf(1));
+        databaseConfig.setApiKey("sk-d24de3ac58ed46fe901e89caf5c92ec4");
+        databaseConfig.setTemperature(Double.valueOf(0.2d));
+        databaseConfig.setConnectTimeoutMillis(Integer.valueOf(10000));
+        databaseConfig.setReadTimeoutMillis(Integer.valueOf(30000));
+        databaseConfig.setMaxRetries(Integer.valueOf(2));
         return databaseConfig;
     }
 

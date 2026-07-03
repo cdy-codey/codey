@@ -23,10 +23,10 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -172,7 +172,7 @@ public class SessionArchiveController {
         JsonNode messagesNode = requestNode.path("messages");
         String lastUserMessage = extractLastMessage(messagesNode, "user");
         String lastAssistantMessage = extractLastMessage(messagesNode, "assistant");
-        Instant updatedAt = readLastModified(latestRequestFile);
+        Date updatedAt = readLastModified(latestRequestFile);
         int displayMessageCount = countDisplayMessages(messagesNode);
         ArchivedMessage latestModelOutput = readLatestModelOutputMessage(
                 sessionDir.getFileName().toString(),
@@ -751,10 +751,10 @@ public class SessionArchiveController {
         }
     }
 
-    private Instant readLastModified(Path file) {
+    private Date readLastModified(Path file) {
         try {
             FileTime fileTime = Files.getLastModifiedTime(file);
-            return fileTime.toInstant();
+            return new Date(fileTime.toMillis());
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "读取文件时间失败", exception);
         }
@@ -840,7 +840,7 @@ public class SessionArchiveController {
         private final String sessionId;
         private final String title;
         private final String preview;
-        private final Instant updatedAt;
+        private final Date updatedAt;
         private final int requestLogCount;
         private final int messageCount;
         private final boolean hasEventLog;
@@ -849,7 +849,7 @@ public class SessionArchiveController {
         public SessionArchiveSummary(String sessionId,
                                      String title,
                                      String preview,
-                                     Instant updatedAt,
+                                     Date updatedAt,
                                      int requestLogCount,
                                      int messageCount,
                                      boolean hasEventLog,
@@ -876,7 +876,7 @@ public class SessionArchiveController {
             return preview;
         }
 
-        public Instant getUpdatedAt() {
+        public Date getUpdatedAt() {
             return updatedAt;
         }
 
@@ -1011,14 +1011,14 @@ public class SessionArchiveController {
     public static class RequestLogEntry {
         private final String fileName;
         private final int sequence;
-        private final Instant updatedAt;
+        private final Date updatedAt;
         private final String userMessage;
         private final int messageCount;
         private final String content;
 
         public RequestLogEntry(String fileName,
                                int sequence,
-                               Instant updatedAt,
+                               Date updatedAt,
                                String userMessage,
                                int messageCount,
                                String content) {
@@ -1038,7 +1038,7 @@ public class SessionArchiveController {
             return sequence;
         }
 
-        public Instant getUpdatedAt() {
+        public Date getUpdatedAt() {
             return updatedAt;
         }
 

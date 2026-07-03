@@ -8,15 +8,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.OffsetDateTime;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TimeZone;
 
 /**
  * 为独立事件目录提供统一的格式化落盘能力。
  */
 abstract class AbstractStructuredEventStore implements SessionStore {
+    private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
     private final Path rootDir;
     private final ObjectMapper objectMapper;
     private final Map<String, Integer> sequenceBySession = new HashMap<String, Integer>();
@@ -35,7 +38,7 @@ abstract class AbstractStructuredEventStore implements SessionStore {
             Path file = sessionDir.resolve(fileName);
 
             Map<String, Object> event = new LinkedHashMap<String, Object>();
-            event.put("timestamp", OffsetDateTime.now().toString());
+            event.put("timestamp", formatNow());
             event.put("sessionId", sessionId);
             event.put("eventType", eventType);
             event.put("payload", payload);
@@ -47,6 +50,13 @@ abstract class AbstractStructuredEventStore implements SessionStore {
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to write structured event log", exception);
         }
+    }
+
+    // 结构化独立日志统一输出 Date 风格时间字符串，保持全项目时间口径一致。
+    private String formatNow() {
+        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_TIME_PATTERN);
+        dateFormat.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+        return dateFormat.format(new Date());
     }
 
     private int nextSequence(String sessionId) {

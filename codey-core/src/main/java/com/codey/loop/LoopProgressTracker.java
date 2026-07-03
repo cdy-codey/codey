@@ -2,6 +2,15 @@ package com.codey.loop;
 
 import com.codey.config.AgentSession;
 
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+
 /**
  * 记录循环内的进度快照，用于停滞判定和失败消息输出。
  * 最大循环次数表示“距离上次有效进展之后还能继续尝试多少轮”，而不是整轮对话的绝对死计数。
@@ -77,6 +86,26 @@ final class LoopProgressTracker {
         if (!isBlank(lastFeedback)) {
             message = message + ". lastFeedback=" + lastFeedback;
         }
+        // #region debug-point B:loop-halt
+        debugReport(
+                "pre-fix",
+                "B",
+                "LoopProgressTracker.buildHaltMessage",
+                "[DEBUG] 循环因停滞被终止",
+                "{"
+                        + "\"sessionId\":\"" + escapeDebug(session == null ? null : session.getSessionId()) + "\","
+                        + "\"maxLoopCount\":\"" + maxLoopCount + "\","
+                        + "\"loop\":\"" + loop + "\","
+                        + "\"progressLoop\":\"" + progressLoop + "\","
+                        + "\"loopsSinceProgress\":\"" + loopsSinceProgress + "\","
+                        + "\"toolResults\":\"" + toolResultsSize + "\","
+                        + "\"editResults\":\"" + editResultsSize + "\","
+                        + "\"transcript\":\"" + transcriptSize + "\","
+                        + "\"lastFeedback\":\"" + escapeDebug(lastFeedback) + "\""
+                        + "}",
+                session == null ? null : session.getSessionId()
+        );
+        // #endregion
         return message;
     }
 
@@ -95,6 +124,57 @@ final class LoopProgressTracker {
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
     }
+
+    // #region debug-point B:loop-halt
+    private void debugReport(String runId, String hypothesisId, String location, String msg, String dataJson, String traceId) {
+        try {
+            String serverUrl = "http://127.0.0.1:7777/event";
+            String sessionId = "db-model-stagnation";
+            Path envPath = Paths.get(".dbg", "db-model-stagnation.env");
+            if (Files.exists(envPath)) {
+                List<String> lines = Files.readAllLines(envPath, StandardCharsets.UTF_8);
+                for (String line : lines) {
+                    if (line.startsWith("DEBUG_SERVER_URL=")) {
+                        serverUrl = line.substring("DEBUG_SERVER_URL=".length()).trim();
+                    } else if (line.startsWith("DEBUG_SESSION_ID=")) {
+                        sessionId = line.substring("DEBUG_SESSION_ID=".length()).trim();
+                    }
+                }
+            }
+            String payload = "{"
+                    + "\"sessionId\":\"" + escapeDebug(sessionId) + "\","
+                    + "\"runId\":\"" + escapeDebug(runId) + "\","
+                    + "\"hypothesisId\":\"" + escapeDebug(hypothesisId) + "\","
+                    + "\"location\":\"" + escapeDebug(location) + "\","
+                    + "\"msg\":\"" + escapeDebug(msg) + "\","
+                    + "\"traceId\":\"" + escapeDebug(traceId) + "\","
+                    + "\"data\":" + (dataJson == null ? "{}" : dataJson)
+                    + "}";
+            HttpURLConnection connection = (HttpURLConnection) new URL(serverUrl).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+            byte[] body = payload.getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(body.length);
+            OutputStream outputStream = connection.getOutputStream();
+            try {
+                outputStream.write(body);
+                outputStream.flush();
+            } finally {
+                outputStream.close();
+            }
+            connection.getInputStream().close();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String escapeDebug(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", "\\r").replace("\n", "\\n");
+    }
+    // #endregion
 
     static final class SessionProgressSnapshot {
         private final int toolResultsSize;

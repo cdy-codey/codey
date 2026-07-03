@@ -5,6 +5,7 @@ import com.codey.client.ChatSession;
 import com.codey.client.RunRequest;
 import com.codey.client.SessionEventHub;
 import com.codey.web.common.ApiResponse;
+import com.codey.web.service.DemoSessionModelConfigService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,13 +27,16 @@ public class ChatController {
     private final AgentClient agentClient;
     private final SessionEventHub sessionEventHub;
     private final ChatSessionDisplayOptionsStore displayOptionsStore;
+    private final DemoSessionModelConfigService demoSessionModelConfigService;
 
     public ChatController(AgentClient agentClient,
                                  SessionEventHub sessionEventHub,
-                                 ChatSessionDisplayOptionsStore displayOptionsStore) {
+                                 ChatSessionDisplayOptionsStore displayOptionsStore,
+                                 DemoSessionModelConfigService demoSessionModelConfigService) {
         this.agentClient = agentClient;
         this.sessionEventHub = sessionEventHub;
         this.displayOptionsStore = displayOptionsStore;
+        this.demoSessionModelConfigService = demoSessionModelConfigService;
     }
 
     @PostMapping("/sessions")
@@ -104,7 +108,8 @@ public class ChatController {
     }
 
     private RunRequest normalize(RunRequest request) {
-        return request == null ? new RunRequest() : request;
+        // Web Demo 正式走会话级模型配置注入，配置来源可替换为数据库查询结果。
+        return demoSessionModelConfigService.applyDatabaseModelConfig(request);
     }
 
     private void saveDisplayOptions(String sessionId, RunRequest request) {

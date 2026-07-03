@@ -77,7 +77,7 @@ public class TaskRunnerAgentClient implements AgentClient {
 
     @Override
     public RunResult run(RunRequest request) {
-        return toResult(taskRunner.run(toTask(request)));
+        return toResult(taskRunner.run(toStandaloneTask(request)));
     }
 
     @Override
@@ -89,7 +89,7 @@ public class TaskRunnerAgentClient implements AgentClient {
                 return new ChatSession(requestedSessionId);
             }
         }
-        TaskRunner.ChatSessionHandle handle = taskRunner.openChatSession(toTask(request));
+        TaskRunner.ChatSessionHandle handle = taskRunner.openChatSession(toSessionOpenTask(request));
         String sessionId = handle == null ? null : handle.getSessionId();
         if (isBlank(sessionId)) {
             throw new IllegalStateException("打开会话失败，未返回 sessionId");
@@ -107,7 +107,7 @@ public class TaskRunnerAgentClient implements AgentClient {
         if (handle == null) {
             throw new IllegalStateException("未找到会话: " + sessionId);
         }
-        return toResult(taskRunner.runChatTurn(handle, toTask(request)));
+        return toResult(taskRunner.runChatTurn(handle, toSessionTurnTask(request)));
     }
 
     @Override
@@ -119,7 +119,7 @@ public class TaskRunnerAgentClient implements AgentClient {
         if (handle == null) {
             throw new IllegalStateException("未找到会话: " + sessionId);
         }
-        final GenerateTask task = toTask(request);
+        final GenerateTask task = toSessionTurnTask(request);
         final CompletableFuture<Void> queuedTurn = sessionTurnChains.compute(sessionId, (key, previous) -> {
             CompletableFuture<Void> head = previous == null
                     ? CompletableFuture.completedFuture(null)
@@ -139,7 +139,19 @@ public class TaskRunnerAgentClient implements AgentClient {
         }
     }
 
-    private GenerateTask toTask(RunRequest request) {
+    private GenerateTask toStandaloneTask(RunRequest request) {
+        return toTask(request, true);
+    }
+
+    private GenerateTask toSessionOpenTask(RunRequest request) {
+        return toTask(request, true);
+    }
+
+    private GenerateTask toSessionTurnTask(RunRequest request) {
+        return toTask(request, false);
+    }
+
+    private GenerateTask toTask(RunRequest request, boolean resolveModelConfig) {
         RunRequest source = request == null ? new RunRequest() : request;
         GenerateTask task = new GenerateTask();
         task.setSessionId(source.getSessionId());
@@ -153,7 +165,9 @@ public class TaskRunnerAgentClient implements AgentClient {
         task.setContextNotes(sanitizeContextNotes(source.getContextNotes()));
         task.setChatHistory(source.getChatHistory());
         task.setIdentities(source.getIdentities());
-        task.setModelConfig(resolveModelConfig(source));
+        if (resolveModelConfig) {
+            task.setModelConfig(resolveInitialModelConfig(source));
+        }
         return task;
     }
 
@@ -213,11 +227,15 @@ public class TaskRunnerAgentClient implements AgentClient {
         return value == null || value.trim().isEmpty();
     }
 
-    private ModelProperties resolveModelConfig(RunRequest request) {
+    private ModelProperties resolveInitialModelConfig(RunRequest request) {
         if (request != null && request.getModelConfig() != null) {
-            return request.getModelConfig();
+            return copyModelConfig(request.getModelConfig());
         }
-        return copyModelConfig(defaultModelConfig);
+        ModelProperties fallback = copyModelConfig(defaultModelConfig);
+        if (fallback != null) {
+            return fallback;
+        }
+        throw new IllegalStateException("模型配置缺失：openSession 时请传入 modelConfig；如果未传入，则必须在 application.yml 中配置 codey.model");
     }
 
     private ModelProperties copyModelConfig(ModelProperties source) {

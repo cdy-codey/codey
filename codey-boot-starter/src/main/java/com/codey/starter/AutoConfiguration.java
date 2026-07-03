@@ -2,6 +2,7 @@ package com.codey.starter;
 
 import com.codey.infra.LocalWorkspaceGateway;
 import com.codey.infra.ModelConfig;
+import com.codey.infra.ModelConfigResolver;
 import com.codey.infra.ModelGateway;
 import com.codey.infra.ModelGatewayFactory;
 import com.codey.loop.HumanConfirmationService;
@@ -295,53 +296,8 @@ public class AutoConfiguration {
     }
 
     private ModelConfig toModelConfig(ModelProperties properties) {
-        // starter 只负责把 Spring 配置映射为运行时配置，不再兜底读取底层 model.yaml。
-        ModelConfig config = new ModelConfig();
-        if (properties == null) {
-            return config;
-        }
-        if (!isBlank(properties.getProvider())) {
-            config.setProvider(properties.getProvider());
-        }
-        if (!isBlank(properties.getEndpoint())) {
-            config.setEndpoint(properties.getEndpoint());
-        }
-        if (!isBlank(properties.getModelName())) {
-            config.setModelName(properties.getModelName());
-        }
-        String resolvedApiKey = resolveApiKey(properties);
-        if (!isBlank(resolvedApiKey)) {
-            config.setApiKey(resolvedApiKey);
-        }
-        if (!isBlank(properties.getApiKeyEnv())) {
-            config.setApiKeyEnv(properties.getApiKeyEnv());
-        }
-        if (properties.getTemperature() != null) {
-            config.setTemperature(properties.getTemperature());
-        }
-        if (properties.getConnectTimeoutMillis() != null) {
-            config.setConnectTimeoutMillis(properties.getConnectTimeoutMillis().intValue());
-        }
-        if (properties.getReadTimeoutMillis() != null) {
-            config.setReadTimeoutMillis(properties.getReadTimeoutMillis().intValue());
-        }
-        if (properties.getMaxRetries() != null) {
-            config.setMaxRetries(properties.getMaxRetries().intValue());
-        }
-        return config;
-    }
-
-    private String resolveApiKey(ModelProperties properties) {
-        if (properties == null) {
-            return null;
-        }
-        if (!isBlank(properties.getApiKey())) {
-            return properties.getApiKey();
-        }
-        if (!isBlank(properties.getApiKeyEnv())) {
-            return System.getenv(properties.getApiKeyEnv());
-        }
-        return null;
+        // starter 与会话级覆盖共用同一套底层配置归一化逻辑，避免运行态差异。
+        return ModelConfigResolver.fromProperties(properties);
     }
 
     private boolean isBlank(String value) {

@@ -1,6 +1,6 @@
 package com.codey.web.common;
 
-import java.time.Instant;
+import java.util.Date;
 
 /**
  * 统一 REST 返回体。
@@ -12,14 +12,15 @@ public class ApiResponse<T> {
     private final String code;
     private final String message;
     private final T data;
-    private final Instant timestamp;
+    // 使用 java.util.Date 复用现有 JacksonConfig 的全局日期格式，避免输出时间戳。
+    private final Date timestamp;
 
     private ApiResponse(boolean success, String code, String message, T data) {
         this.success = success;
         this.code = code;
         this.message = message;
         this.data = data;
-        this.timestamp = Instant.now();
+        this.timestamp = new Date();
     }
 
     public static <T> ApiResponse<T> success(String message, T data) {
@@ -46,7 +47,7 @@ public class ApiResponse<T> {
         return data;
     }
 
-    public Instant getTimestamp() {
+    public Date getTimestamp() {
         return timestamp;
     }
 }

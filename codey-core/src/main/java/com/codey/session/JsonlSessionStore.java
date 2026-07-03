@@ -10,10 +10,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.OffsetDateTime;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TimeZone;
 
 /**
  * 基于 json 的会话日志存储。
@@ -25,6 +27,7 @@ public class JsonlSessionStore implements SessionStore {
     private static final int MAX_INLINE_STRING_LENGTH = 4096;
     private static final int MAX_COLLECTION_ITEMS = 32;
     private static final int MAX_SANITIZE_DEPTH = 6;
+    private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
     private final Path sessionDir;
     private final ObjectMapper objectMapper;
@@ -109,7 +112,7 @@ public class JsonlSessionStore implements SessionStore {
             Files.createDirectories(sessionDir);
             Path file = sessionDir.resolve(event.getSessionId() + ".jsonl");
             Map<String, Object> eventLine = new LinkedHashMap<String, Object>();
-            eventLine.put("timestamp", OffsetDateTime.now().toString());
+            eventLine.put("timestamp", formatNow());
             eventLine.put("sessionId", event.getSessionId());
             eventLine.put("eventType", event.getType() == null ? null : event.getType().getCode());
             if (!isBlank(event.getStage())) {
@@ -126,6 +129,13 @@ public class JsonlSessionStore implements SessionStore {
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to write session log", exception);
         }
+    }
+
+    // 独立日志统一输出 Date 风格时间字符串，避免项目内继续混用 java.time 时间类型。
+    private String formatNow() {
+        SimpleDateFormat dateFormat = new SimpleDateFormat(DATE_TIME_PATTERN);
+        dateFormat.setTimeZone(TimeZone.getTimeZone("GMT+8"));
+        return dateFormat.format(new Date());
     }
 
     private void appendThinkingDelta(SessionEvent event) {
