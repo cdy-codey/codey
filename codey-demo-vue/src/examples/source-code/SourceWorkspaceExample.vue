@@ -3,20 +3,17 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
-import AiChatWorkspace from '../../components/ai/AiChatWorkspace.vue'
+import { AiChatWorkspace } from 'codey-chat-workspace'
 import WorkspaceEditorPanel from '../../components/workspace/WorkspaceEditorPanel.vue'
 import WorkspaceFileTree from '../../components/workspace/WorkspaceFileTree.vue'
-import { createWorkspaceApi } from '../../api/workspace'
+import { useAiAssistantHandlers } from '../../composables/useAiAssistantHandlers'
 
-const workspaceApi = createWorkspaceApi()
+const { aiAssistantHandlers, workspaceApi } = useAiAssistantHandlers()
 
 const workspaceSnapshot = ref(null)
 const workspaceEditorRef = ref(null)
-const activeDocumentId = ref('')
 const activeFileKey = ref('')
 const editorContent = ref('')
-const loadedFileContent = ref('')
-const workspaceStatus = ref('工作目录尚未加载')
 const loadingWorkspace = ref(false)
 const loadingFile = ref(false)
 const savingFile = ref(false)
@@ -24,12 +21,15 @@ const creatingEntry = ref(false)
 const deletingEntry = ref(false)
 const activeMainTab = ref('code')
 
+// 直接使用后端返回的原始数据，不做前端加工
 const workspaceTree = computed(() => workspaceSnapshot.value?.entries || [])
-const workspaceRoot = computed(() => workspaceSnapshot.value?.rootPath || '')
+const workspaceRoot = ref('')
 const workspaceFileCount = computed(() => workspaceSnapshot.value?.fileCount || 0)
-const aiProjectPath = ref('')
-const aiWorkingDirectory = ref('')
-const aiCurrentFileKey = ref('')
+const effectiveWorkingDirectory = computed(() => {
+  const root = workspaceSnapshot.value?.rootPath || ''
+  const wsId = workspaceSnapshot.value?.workspaceId || ''
+  return wsId ? `${root}/${wsId}` : root
+})
 const aiCollapsed = ref(false)
 const aiIdentities = ['programming', 'workspace']
 
@@ -48,17 +48,6 @@ function collectFileNodes(entries = [], bucket = []) {
   return bucket
 }
 
-function createDocumentId(path) {
-  return path ? `workspace:${path}` : ''
-}
-
-function findFileByDocumentId(documentId, snapshot = workspaceSnapshot.value) {
-  if (!documentId) {
-    return null
-  }
-  return collectFileNodes(snapshot?.entries || []).find((item) => item.documentId === documentId) || null
-}
-
 function findFileByPath(path, snapshot = workspaceSnapshot.value) {
   if (!path) {
     return null
@@ -72,67 +61,66 @@ function resolveNextFile(snapshot) {
 }
 
 function applyCurrentFile(file) {
-  activeDocumentId.value = file?.documentId || createDocumentId(file?.fileKey || file?.path || '')
   activeFileKey.value = file?.fileKey || file?.path || ''
   editorContent.value = file?.content || ''
-  loadedFileContent.value = file?.content || ''
 }
 
 function clearCurrentFile() {
-  activeDocumentId.value = ''
   activeFileKey.value = ''
   editorContent.value = ''
-  loadedFileContent.value = ''
 }
 
-async function openWorkspace() {
+function getLatestEditorContent() {
+  return typeof workspaceEditorRef.value?.getValue === 'function'
+    ? workspaceEditorRef.value.getValue()
+    : editorContent.value
+}
+
+async function loadWorkspaceRoot(options = {}) {
+  const {
+    preferredPath = activeFileKey.value,
+    successMessage = '',
+    errorMessage = '加载工作目录失败',
+  } = options
   loadingWorkspace.value = true
   try {
     const snapshot = await workspaceApi.query('')
-    await applySnapshot(snapshot, activeFileKey.value, {
-      syncAiContext: true,
-    })
-    ElMessage.success('工作目录已加载')
+    await applySnapshot(snapshot, preferredPath)
+    if (successMessage) {
+      ElMessage.success(successMessage)
+    }
   } catch (error) {
-    workspaceStatus.value = error.message || '加载工作目录失败'
-    ElMessage.error(workspaceStatus.value)
+    ElMessage.error(error.message || errorMessage)
   } finally {
     loadingWorkspace.value = false
   }
 }
 
-function syncAiContext(snapshot) {
-  aiProjectPath.value = snapshot?.projectPath || ''
-  aiWorkingDirectory.value = snapshot?.projectWorkingDirectory || snapshot?.rootPath || ''
-  aiCurrentFileKey.value = snapshot?.currentProjectFilePath || ''
+async function openWorkspace() {
+  await loadWorkspaceRoot({
+    successMessage: '工作目录已加载',
+    errorMessage: '加载工作目录失败',
+  })
 }
 
-async function applySnapshot(snapshot, preferredPath = '', options = {}) {
-  const shouldSyncAiContext = options.syncAiContext !== false
+async function applySnapshot(snapshot, preferredPath = '') {
   workspaceSnapshot.value = snapshot
-  workspaceStatus.value = snapshot?.status || '工作目录状态未知'
-  if (shouldSyncAiContext) {
-    syncAiContext(snapshot)
-  }
-  // 查询接口返回 currentFile 时，直接以服务端选中的文件为准。
+  workspaceRoot.value = snapshot?.rootPath || ''
   if (snapshot?.currentFile) {
     applyCurrentFile(snapshot.currentFile)
     return
   }
   const nextFile =
     findFileByPath(preferredPath, snapshot) ||
-    findFileByDocumentId(activeDocumentId.value, snapshot) ||
     resolveNextFile(snapshot)
   if (!nextFile) {
     clearCurrentFile()
     return
   }
-  await loadWorkspaceFile(nextFile.fileKey || nextFile.path, {
-    syncAiContext: shouldSyncAiContext,
-  })
+  await loadWorkspaceFile(nextFile.fileKey || nextFile.path)
 }
 
-async function loadWorkspaceFile(fileOrPath, options = {}) {
+async function loadWorkspaceFile(fileOrPath) {
   const path = typeof fileOrPath === 'string'
     ? fileOrPath
     : (fileOrPath?.fileKey || fileOrPath?.path || '')
@@ -142,7 +130,7 @@ async function loadWorkspaceFile(fileOrPath, options = {}) {
   loadingFile.value = true
   try {
     const snapshot = await workspaceApi.query(path)
-    await applySnapshot(snapshot, path, options)
+    await applySnapshot(snapshot, path)
   } catch (error) {
     ElMessage.error(error.message || '读取文件失败')
   } finally {
@@ -156,17 +144,13 @@ async function saveWorkspaceFile() {
   }
   savingFile.value = true
   try {
-    const latestEditorContent = typeof workspaceEditorRef.value?.getValue === 'function'
-      ? workspaceEditorRef.value.getValue()
-      : editorContent.value
+    const latestEditorContent = getLatestEditorContent()
     editorContent.value = latestEditorContent
     const snapshot = await workspaceApi.push({
       path: activeFileKey.value,
       content: latestEditorContent,
     })
-    await applySnapshot(snapshot, activeFileKey.value, {
-      syncAiContext: true,
-    })
+    await applySnapshot(snapshot, activeFileKey.value)
     ElMessage.success('文件已保存')
   } catch (error) {
     ElMessage.error(error.message || '保存文件失败')
@@ -175,59 +159,20 @@ async function saveWorkspaceFile() {
   }
 }
 
-async function refreshWorkspace(showMessage = true, options = {}) {
-  loadingWorkspace.value = true
-  try {
-    const snapshot = await workspaceApi.query('')
-    await applySnapshot(snapshot, activeFileKey.value, options)
-    if (showMessage) {
-      ElMessage.success('工作目录已刷新')
-    }
-  } catch (error) {
-    if (showMessage) {
-      ElMessage.error(error.message || '刷新工作目录失败')
-    }
-  } finally {
-    loadingWorkspace.value = false
-  }
-}
-
-function joinWorkspacePath(parentPath, name) {
-  const normalizedParent = typeof parentPath === 'string'
-    ? parentPath.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
-    : ''
-  const normalizedName = typeof name === 'string'
-    ? name.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
-    : ''
-  if (!normalizedParent) {
-    return normalizedName
-  }
-  if (!normalizedName) {
-    return normalizedParent
-  }
-  return `${normalizedParent}/${normalizedName}`
-}
-
-function remapPathAfterRename(currentPath, sourcePath, nextName) {
-  if (!currentPath || !sourcePath || !nextName) {
-    return currentPath || ''
-  }
-  const normalizedSourcePath = sourcePath.trim()
-  const sourceSegments = normalizedSourcePath.split('/')
-  const renamedPath = [...sourceSegments.slice(0, -1), nextName].filter(Boolean).join('/')
-  if (currentPath === normalizedSourcePath) {
-    return renamedPath
-  }
-  const prefix = `${normalizedSourcePath}/`
-  if (currentPath.startsWith(prefix)) {
-    return `${renamedPath}/${currentPath.slice(prefix.length)}`
-  }
-  return currentPath
+async function refreshWorkspace(showMessage = true) {
+  await loadWorkspaceRoot({
+    preferredPath: activeFileKey.value,
+    successMessage: showMessage ? '工作目录已刷新' : '',
+    errorMessage: '刷新工作目录失败',
+  })
 }
 
 async function createWorkspaceEntry(options = {}) {
   const directory = options.directory === true
-  const parentPath = typeof options.parentPath === 'string' ? options.parentPath : ''
+  const parentFileKey = typeof options.parentFileKey === 'string'
+    ? options.parentFileKey
+    : (options.parentFileKey?.fileKey || options.parentFileKey?.path || '')
+
   let promptResult
   try {
     promptResult = await ElMessageBox.prompt(
@@ -244,10 +189,10 @@ async function createWorkspaceEntry(options = {}) {
   }
 
   const entryName = promptResult?.value?.trim()
-  const path = joinWorkspacePath(parentPath, entryName)
-  if (!path) {
+  if (!entryName) {
     return
   }
+  const path = parentFileKey ? `${parentFileKey}/${entryName}` : entryName
 
   creatingEntry.value = true
   try {
@@ -256,9 +201,7 @@ async function createWorkspaceEntry(options = {}) {
       directory,
       content: directory ? undefined : '',
     })
-    await applySnapshot(snapshot, directory ? activeFileKey.value : path, {
-      syncAiContext: true,
-    })
+    await applySnapshot(snapshot, directory ? activeFileKey.value : path)
     ElMessage.success(directory ? '目录已创建' : '文件已创建')
   } catch (error) {
     ElMessage.error(error.message || (directory ? '创建目录失败' : '创建文件失败'))
@@ -268,25 +211,20 @@ async function createWorkspaceEntry(options = {}) {
 }
 
 async function createWorkspaceFile(parentPath = '') {
-  await createWorkspaceEntry({
-    parentPath,
-    directory: false,
-  })
+  await createWorkspaceEntry({ parentFileKey: parentPath, directory: false })
 }
 
 async function createWorkspaceDirectory(parentPath = '') {
-  await createWorkspaceEntry({
-    parentPath,
-    directory: true,
-  })
+  await createWorkspaceEntry({ parentFileKey: parentPath, directory: true })
 }
 
 async function renameWorkspaceEntry(node) {
-  const sourcePath = node?.path || node?.fileKey || ''
-  const currentName = node?.name || node?.label || ''
-  if (!sourcePath || !currentName) {
+  const sourcePath = node?.fileKey || node?.path || ''
+  if (!sourcePath) {
     return
   }
+  const currentName = node?.name || node?.label || ''
+
   let promptResult
   try {
     promptResult = await ElMessageBox.prompt(
@@ -309,14 +247,11 @@ async function renameWorkspaceEntry(node) {
 
   creatingEntry.value = true
   try {
-    const preferredPath = remapPathAfterRename(activeFileKey.value, sourcePath, nextName)
     const snapshot = await workspaceApi.push({
       path: sourcePath,
       newName: nextName,
     })
-    await applySnapshot(snapshot, preferredPath, {
-      syncAiContext: true,
-    })
+    await applySnapshot(snapshot, activeFileKey.value)
     ElMessage.success(node.directory ? '目录已重命名' : '文件已重命名')
   } catch (error) {
     ElMessage.error(error.message || (node.directory ? '目录重命名失败' : '文件重命名失败'))
@@ -345,9 +280,7 @@ async function deleteCurrentEntry() {
   try {
     const snapshot = await workspaceApi.remove(activeFileKey.value)
     clearCurrentFile()
-    await applySnapshot(snapshot, '', {
-      syncAiContext: true,
-    })
+    await applySnapshot(snapshot, '')
     ElMessage.success('文件已删除')
   } catch (error) {
     ElMessage.error(error.message || '删除文件失败')
@@ -356,19 +289,32 @@ async function deleteCurrentEntry() {
   }
 }
 
-async function handleAiFinalSummary() {
-  // AI 会话结束后只刷新目录和编辑区，不回写 AI 作用域，避免对话面板被误判为作用域切换。
-  await refreshWorkspace(false, {
-    syncAiContext: false,
-  })
+async function handleAiTaskEnded(event) {
+  const snapshot = event?.data
+  if (!snapshot) {
+    return
+  }
+  await applySnapshot(snapshot, activeFileKey.value)
   ElMessage.success('AI 本轮已结束，工作目录已刷新')
 }
 
+async function handleBeforeAiSend({ prompt, syncPagePayloadToWorkspace }) {
+  if (!activeFileKey.value || typeof syncPagePayloadToWorkspace !== 'function') {
+    return prompt
+  }
+  const latestEditorContent = getLatestEditorContent()
+  await syncPagePayloadToWorkspace(latestEditorContent)
+  return prompt
+}
+
 function handleTreeNodeClick(node) {
-  if (!node || node.directory) {
+  if (!node) {
     return
   }
-  loadWorkspaceFile(node)
+  if (node.directory) {
+    return
+  }
+  loadWorkspaceFile(node?.fileKey || node?.path || node)
 }
 
 onMounted(async () => {
@@ -398,7 +344,7 @@ onMounted(async () => {
             <WorkspaceFileTree
               :entries="workspaceTree"
               :file-count="workspaceFileCount"
-              :active-document-id="activeDocumentId"
+              :active-file-key="activeFileKey"
               @select="handleTreeNodeClick"
               @create-file="createWorkspaceFile"
               @create-directory="createWorkspaceDirectory"
@@ -425,15 +371,15 @@ onMounted(async () => {
               title="任务"
               subtitle="当前工作目录。"
               :compact-header="true"
-              :workspace-id-value="aiProjectPath || workspaceRoot"
+              v-bind="aiAssistantHandlers"
               :identities-value="aiIdentities"
-              :current-file-key="aiCurrentFileKey"
-              :current-document-id="activeDocumentId"
-              :working-directory-value="aiWorkingDirectory"
-              default-working-directory="./workspace/project"
+              :current-file-key="activeFileKey"
+              :working-directory-value="effectiveWorkingDirectory"
               :load-history-on-mounted="true"
               :show-working-directory="false"
-              :on-final-summary="handleAiFinalSummary"
+              task-ended-read-mode="snapshot"
+              :on-before-send="handleBeforeAiSend"
+              :on-task-ended="handleAiTaskEnded"
               height="100%"
               :min-height="0"
               :collapsible="true"
@@ -473,92 +419,44 @@ onMounted(async () => {
 .page-header-left {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .page-title {
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: 18px;
+  font-weight: 700;
   color: #303133;
-}
-
-.panel-card {
-  border-radius: 8px;
 }
 
 .workspace-shell {
   display: flex;
-  align-items: stretch;
-  gap: 8px;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
-}
-
-.top-summary-card :deep(.el-card__body) {
-  padding: 8px 12px;
+  gap: 8px;
 }
 
 .workspace-sidebar {
-  width: 220px;
-  flex: 0 0 220px;
+  width: 280px;
+  flex-shrink: 0;
   min-height: 0;
 }
 
 .workspace-main {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
   min-height: 0;
 }
 
 .workspace-assistant {
-  width: 420px;
-  flex: 0 0 420px;
+  width: 400px;
+  flex-shrink: 0;
   min-height: 0;
-  transition: width 0.3s ease, flex-basis 0.3s ease;
+  transition: width 0.3s ease;
 }
 
 .workspace-assistant.collapsed {
-  width: 48px;
-  flex: 0 0 48px;
-}
-
-.workspace-example :deep(.el-scrollbar__wrap),
-.workspace-example :deep(.cm-scroller) {
-  scrollbar-width: thin;
-  scrollbar-color: #c0c4cc transparent;
-}
-
-.workspace-example :deep(.el-scrollbar__wrap)::-webkit-scrollbar,
-.workspace-example :deep(.cm-scroller)::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.workspace-example :deep(.el-scrollbar__wrap)::-webkit-scrollbar-thumb,
-.workspace-example :deep(.cm-scroller)::-webkit-scrollbar-thumb {
-  background: #c0c4cc;
-  border-radius: 999px;
-}
-
-.workspace-example :deep(.el-scrollbar__wrap)::-webkit-scrollbar-track,
-.workspace-example :deep(.cm-scroller)::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-@media (max-width: 1400px) {
-  .workspace-shell {
-    flex-direction: column;
-  }
-
-  .workspace-sidebar,
-  .workspace-assistant {
-    width: 100%;
-    flex-basis: auto;
-  }
+  width: 0;
+  overflow: hidden;
 }
 </style>

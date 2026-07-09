@@ -2,9 +2,23 @@
 import { nextTick, onActivated, onDeactivated, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
-import AiChatWorkspace from '../../components/ai/AiChatWorkspace.vue'
+import { AiChatWorkspace } from 'codey-chat-workspace'
+import { useAiAssistantHandlers } from '../../composables/useAiAssistantHandlers'
 import { createWorkspaceJsonResource } from '../../composables/useWorkspaceJsonResource'
 
+const {
+  openSession,
+  resumeSession,
+  sendMessage,
+  closeSession,
+  listSessions,
+  getSessionDetail,
+  deleteHistorySession,
+  clearHistorySessions,
+  createEventSource,
+  queryWorkspace,
+  writeWorkspaceFile,
+} = useAiAssistantHandlers()
 // 低代码示例暂时没有独立文件树，这里将 AI 的工作范围固定到当前一级项目目录。
 const aiProjectPath = 'vform'
 const aiWorkingDirectory = './workspace/vform'
@@ -26,6 +40,7 @@ const aiCollapsed = ref(false)
 function handleAiCollapseChange(collapsed) {
   aiCollapsed.value = collapsed
 }
+
 const designerConfig = {
   languageMenu: true,
   externalLink: true,
@@ -163,11 +178,28 @@ async function reloadDesignerSchemaFromServer() {
 }
 
 async function handleAiFinalSummary() {
-  // 一轮会话结束后静默回读后端文件，确保设计器立即显示 AI 最新落盘结果。
-  await loadDesignerSchemaWithOptions({
-    showSuccessMessage: false,
-    showEmptyMessage: false,
-  })
+  // 结束摘要只负责补充文本阶段联动，JSON 回读交给 onTaskEnded 统一处理。
+}
+
+async function handleBeforeAiSend({ prompt, syncPagePayloadToWorkspace }) {
+  if (typeof syncPagePayloadToWorkspace !== 'function') {
+    return prompt
+  }
+  // 发送前通过组件内置同步能力把设计器当前 JSON 写回工作区目标文件。
+  const schemaObject = readDesignerSchemaObject()
+  await syncPagePayloadToWorkspace(schemaObject)
+  return prompt
+}
+
+async function handleAiTaskEnded(event) {
+  const schemaObject = event?.data
+    ? normalizeDesignerSchema(event.data)
+    : null
+  if (!schemaObject) {
+    return
+  }
+  // 任务结束后直接消费 queryWorkspace 返回的 JSON 内容，避免再从快照 currentFile 提取。
+  applyDesignerSchemaObject(schemaObject)
 }
 
 onActivated(async () => {
@@ -209,15 +241,29 @@ onDeactivated(() => {
           subtitle="对话范围限制在当前一级项目目录，可用于表单配置、页面说明和落地代码建议。"
           placeholder="例如：帮我设计一个包含姓名、手机号、部门、审批意见的审批表单"
           :compact-header="true"
+          :open-session="openSession"
+          :resume-session="resumeSession"
+          :send-message="sendMessage"
+          :close-session="closeSession"
+          :list-sessions="listSessions"
+          :get-session-detail="getSessionDetail"
+          :delete-history-session="deleteHistorySession"
+          :clear-history-sessions="clearHistorySessions"
+          :create-event-source="createEventSource"
+          :query-workspace="queryWorkspace"
+          :write-workspace-file="writeWorkspaceFile"
           skill-name-value="vform-json-agent"
           :identities-value="aiIdentities"
           :workspace-id-value="aiProjectPath"
+          :page-payload-file-key="formConfigFileKey"
           :current-file-key="formConfigFileKey"
           :current-document-id="formConfigDocumentId"
           :working-directory-value="aiWorkingDirectory"
           default-working-directory="./workspace/project"
           :load-history-on-mounted="true"
-          :on-final-summary="handleAiFinalSummary"
+          :on-before-send="handleBeforeAiSend"
+          :on-assistant-finished="handleAiFinalSummary"
+          :on-task-ended="handleAiTaskEnded"
           :show-working-directory="false"
           height="100%"
           :min-height="0"

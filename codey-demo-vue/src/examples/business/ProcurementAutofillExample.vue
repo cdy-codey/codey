@@ -2,14 +2,15 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
-import AiChatWorkspace from '../../components/ai/AiChatWorkspace.vue'
+import { AiChatWorkspace } from 'codey-chat-workspace'
+import { useAiAssistantHandlers } from '../../composables/useAiAssistantHandlers'
 import { createBusinessScenarioApi } from '../../api/businessScenario'
 import { createBusinessAiWorkspace } from '../../composables/useBusinessAiWorkspace'
 
+const { aiAssistantHandlers, queryWorkspace, workspaceApi } = useAiAssistantHandlers()
 const businessScenarioApi = createBusinessScenarioApi()
 const assistantRef = ref(null)
 const loading = ref(false)
-const aiSending = ref(false)
 const aiCollapsed = ref(false)
 const aiSummary = ref('')
 const scenario = ref(null)
@@ -46,14 +47,8 @@ const totalAmount = computed(() =>
   lineItems.value.reduce((sum, item) => sum + toNumber(item.quantity) * toNumber(item.unitPrice), 0)
 )
 
-const businessAiWorkspace = createBusinessAiWorkspace({
-  workspaceId: 'business-procurement',
-  workingDirectory: './business-procurement',
-})
-const aiWorkspaceId = businessAiWorkspace.workspaceId
-const aiWorkingDirectory = businessAiWorkspace.workingDirectory
-const aiContextFileKey = businessAiWorkspace.contextFileKey
-const aiContextDocumentId = businessAiWorkspace.contextDocumentId
+const aiWorkingDirectory = "business-procurement"
+const aiContextFileKey = "采购文件申请"
 
 function handleAiCollapseChange(collapsed) {
   aiCollapsed.value = collapsed
@@ -134,12 +129,21 @@ function buildContextSnapshot() {
   }
 }
 
-async function syncContextToWorkspace() {
-  await businessAiWorkspace.syncContext(buildContextSnapshot())
-}
-
 function buildContextSignature(payload) {
   return JSON.stringify(payload || {})
+}
+
+function normalizeWorkspaceContextContent(content) {
+  if (!content) {
+    return null
+  }
+  if (typeof content === 'string') {
+    return JSON.parse(content)
+  }
+  if (typeof content === 'object') {
+    return content
+  }
+  return null
 }
 
 function applyScenarioContext(context) {
@@ -247,29 +251,29 @@ async function triggerAiAutofill() {
     ElMessage.warning('AI 助手暂未初始化完成')
     return
   }
-  aiSending.value = true
   try {
     // 自动填写按钮只是在右侧聊天里代替操作人发一句“请自动填写”，不再维护专用提示词。
     await assistantRef.value.sendPrompt(AUTO_FILL_CHAT_MESSAGE)
     ElMessage.success('已发起自动填写请求')
   } catch (error) {
-    aiSending.value = false
     ElMessage.error(error.message || '发送 AI 自动填写请求失败')
   }
 }
 
-async function handleBeforeAiSend() {
+async function handleBeforeAiSend({ prompt, syncPagePayloadToWorkspace }) {
   // 业务表单可能被用户手动改动，所以每次发送前都同步一次最新上下文。
   const contextSnapshot = buildContextSnapshot()
-  await businessAiWorkspace.prepareForSend(contextSnapshot)
+  if (typeof syncPagePayloadToWorkspace === 'function') {
+    await syncPagePayloadToWorkspace(contextSnapshot)
+  }
   lastSubmittedContextSignature.value = buildContextSignature(contextSnapshot)
+  return prompt
 }
 
-async function handleAssistantFinished(result) {
-  aiSending.value = false
-  aiSummary.value = result?.summary || result?.content || ''
+async function handleAiTaskEnded(event) {
   try {
-    const workspaceContext = await businessAiWorkspace.loadContext()
+    // 任务结束后直接消费 queryWorkspace 返回的 JSON 内容，避免再从快照 currentFile 提取。
+    const workspaceContext = normalizeWorkspaceContextContent(event?.data)
     if (!workspaceContext) {
       return
     }
@@ -309,7 +313,7 @@ onMounted(async () => {
 
               <el-space wrap>
                 <el-button @click="loadScenarioContext(true)">重置演示数据</el-button>
-                <el-button type="primary" :loading="aiSending" @click="triggerAiAutofill">
+                <el-button type="primary" @click="triggerAiAutofill">
                   AI 自动填写
                 </el-button>
               </el-space>
@@ -542,20 +546,19 @@ onMounted(async () => {
           title="AI 智能分析助手"
           subtitle="发送前会自动把当前页面查询结构同步到工作区 context.json，AI 完成后直接回填页面并同步最新上下文。"
           placeholder="例如：帮我完善采购申请理由，并给出更合理的设备配置建议"
+          v-bind="aiAssistantHandlers"
           :skill-name-value="PROCUREMENT_FORM_SKILL"
           :system-prompt-value="BUSINESS_AI_SYSTEM_PROMPT"
           :compact-header="true"
-          :workspace-id-value="aiWorkspaceId"
           :current-file-key="aiContextFileKey"
-          :current-document-id="aiContextDocumentId"
           :working-directory-value="aiWorkingDirectory"
           :identities-value="['programming']"
           :load-history-on-mounted="true"
           :show-thinking="false"
           :show-working-directory="false"
           :collapsible="true"
-          :on-before-send="handleBeforeAiSend"
-          :on-assistant-finished="handleAssistantFinished"
+          :on-before-send="handleBeforeAiSend"      
+          :on-task-ended="handleAiTaskEnded"
           height="calc(100vh - 96px)"
           :min-height="460"
           @collapse-change="handleAiCollapseChange"

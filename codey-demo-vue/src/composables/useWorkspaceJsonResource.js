@@ -38,7 +38,6 @@ export function createWorkspaceJsonResource(options = {}) {
 
   async function save(payload) {
     const content = JSON.stringify(payload, null, 2)
-    // push 已经在后端统一处理创建和保存，这里不再区分 create/update。
     await workspaceApi.push({
       path: workspacePath,
       content,
