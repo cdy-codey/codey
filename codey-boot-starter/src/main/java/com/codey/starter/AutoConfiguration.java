@@ -6,14 +6,10 @@ import com.codey.infra.ModelConfigResolver;
 import com.codey.infra.ModelGateway;
 import com.codey.infra.ModelGatewayFactory;
 import com.codey.loop.HumanConfirmationService;
-import com.codey.mcp.AppendInstructionEditStrategy;
-import com.codey.mcp.EditCodeTool;
 import com.codey.mcp.ListWorkspaceTool;
 import com.codey.mcp.ProjectMapTool;
-import com.codey.mcp.QueryApiInfoTool;
-import com.codey.mcp.ReadApiSpecTool;
 import com.codey.mcp.ReadFileTool;
-import com.codey.mcp.SearchCodeTool;
+import com.codey.mcp.SearchContentTool;
 import com.codey.session.CompositeSessionStore;
 import com.codey.session.JsonlSessionStore;
 import com.codey.session.ModelInputLogStore;
@@ -28,11 +24,11 @@ import com.codey.config.ModelProperties;
 import com.codey.task.TaskRunner;
 import com.codey.task.TaskRunnerFactory;
 import com.codey.tool.ToolSpec;
-import com.codey.tools.ApplyPatchTool;
-import com.codey.tools.DeleteFileTool;
-import com.codey.tools.EditFileTool;
+import com.codey.mcp.ApplyPatchTool;
+import com.codey.mcp.DeleteFileTool;
+import com.codey.mcp.EditFileTool;
 import com.codey.tools.ToolRegistry;
-import com.codey.tools.WriteFileTool;
+import com.codey.mcp.WriteFileTool;
 import com.codey.verify.Verifier;
 import com.codey.verify.VerifierFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -140,22 +136,8 @@ public class AutoConfiguration {
     @Bean
     @Qualifier("BuiltinTool")
     @ConditionalOnMissingBean
-    public QueryApiInfoTool queryApiInfoTool(LocalWorkspaceGateway workspaceGateway) {
-        return new QueryApiInfoTool(workspaceGateway);
-    }
-
-    @Bean
-    @Qualifier("BuiltinTool")
-    @ConditionalOnMissingBean
-    public ReadApiSpecTool readApiSpecTool(LocalWorkspaceGateway workspaceGateway) {
-        return new ReadApiSpecTool(workspaceGateway);
-    }
-
-    @Bean
-    @Qualifier("BuiltinTool")
-    @ConditionalOnMissingBean
-    public SearchCodeTool searchCodeTool(LocalWorkspaceGateway workspaceGateway) {
-        return new SearchCodeTool(workspaceGateway);
+    public SearchContentTool searchContentTool(LocalWorkspaceGateway workspaceGateway) {
+        return new SearchContentTool(workspaceGateway);
     }
 
     @Bean
@@ -184,17 +166,6 @@ public class AutoConfiguration {
     @ConditionalOnMissingBean
     public DeleteFileTool deleteFileTool() {
         return new DeleteFileTool();
-    }
-
-    @Bean
-    @Qualifier("BuiltinTool")
-    @ConditionalOnMissingBean
-    public EditCodeTool editCodeTool(LocalWorkspaceGateway workspaceGateway) {
-        return new EditCodeTool(
-                workspaceGateway,
-                new AppendInstructionEditStrategy(),
-                Paths.get("sessions", "backups").toString()
-        );
     }
 
     @Bean
@@ -241,7 +212,6 @@ public class AutoConfiguration {
                                      SessionEventPublisher sessionEventPublisher) {
         Path sessionDirectory = properties.resolveSessionDirectoryRoot(WorkspaceRoot);
         return new CompositeSessionStore(
-                // Web Demo 也需要保留模型输入/输出归档，历史恢复才能补回最后一轮模型结果。
                 new JsonlSessionStore(sessionDirectory),
                 new ModelInputLogStore(sessionDirectory.resolve("model-inputs")),
                 new ModelOutputLogStore(sessionDirectory.resolve("model-outputs")),

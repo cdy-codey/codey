@@ -64,12 +64,12 @@ public interface WorkspaceGateway {
 
     String searchCode(String keyword, String pathHint);
 
-    default SearchCodeResult searchCodeResult(SearchCodeRequest request) {
+    default SearchContentResult searchCodeResult(SearcContentRequest request) {
         if (request == null || isBlank(request.getKeyword())) {
             throw new IllegalArgumentException("keyword must not be blank");
         }
         String legacy = searchCode(request.getKeyword(), request.getPathHint());
-        SearchCodeResult result = new SearchCodeResult();
+        SearchContentResult result = new SearchContentResult();
         result.setRoot(isBlank(request.getPathHint()) ? "." : request.getPathHint());
         result.setPattern(request.getKeyword());
         result.setRegex(Boolean.TRUE.equals(request.getRegex()));
@@ -78,7 +78,7 @@ public interface WorkspaceGateway {
         result.setMaxResults(request.getMaxResults() == null ? 20 : Math.max(1, request.getMaxResults().intValue()));
         result.setFilesSearched(0);
 
-        List<SearchCodeMatch> matches = parseLegacySearchMatches(legacy);
+        List<SearchContentMatch> matches = parseLegacySearchMatches(legacy);
         result.setMatches(matches);
         result.setTotalMatches(matches.size());
         result.setTruncated(false);
@@ -165,8 +165,8 @@ public interface WorkspaceGateway {
         return count;
     }
 
-    default List<SearchCodeMatch> parseLegacySearchMatches(String content) {
-        List<SearchCodeMatch> matches = new ArrayList<SearchCodeMatch>();
+    default List<SearchContentMatch> parseLegacySearchMatches(String content) {
+        List<SearchContentMatch> matches = new ArrayList<SearchContentMatch>();
         if (isBlank(content) || content.startsWith("No code match")) {
             return matches;
         }
@@ -213,7 +213,7 @@ public interface WorkspaceGateway {
             }
         }
 
-        SearchCodeMatch match = new SearchCodeMatch();
+        SearchContentMatch match = new SearchContentMatch();
         match.setPath(normalizeRelativePath(path));
         match.setMatchedLine(matchedLine <= 0 ? startLine : matchedLine);
         match.setStartLine(startLine);

@@ -1,4 +1,4 @@
-package com.codey.mcp;
+package com.codey.tools;
 
 import com.codey.tools.*;
 

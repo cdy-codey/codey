@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * 单条文件内容搜索命中结果。
  */
-public class SearchCodeMatch {
+public class SearchContentMatch {
     private String path;
     private int matchedLine;
     private int startLine;

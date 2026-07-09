@@ -3,7 +3,7 @@ package com.codey.infra;
 /**
  * 文件内容搜索请求。
  */
-public class SearchCodeRequest {
+public class SearcContentRequest {
     private String keyword;
     private String pathHint;
     private Boolean regex;

@@ -82,40 +82,10 @@ final class ToolCallProcessor {
             boolean isWriteTool = !toolExecutor.isReadOnly(request);
             LoopGuardDecision guardDecision = loopGuard.inspect(request, isWriteTool, session);
             if (guardDecision.getAction() == LoopGuardDecision.Action.SKIP) {
-                // #region debug-point C:loop-guard-skip
-                debugReport(
-                        "pre-fix",
-                        "C",
-                        "ToolCallProcessor.processToolCalls.skip",
-                        "[DEBUG] LoopGuard 跳过了重复工具请求",
-                        "{"
-                                + "\"sessionId\":\"" + escapeDebug(session == null ? null : session.getSessionId()) + "\","
-                                + "\"tool\":\"" + escapeDebug(request == null ? null : request.getToolName()) + "\","
-                                + "\"signature\":\"" + escapeDebug(guardDecision.getRequestSignature()) + "\","
-                                + "\"message\":\"" + escapeDebug(guardDecision.getMessage()) + "\""
-                                + "}",
-                        session == null ? null : session.getSessionId()
-                );
-                // #endregion
                 session.appendSystemFeedback(guardDecision.getMessage());
                 continue;
             }
             if (guardDecision.getAction() == LoopGuardDecision.Action.REPLAN) {
-                // #region debug-point C:loop-guard-replan
-                debugReport(
-                        "pre-fix",
-                        "C",
-                        "ToolCallProcessor.processToolCalls.replan",
-                        "[DEBUG] LoopGuard 要求重新规划",
-                        "{"
-                                + "\"sessionId\":\"" + escapeDebug(session == null ? null : session.getSessionId()) + "\","
-                                + "\"tool\":\"" + escapeDebug(request == null ? null : request.getToolName()) + "\","
-                                + "\"signature\":\"" + escapeDebug(guardDecision.getRequestSignature()) + "\","
-                                + "\"message\":\"" + escapeDebug(guardDecision.getMessage()) + "\""
-                                + "}",
-                        session == null ? null : session.getSessionId()
-                );
-                // #endregion
                 if (!flushParallelBatch(parallelBatch, parallelSignatures, parallelToolCalls, session, executedToolCalls, toolResultMessages)) {
                     break;
                 }
@@ -149,39 +119,10 @@ final class ToolCallProcessor {
             }
 
             sessionStore.appendEvent(SessionEventFactory.toolExecutionStarted(session.getSessionId(), request));
-            // #region debug-point C:tool-execution
-            debugReport(
-                    "pre-fix",
-                    "C",
-                    "ToolCallProcessor.processToolCalls.execute",
-                    "[DEBUG] 即将执行工具调用",
-                    "{"
-                            + "\"sessionId\":\"" + escapeDebug(session == null ? null : session.getSessionId()) + "\","
-                            + "\"tool\":\"" + escapeDebug(request == null ? null : request.getToolName()) + "\","
-                            + "\"signature\":\"" + escapeDebug(requestSignature) + "\","
-                            + "\"arguments\":\"" + escapeDebug(String.valueOf(request == null ? null : request.getArguments())) + "\""
-                            + "}",
-                    session == null ? null : session.getSessionId()
-            );
-            // #endregion
             ToolResult result = toolExecutor.execute(request, session.getWorkingDirectory());
             sessionStore.appendEvent(SessionEventFactory.toolCall(session.getSessionId(), request, result));
             rememberExecutedToolCall(executedToolCalls, toolCall);
             if (!result.isSuccess()) {
-                // #region debug-point C:tool-failure
-                debugReport(
-                        "pre-fix",
-                        "C",
-                        "ToolCallProcessor.processToolCalls.failure",
-                        "[DEBUG] 工具调用执行失败",
-                        "{"
-                                + "\"sessionId\":\"" + escapeDebug(session == null ? null : session.getSessionId()) + "\","
-                                + "\"tool\":\"" + escapeDebug(request == null ? null : request.getToolName()) + "\","
-                                + "\"signature\":\"" + escapeDebug(requestSignature) + "\","
-                                + "\"error\":\"" + escapeDebug(result == null ? null : result.getErrorMessage()) + "\""
-                                + "}",
-                        session == null ? null : session.getSessionId()
-                );
                 // #endregion
                 loopGuard.recordFailure(session, requestSignature);
                 session.appendSystemFeedback(result.getErrorMessage());
@@ -189,20 +130,6 @@ final class ToolCallProcessor {
                 replanService.requestReplan(session, result.getErrorMessage());
                 break;
             }
-            // #region debug-point C:tool-success
-            debugReport(
-                    "pre-fix",
-                    "C",
-                    "ToolCallProcessor.processToolCalls.success",
-                    "[DEBUG] 工具调用执行成功",
-                    "{"
-                            + "\"sessionId\":\"" + escapeDebug(session == null ? null : session.getSessionId()) + "\","
-                            + "\"tool\":\"" + escapeDebug(request == null ? null : request.getToolName()) + "\","
-                            + "\"signature\":\"" + escapeDebug(requestSignature) + "\","
-                            + "\"contentPreview\":\"" + escapeDebug(limitDebug(result == null ? null : result.getContentForModel(), 240)) + "\""
-                            + "}",
-                    session == null ? null : session.getSessionId()
-            );
             // #endregion
             loopGuard.recordSuccess(session, requestSignature, isWriteTool);
             rememberContextAfterToolSuccess(session, request);
@@ -268,15 +195,8 @@ final class ToolCallProcessor {
         }
         if ("list_workspace".equals(tool)
                 || "project_map".equals(tool)
-                || "search_code".equals(tool)
-                || "query_api_info".equals(tool)) {
+                || "search_content".equals(tool)){
             normalizePathArg(request, session, "pathHint");
-            return;
-        }
-        if ("read_api_spec".equals(tool)
-                || "validate_procurement_context_json".equals(tool)
-                || "validate_vform_json".equals(tool)) {
-            normalizePathArg(request, session, "path");
             return;
         }
         if ("edit_code".equals(tool)) {
@@ -480,13 +400,6 @@ final class ToolCallProcessor {
             }
             return;
         }
-        if ("edit_code".equals(tool)) {
-            String file = readStringArg(request, "file");
-            if (!isBlank(file)) {
-                session.setLastEditedFilePath(file);
-            }
-            return;
-        }
         if ("search_in_files".equals(tool) || "global_search".equals(tool)) {
             String dir = readStringArg(request, "path");
             if (isBlank(dir)) {
@@ -638,49 +551,6 @@ final class ToolCallProcessor {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
-    }
-
-    // #region debug-point C:loop-guard
-    private void debugReport(String runId, String hypothesisId, String location, String msg, String dataJson, String traceId) {
-        try {
-            String serverUrl = "http://127.0.0.1:7777/event";
-            String sessionId = "db-model-stagnation";
-            Path envPath = Paths.get(".dbg", "db-model-stagnation.env");
-            if (Files.exists(envPath)) {
-                List<String> lines = Files.readAllLines(envPath, StandardCharsets.UTF_8);
-                for (String line : lines) {
-                    if (line.startsWith("DEBUG_SERVER_URL=")) {
-                        serverUrl = line.substring("DEBUG_SERVER_URL=".length()).trim();
-                    } else if (line.startsWith("DEBUG_SESSION_ID=")) {
-                        sessionId = line.substring("DEBUG_SESSION_ID=".length()).trim();
-                    }
-                }
-            }
-            String payload = "{"
-                    + "\"sessionId\":\"" + escapeDebug(sessionId) + "\","
-                    + "\"runId\":\"" + escapeDebug(runId) + "\","
-                    + "\"hypothesisId\":\"" + escapeDebug(hypothesisId) + "\","
-                    + "\"location\":\"" + escapeDebug(location) + "\","
-                    + "\"msg\":\"" + escapeDebug(msg) + "\","
-                    + "\"traceId\":\"" + escapeDebug(traceId) + "\","
-                    + "\"data\":" + (dataJson == null ? "{}" : dataJson)
-                    + "}";
-            HttpURLConnection connection = (HttpURLConnection) new URL(serverUrl).openConnection();
-            connection.setRequestMethod("POST");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json");
-            byte[] body = payload.getBytes(StandardCharsets.UTF_8);
-            connection.setFixedLengthStreamingMode(body.length);
-            OutputStream outputStream = connection.getOutputStream();
-            try {
-                outputStream.write(body);
-                outputStream.flush();
-            } finally {
-                outputStream.close();
-            }
-            connection.getInputStream().close();
-        } catch (Exception ignored) {
-        }
     }
 
     private String escapeDebug(String value) {

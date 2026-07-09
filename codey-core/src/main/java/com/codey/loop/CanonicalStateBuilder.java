@@ -112,8 +112,8 @@ public class CanonicalStateBuilder {
                 continue;
             }
             if (toolResult.startsWith("Read file success:")
-                    || toolResult.startsWith("Search code result:")
-                    || toolResult.startsWith("Search code success:")) {
+                    || toolResult.startsWith("Search content result:")
+                    || toolResult.startsWith("Search content success:")) {
                 evidenceCount++;
             }
             if (toolResult.contains("\"matchedLine\"")

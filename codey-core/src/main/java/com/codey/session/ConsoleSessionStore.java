@@ -466,8 +466,8 @@ public class ConsoleSessionStore implements SessionStore {
         if ("project_map".equals(toolName)) {
             return "正在梳理项目结构和关键文件";
         }
-        if ("search_code".equals(toolName)) {
-            return "正在搜索相关代码位置";
+        if ("search_content".equals(toolName)) {
+            return "正在搜索文件内容";
         }
         if ("edit_code".equals(toolName)) {
             return "正在准备修改代码";
@@ -526,7 +526,7 @@ public class ConsoleSessionStore implements SessionStore {
         if ("list_workspace".equals(toolName)) {
             return summarizeWorkspaceList(result.getContent());
         }
-        if ("search_code".equals(toolName) || "query_api_info".equals(toolName)) {
+        if ("search_content".equals(toolName) || "query_api_info".equals(toolName)) {
             return summarizeSearch(toolName, result.getContent());
         }
         if ("write_file".equals(toolName)) {
@@ -628,12 +628,12 @@ public class ConsoleSessionStore implements SessionStore {
     private String summarizeSearch(String toolName, String content) {
         JsonNode payload = extractJsonPayload(content);
         if (payload == null) {
-            return "search_code".equals(toolName) ? "代码搜索完成" : "接口信息查询完成";
+            return "search_content".equals(toolName) ? "文件内容搜索完成" : "接口信息查询完成";
         }
         int totalMatches = payload.path("totalMatches").asInt(-1);
         String keyword = payload.path("keyword").asText("");
         StringBuilder builder = new StringBuilder();
-        builder.append("query_api_info".equals(toolName) ? "接口信息查询完成" : "代码搜索完成");
+        builder.append("query_api_info".equals(toolName) ? "接口信息查询完成" : "文件内容搜索完成");
         if (!isBlank(keyword)) {
             builder.append("：").append(keyword);
         }

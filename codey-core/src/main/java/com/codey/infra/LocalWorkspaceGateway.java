@@ -10,9 +10,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -172,14 +170,14 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
                     .filter(result -> result != null)
                     .findFirst()
                     .map(LegacySearchResult::format)
-                    .orElse("No code match for keyword: " + keyword);
+                    .orElse("No match for keyword: " + keyword);
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to search code under: " + visibleRoot, exception);
+            throw new IllegalStateException("Failed to search content under: " + visibleRoot, exception);
         }
     }
 
     @Override
-    public SearchCodeResult searchCodeResult(SearchCodeRequest request) {
+    public SearchContentResult searchCodeResult(SearcContentRequest request) {
         if (request == null || isBlank(request.getKeyword())) {
             throw new IllegalArgumentException("keyword must not be blank");
         }
@@ -192,7 +190,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
         Pattern regexPattern = useRegex ? compilePattern(request.getKeyword(), caseSensitive) : null;
         PathMatcher fileMatcher = buildFileMatcher(request.getFilePattern());
 
-        List<SearchCodeMatch> matches = new ArrayList<SearchCodeMatch>();
+        List<SearchContentMatch> matches = new ArrayList<SearchContentMatch>();
         int filesSearched = 0;
         boolean truncated = false;
 
@@ -211,8 +209,8 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
                     continue;
                 }
 
-                List<SearchCodeMatch> fileMatches = findMatches(path, regexPattern, request.getKeyword(), useRegex, caseSensitive, contextLines);
-                for (SearchCodeMatch fileMatch : fileMatches) {
+                List<SearchContentMatch> fileMatches = findMatches(path, regexPattern, request.getKeyword(), useRegex, caseSensitive, contextLines);
+                for (SearchContentMatch fileMatch : fileMatches) {
                     if (matches.size() >= maxResults) {
                         truncated = true;
                         break;
@@ -224,10 +222,10 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
                 }
             }
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to search code under: " + visibleRoot, exception);
+            throw new IllegalStateException("Failed to search content under: " + visibleRoot, exception);
         }
 
-        SearchCodeResult result = new SearchCodeResult();
+        SearchContentResult result = new SearchContentResult();
         result.setRoot(relativize(root));
         result.setPattern(request.getKeyword());
         result.setRegex(useRegex);
@@ -288,13 +286,13 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
         }
     }
 
-    private List<SearchCodeMatch> findMatches(Path path,
-                                              Pattern regexPattern,
-                                              String keyword,
-                                              boolean useRegex,
-                                              boolean caseSensitive,
-                                              int contextLines) {
-        List<SearchCodeMatch> matches = new ArrayList<SearchCodeMatch>();
+    private List<SearchContentMatch> findMatches(Path path,
+                                                 Pattern regexPattern,
+                                                 String keyword,
+                                                 boolean useRegex,
+                                                 boolean caseSensitive,
+                                                 int contextLines) {
+        List<SearchContentMatch> matches = new ArrayList<SearchContentMatch>();
         try {
             List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
             for (int index = 0; index < lines.size(); index++) {
@@ -304,7 +302,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
                 int start = Math.max(0, index - contextLines);
                 int end = Math.min(lines.size() - 1, index + contextLines);
 
-                SearchCodeMatch item = new SearchCodeMatch();
+                SearchContentMatch item = new SearchContentMatch();
                 item.setPath(relativize(path));
                 item.setMatchedLine(index + 1);
                 item.setStartLine(start + 1);
@@ -458,6 +456,7 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
         return value == null || value.intValue() <= 0 ? defaultValue : value.intValue();
     }
 
+    // 支持搜索的文件类型，涵盖代码、配置、文档等通用文本文件
     private boolean isTextFile(String fileName) {
         String lower = fileName.toLowerCase();
         return lower.endsWith(".java")
@@ -474,13 +473,37 @@ public class LocalWorkspaceGateway implements WorkspaceGateway {
                 || lower.endsWith(".html")
                 || lower.endsWith(".css")
                 || lower.endsWith(".scss")
+                || lower.endsWith(".less")
                 || lower.endsWith(".sql")
                 || lower.endsWith(".py")
                 || lower.endsWith(".go")
                 || lower.endsWith(".rs")
                 || lower.endsWith(".txt")
                 || lower.endsWith(".properties")
-                || lower.endsWith(".toml");
+                || lower.endsWith(".toml")
+                || lower.endsWith(".ini")
+                || lower.endsWith(".cfg")
+                || lower.endsWith(".conf")
+                || lower.endsWith(".env")
+                || lower.endsWith(".sh")
+                || lower.endsWith(".bat")
+                || lower.endsWith(".ps1")
+                || lower.endsWith(".csv")
+                || lower.endsWith(".log")
+                || lower.endsWith(".gradle")
+                || lower.endsWith(".kt")
+                || lower.endsWith(".kts")
+                || lower.endsWith(".swift")
+                || lower.endsWith(".c")
+                || lower.endsWith(".cpp")
+                || lower.endsWith(".h")
+                || lower.endsWith(".hpp")
+                || lower.endsWith(".rb")
+                || lower.endsWith(".php")
+                || lower.endsWith(".lua")
+                || lower.endsWith(".r")
+                || lower.endsWith(".dart")
+                || lower.endsWith(".proto");
     }
 
     private Path resolvePath(String path) {

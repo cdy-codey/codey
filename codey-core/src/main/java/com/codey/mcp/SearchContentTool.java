@@ -6,9 +6,9 @@ import com.codey.tool.ToolResult;
 import com.codey.tools.*;
 
 import com.codey.infra.ModelToolDefinition;
-import com.codey.infra.SearchCodeRequest;
-import com.codey.infra.SearchCodeMatch;
-import com.codey.infra.SearchCodeResult;
+import com.codey.infra.SearcContentRequest;
+import com.codey.infra.SearchContentMatch;
+import com.codey.infra.SearchContentResult;
 import com.codey.infra.WorkspacePathSupport;
 import com.codey.infra.WorkspaceGateway;
 
@@ -17,29 +17,30 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 在工作区内按关键字或正则搜索代码内容。
+ * 在工作区内按关键字或正则搜索文件内容，定位匹配位置。
+ * 适用于代码搜索、配置文件查找、文档内容检索等通用文件内容搜索场景。
  */
-public class SearchCodeTool extends AbstractWorkspaceTool {
+public class SearchContentTool extends AbstractWorkspaceTool {
     private final WorkspaceGateway workspaceGateway;
     private final WorkspaceToolPayloadFormatter payloadFormatter = new WorkspaceToolPayloadFormatter();
 
-    public SearchCodeTool(WorkspaceGateway workspaceGateway) {
+    public SearchContentTool(WorkspaceGateway workspaceGateway) {
         this.workspaceGateway = workspaceGateway;
     }
 
     @Override
     public String name() {
-        return "search_code";
+        return "search_content";
     }
 
     @Override
     public String displayName() {
-        return "搜索代码";
+        return "搜索文件内容";
     }
 
     @Override
     public String description() {
-        return "Search code content in the workspace with regex, limits and context lines.";
+        return "Search file content in the workspace with regex, limits and context lines. Use to locate content in any text file.";
     }
 
     @Override
@@ -55,7 +56,7 @@ public class SearchCodeTool extends AbstractWorkspaceTool {
     public ToolResult execute(ToolInvocation request, WorkspaceToolContext context) {
         try {
             String pathHint = readString(request, "pathHint");
-            SearchCodeRequest searchRequest = new SearchCodeRequest();
+            SearcContentRequest searchRequest = new SearcContentRequest();
             searchRequest.setKeyword(readRequiredString(request, "keyword"));
             searchRequest.setPathHint(toWorkspaceRelativePath(context, pathHint));
             searchRequest.setRegex(readBoolean(request, "regex"));
@@ -64,19 +65,19 @@ public class SearchCodeTool extends AbstractWorkspaceTool {
             searchRequest.setMaxResults(readInteger(request, "maxResults"));
             searchRequest.setFilePattern(readString(request, "filePattern"));
 
-            SearchCodeResult result = workspaceGateway.searchCodeResult(searchRequest);
+            SearchContentResult result = workspaceGateway.searchCodeResult(searchRequest);
             result.setRoot(".");
             if (result.getMatches() != null) {
-                for (SearchCodeMatch match : result.getMatches()) {
+                for (SearchContentMatch match : result.getMatches()) {
                     match.setPath(context.relativize(context.resolvePath(match.getPath())));
                 }
             }
             return ToolResult.ok(
-                    "Search code result:\n" + payloadFormatter.formatSearchCodeResult(result),
+                    "Search content result:\n" + payloadFormatter.formatSearchCodeResult(result),
                     "已返回搜索结果"
             );
         } catch (Exception exception) {
-            return ToolResult.fail("搜索代码失败：" + exception.getMessage());
+            return ToolResult.fail("搜索失败：" + exception.getMessage());
         }
     }
 
@@ -90,7 +91,7 @@ public class SearchCodeTool extends AbstractWorkspaceTool {
         parameters.put("type", "object");
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
-        properties.put("keyword", stringProperty("Keyword or regular expression to search for."));
+        properties.put("keyword", stringProperty("Keyword or regular expression to search for in file content."));
         properties.put("pathHint", stringProperty("Optional subdirectory path hint relative to the current working directory. Defaults to the current working directory."));
         properties.put("regex", booleanProperty("Whether the keyword is treated as a regular expression."));
         properties.put("caseSensitive", booleanProperty("Whether the search is case sensitive."));

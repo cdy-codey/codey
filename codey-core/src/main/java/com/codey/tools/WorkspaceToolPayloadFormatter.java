@@ -1,9 +1,9 @@
-package com.codey.mcp;
+package com.codey.tools;
 
 import com.codey.infra.NumberedLine;
 import com.codey.infra.ReadFileResult;
-import com.codey.infra.SearchCodeMatch;
-import com.codey.infra.SearchCodeResult;
+import com.codey.infra.SearchContentMatch;
+import com.codey.infra.SearchContentResult;
 import com.codey.infra.WorkspaceEntry;
 import com.codey.infra.WorkspaceListResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,10 +16,10 @@ import java.util.Map;
 /**
  * 负责把工作目录 DTO 转成工具层稳定输出，避免网关层直接拼接 JSON。
  */
-final class WorkspaceToolPayloadFormatter {
+public class WorkspaceToolPayloadFormatter {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    String formatReadFileResult(ReadFileResult result) throws Exception {
+    public  String formatReadFileResult(ReadFileResult result) throws Exception {
         Map<String, Object> payload = new LinkedHashMap<String, Object>();
         payload.put("path", result.getPath());
         payload.put("startLine", result.getStartLine());
@@ -30,7 +30,7 @@ final class WorkspaceToolPayloadFormatter {
         return toJson(payload);
     }
 
-    String formatWorkspaceListResult(WorkspaceListResult result) throws Exception {
+    public  String formatWorkspaceListResult(WorkspaceListResult result) throws Exception {
         Map<String, Object> payload = new LinkedHashMap<String, Object>();
         payload.put("path", result.getPath());
         payload.put("root", result.getRoot());
@@ -47,7 +47,7 @@ final class WorkspaceToolPayloadFormatter {
         return toJson(payload);
     }
 
-    String formatSearchCodeResult(SearchCodeResult result) throws Exception {
+    public String formatSearchCodeResult(SearchContentResult result) throws Exception {
         Map<String, Object> payload = new LinkedHashMap<String, Object>();
         payload.put("root", result.getRoot());
         payload.put("pattern", result.getPattern());
@@ -62,7 +62,7 @@ final class WorkspaceToolPayloadFormatter {
         return toJson(payload);
     }
 
-    private List<Map<String, Object>> toWorkspaceEntries(List<WorkspaceEntry> entries) {
+    public List<Map<String, Object>> toWorkspaceEntries(List<WorkspaceEntry> entries) {
         List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
         if (entries == null) {
             return items;
@@ -79,12 +79,12 @@ final class WorkspaceToolPayloadFormatter {
         return items;
     }
 
-    private List<Map<String, Object>> toSearchMatches(List<SearchCodeMatch> matches) {
+    public List<Map<String, Object>> toSearchMatches(List<SearchContentMatch> matches) {
         List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
         if (matches == null) {
             return items;
         }
-        for (SearchCodeMatch match : matches) {
+        for (SearchContentMatch match : matches) {
             Map<String, Object> item = new LinkedHashMap<String, Object>();
             item.put("path", match.getPath());
             item.put("matchedLine", match.getMatchedLine());
@@ -96,7 +96,7 @@ final class WorkspaceToolPayloadFormatter {
         return items;
     }
 
-    private String formatNumberedLines(List<NumberedLine> lines) {
+    public String formatNumberedLines(List<NumberedLine> lines) {
         if (lines == null || lines.isEmpty()) {
             return "";
         }
@@ -112,7 +112,7 @@ final class WorkspaceToolPayloadFormatter {
         return builder.toString();
     }
 
-    private String toJson(Map<String, Object> payload) throws Exception {
+    public String toJson(Map<String, Object> payload) throws Exception {
         return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
     }
 }

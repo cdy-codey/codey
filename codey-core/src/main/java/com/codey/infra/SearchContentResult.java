@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * 结构化的文件内容搜索结果。
  */
-public class SearchCodeResult {
+public class SearchContentResult {
     private String root;
     private String pattern;
     private boolean regex;
@@ -15,7 +15,7 @@ public class SearchCodeResult {
     private int filesSearched;
     private int totalMatches;
     private boolean truncated;
-    private List<SearchCodeMatch> matches;
+    private List<SearchContentMatch> matches;
 
     public String getRoot() {
         return root;
@@ -89,11 +89,11 @@ public class SearchCodeResult {
         this.truncated = truncated;
     }
 
-    public List<SearchCodeMatch> getMatches() {
+    public List<SearchContentMatch> getMatches() {
         return matches;
     }
 
-    public void setMatches(List<SearchCodeMatch> matches) {
+    public void setMatches(List<SearchContentMatch> matches) {
         this.matches = matches;
     }
 }

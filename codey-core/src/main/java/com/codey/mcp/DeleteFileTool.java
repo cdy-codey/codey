@@ -1,9 +1,11 @@
-package com.codey.tools;
+package com.codey.mcp;
 
 import com.codey.infra.ModelToolDefinition;
 import com.codey.tool.ToolCapability;
 import com.codey.tool.ToolInvocation;
 import com.codey.tool.ToolResult;
+import com.codey.tools.AbstractWorkspaceTool;
+import com.codey.tools.WorkspaceToolContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;
