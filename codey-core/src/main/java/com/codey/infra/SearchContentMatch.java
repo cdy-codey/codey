@@ -3,7 +3,7 @@ package com.codey.infra;
 import java.util.List;
 
 /**
- * 单条代码搜索命中结果。
+ * 单条文件内容搜索命中结果。
  */
 public class SearchCodeMatch {
     private String path;

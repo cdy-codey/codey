@@ -3,7 +3,7 @@ package com.codey.infra;
 import java.util.List;
 
 /**
- * 结构化的代码搜索结果。
+ * 结构化的文件内容搜索结果。
  */
 public class SearchCodeResult {
     private String root;

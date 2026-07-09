@@ -1,7 +1,7 @@
 package com.codey.infra;
 
 /**
- * 代码搜索请求。
+ * 文件内容搜索请求。
  */
 public class SearchCodeRequest {
     private String keyword;
