@@ -6,19 +6,7 @@ import { AiChatWorkspace } from 'codey-chat-workspace'
 import { useAiAssistantHandlers } from '../../composables/useAiAssistantHandlers'
 import { createWorkspaceJsonResource } from '../../composables/useWorkspaceJsonResource'
 
-const {
-  openSession,
-  resumeSession,
-  sendMessage,
-  closeSession,
-  listSessions,
-  getSessionDetail,
-  deleteHistorySession,
-  clearHistorySessions,
-  createEventSource,
-  queryWorkspace,
-  writeWorkspaceFile,
-} = useAiAssistantHandlers()
+const { aiAssistantHandlers } = useAiAssistantHandlers()
 // 低代码示例暂时没有独立文件树，这里将 AI 的工作范围固定到当前一级项目目录。
 const aiProjectPath = 'vform'
 const aiWorkingDirectory = './workspace/vform'
@@ -240,18 +228,7 @@ onDeactivated(() => {
           title="低代码 AI 助手"
           subtitle="对话范围限制在当前一级项目目录，可用于表单配置、页面说明和落地代码建议。"
           placeholder="例如：帮我设计一个包含姓名、手机号、部门、审批意见的审批表单"
-          :compact-header="true"
-          :open-session="openSession"
-          :resume-session="resumeSession"
-          :send-message="sendMessage"
-          :close-session="closeSession"
-          :list-sessions="listSessions"
-          :get-session-detail="getSessionDetail"
-          :delete-history-session="deleteHistorySession"
-          :clear-history-sessions="clearHistorySessions"
-          :create-event-source="createEventSource"
-          :query-workspace="queryWorkspace"
-          :write-workspace-file="writeWorkspaceFile"
+          v-bind="aiAssistantHandlers"
           skill-name-value="vform-json-agent"
           :identities-value="aiIdentities"
           :workspace-id-value="aiProjectPath"
@@ -260,14 +237,15 @@ onDeactivated(() => {
           :current-document-id="formConfigDocumentId"
           :working-directory-value="aiWorkingDirectory"
           default-working-directory="./workspace/project"
+          :compact-header="true"
           :load-history-on-mounted="true"
+          :show-working-directory="false"
           :on-before-send="handleBeforeAiSend"
           :on-assistant-finished="handleAiFinalSummary"
           :on-task-ended="handleAiTaskEnded"
-          :show-working-directory="false"
+          :collapsible="true"
           height="100%"
           :min-height="0"
-          :collapsible="true"
           @collapse-change="handleAiCollapseChange"
         />
       </div>

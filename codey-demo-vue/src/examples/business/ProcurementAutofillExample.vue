@@ -544,7 +544,7 @@ onMounted(async () => {
         <AiChatWorkspace
           ref="assistantRef"
           title="AI 智能分析助手"
-          subtitle="发送前会自动把当前页面查询结构同步到工作区 context.json，AI 完成后直接回填页面并同步最新上下文。"
+          subtitle="发送前会自动把当前页面查询结构同步到工作区，AI 完成后直接回填页面并同步最新上下文。"
           placeholder="例如：帮我完善采购申请理由，并给出更合理的设备配置建议"
           v-bind="aiAssistantHandlers"
           :skill-name-value="PROCUREMENT_FORM_SKILL"
