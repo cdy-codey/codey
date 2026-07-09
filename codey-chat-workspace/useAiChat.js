@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   buildToolResultPreview,
   extractFinalSummaryText,
+  normalizeContent,
   normalizeFinalAssistantContent,
   normalizeToolMessageContent,
   parseModelOutputPayload,
@@ -150,9 +151,6 @@ export function useAiChat(options = {}) {
   }
 
   const canSend = computed(() => inputValue.value.trim().length > 0 && !isSending.value)
-  function normalizeContent(value) {
-    return typeof value === 'string' ? value : ''
-  }
 
   function createWelcomeMessages() {
     return [
@@ -337,157 +335,147 @@ export function useAiChat(options = {}) {
       isLoadingDetail.value = false
     }
   }
-function handleStreamEvent(eventType, event) {
-    let payload = null
+function parseEventPayload(event) {
     try {
-      payload = event?.data ? JSON.parse(event.data) : null
+      return event?.data ? JSON.parse(event.data) : null
     } catch (error) {
-      payload = null
+      return null
     }
+  }
 
-    if (eventType === 'connected') {
-      connectionStatus.value = `实时会话：${payload?.sessionId || sessionId.value}`
+  function handleConnected(payload) {
+    connectionStatus.value = `实时会话：${payload?.sessionId || sessionId.value}`
+  }
+
+  function handleModelTextDelta(payload) {
+    const message = ensureActiveAssistantMessage()
+    message.content += payload?.message || payload?.payload?.delta || ''
+  }
+
+  function handleModelThinkingDelta(payload) {
+    const message = ensureActiveAssistantMessage()
+    message.reasoning += payload?.message || payload?.payload?.delta || ''
+  }
+
+  function handleModelToolCallStarted(payload) {
+    const message = ensureActiveAssistantMessage()
+    mergeToolCalls(message, [normalizeContent(payload?.payload?.displayName || payload?.message)])
+  }
+
+  function handleTaskStatus(payload) {
+    const status = payload?.payload?.status || payload?.message || ''
+    const terminal = payload?.payload?.terminal === true
+    const success = payload?.payload?.success === true
+    if (status === 'accepted') {
+      invokeHook('onTaskAccepted', { sessionId: sessionId.value, payload })
       return
     }
-
-    if (eventType === 'model_text_delta') {
-      const message = ensureActiveAssistantMessage()
-      message.content += payload?.message || payload?.payload?.delta || ''
+    if (terminal && success) {
+      invokeHook('onTaskCompleted', { sessionId: sessionId.value, payload })
       return
     }
-
-    if (eventType === 'model_thinking_delta') {
-      const message = ensureActiveAssistantMessage()
-      message.reasoning += payload?.message || payload?.payload?.delta || ''
-      return
-    }
-
-    if (eventType === 'model_tool_call_started') {
-      const message = ensureActiveAssistantMessage()
-      mergeToolCalls(message, [normalizeContent(payload?.payload?.displayName || payload?.message)])
-      return
-    }
-
-    if (eventType === 'task_status') {
-      const status = payload?.payload?.status || payload?.message || ''
-      const terminal = payload?.payload?.terminal === true
-      const success = payload?.payload?.success === true
-      if (status === 'accepted') {
-        invokeHook('onTaskAccepted', {
-          sessionId: sessionId.value,
-          payload,
-        })
-        return
-      }
-      if (terminal && success) {
-        invokeHook('onTaskCompleted', {
-          sessionId: sessionId.value,
-          payload,
-        })
-        return
-      }
-      if (terminal) {
-        const message = payload?.payload?.message || payload?.message || '任务执行失败'
-        errorMessage.value = message
-        closeActiveAssistantMessage()
-        isSending.value = false
-        invokeHook('onTaskFailed', {
-          sessionId: sessionId.value,
-          message,
-          payload,
-        })
-      }
-      return
-    }
-
-    if (eventType === 'final_summary') {
-      const message = ensureActiveAssistantMessage()
-      // 最终摘要可能是纯文本，也可能是 JSON 字符串或 markdown code fence；这里统一提取可展示的 summary。
-      const summary = extractFinalSummaryText(payload)
-      // 流式阶段可能已把最终 FINISH JSON 塞进正文；这里统一收敛成给用户展示的自然语言摘要。
-      // AI修改：结束语提取成功后，优先把正文稳定成可展示文本，避免业务侧继续拿到伪 JSON - 2026-06-29
-      message.content = normalizeFinalAssistantContent(message.content, summary)
-      const finalSummary = summary || message.content
-      // 对外暴露最终回答文本，便于业务页面按约定解析 JSON 并自动回填表单。
-      invokeHook('onAssistantFinished', {
-        sessionId: sessionId.value,
-        summary: finalSummary,
-        content: message.content,
-        reasoning: message.reasoning,
-        payload,
-      })
+    if (terminal) {
+      const message = payload?.payload?.message || payload?.message || '任务执行失败'
+      errorMessage.value = message
       closeActiveAssistantMessage()
       isSending.value = false
-      invokeHook('onFinalSummary', {
-        sessionId: sessionId.value,
-        summary: finalSummary,
-        payload,
-      })
-      loadSessions(sessionId.value)
+      invokeHook('onTaskFailed', { sessionId: sessionId.value, message, payload })
+    }
+  }
+
+  function handleFinalSummary(payload) {
+    const message = ensureActiveAssistantMessage()
+    // 最终摘要可能是纯文本，也可能是 JSON 字符串或 markdown code fence；这里统一提取可展示的 summary。
+    const summary = extractFinalSummaryText(payload)
+    // 流式阶段可能已把最终 FINISH JSON 塞进正文；这里统一收敛成给用户展示的自然语言摘要。
+    // AI修改：结束语提取成功后，优先把正文稳定成可展示文本，避免业务侧继续拿到伪 JSON - 2026-06-29
+    message.content = normalizeFinalAssistantContent(message.content, summary)
+    const finalSummary = summary || message.content
+    // 对外暴露最终回答文本，便于业务页面按约定解析 JSON 并自动回填表单。
+    invokeHook('onAssistantFinished', {
+      sessionId: sessionId.value,
+      summary: finalSummary,
+      content: message.content,
+      reasoning: message.reasoning,
+      payload,
+    })
+    closeActiveAssistantMessage()
+    isSending.value = false
+    invokeHook('onFinalSummary', { sessionId: sessionId.value, summary: finalSummary, payload })
+    loadSessions(sessionId.value)
+  }
+
+  function handleToolCall(payload) {
+    const toolName =
+      payload?.payload?.request?.toolName ||
+      payload?.payload?.request?.tool_name ||
+      payload?.payload?.name ||
+      ''
+    closeActiveAssistantMessage()
+    messages.value.push(
+      createMessage('tool', buildToolResultPreview(payload), {
+        name: normalizeContent(payload?.payload?.displayName || payload?.payload?.request?.displayName),
+        live: false,
+      }),
+    )
+    invokeHook('onToolCall', { sessionId: sessionId.value, toolName, payload })
+  }
+
+  function handleVerificationOrHumanDecision(payload, eventType) {
+    closeActiveAssistantMessage()
+    messages.value.push(
+      createMessage('tool', payload?.message || payload?.stage || eventType, {
+        name: eventType,
+        live: false,
+      }),
+    )
+  }
+
+  function handleSecurityEvent(payload) {
+    errorMessage.value = payload?.message || '检测到安全事件'
+  }
+
+  function handleModelOutput(payload) {
+    const parsedOutput = parseModelOutputPayload(payload)
+    if (!parsedOutput) {
       return
     }
-
-    if (eventType === 'tool_execution_started') {
-      return
+    const message = ensureActiveAssistantMessage()
+    if (parsedOutput.reasoning && parsedOutput.reasoning.length >= message.reasoning.length) {
+      message.reasoning = parsedOutput.reasoning
     }
-
-    if (eventType === 'tool_call') {
-      const toolName =
-        payload?.payload?.request?.toolName ||
-        payload?.payload?.request?.tool_name ||
-        payload?.payload?.name ||
-        ''
+    if (parsedOutput.content && parsedOutput.content.length >= message.content.length) {
+      message.content = parsedOutput.content
+    }
+    mergeToolCalls(message, parsedOutput.toolCalls)
+    if (parsedOutput.finishReason === 'tool_calls') {
       closeActiveAssistantMessage()
-      messages.value.push(
-        createMessage('tool', buildToolResultPreview(payload), {
-          name: normalizeContent(payload?.payload?.displayName || payload?.payload?.request?.displayName),
-          live: false,
-        }),
-      )
-      invokeHook('onToolCall', {
-        sessionId: sessionId.value,
-        toolName,
-        payload,
-      })
-      return
     }
+  }
 
-    if (eventType === 'verification' || eventType === 'human_decision') {
-      closeActiveAssistantMessage()
-      messages.value.push(
-        createMessage('tool', payload?.message || payload?.stage || eventType, {
-          name: eventType,
-          live: false,
-        }),
-      )
-      return
-    }
+  // 流式事件处理器映射表，按事件类型分派到对应的处理函数
+  const STREAM_EVENT_HANDLERS = {
+    connected: handleConnected,
+    model_text_delta: handleModelTextDelta,
+    model_thinking_delta: handleModelThinkingDelta,
+    model_tool_call_started: handleModelToolCallStarted,
+    task_status: handleTaskStatus,
+    final_summary: handleFinalSummary,
+    tool_call: handleToolCall,
+    security_event: handleSecurityEvent,
+    model_output: handleModelOutput,
+    // 以下事件类型只需记录或无需处理
+    tool_execution_started: () => {},
+    debug_trace: () => {},
+    verification: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
+    human_decision: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
+  }
 
-    if (eventType === 'security_event') {
-      const message = payload?.message || '检测到安全事件'
-      errorMessage.value = message
-      return
-    }
-
-    if (eventType === 'debug_trace') {
-      return
-    }
-
-    if (eventType === 'model_output') {
-      const parsedOutput = parseModelOutputPayload(payload)
-      if (parsedOutput) {
-        const message = ensureActiveAssistantMessage()
-        if (parsedOutput.reasoning && parsedOutput.reasoning.length >= message.reasoning.length) {
-          message.reasoning = parsedOutput.reasoning
-        }
-        if (parsedOutput.content && parsedOutput.content.length >= message.content.length) {
-          message.content = parsedOutput.content
-        }
-        mergeToolCalls(message, parsedOutput.toolCalls)
-        if (parsedOutput.finishReason === 'tool_calls') {
-          closeActiveAssistantMessage()
-        }
-      }
+  function handleStreamEvent(eventType, event) {
+    const payload = parseEventPayload(event)
+    const handler = STREAM_EVENT_HANDLERS[eventType]
+    if (handler) {
+      handler(payload, eventType)
     }
   }
   function connectEventStream(targetSessionId) {

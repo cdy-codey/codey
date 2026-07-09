@@ -637,6 +637,7 @@ const {
         await notifyTaskEnded('task-completed')
       } catch (error) {
         // 结果文件可能尚未落盘，assistant-finished 阶段会再兜底读取一次。
+        console.warn('[AiChatWorkspace] notifyTaskEnded (task-completed) 失败:', error)
       }
     }
   },
@@ -655,6 +656,7 @@ const {
         await notifyTaskEnded('assistant-finished')
       } catch (error) {
         // 保持主流程完成态，业务页可自行决定是否继续兜底处理。
+        console.warn('[AiChatWorkspace] notifyTaskEnded (assistant-finished) 失败:', error)
       }
     }
     await emitAssistantCallback('onAssistantFinished', eventPayload)

@@ -54,11 +54,21 @@ export function onSystemAiAssistantEvent(handler) {
 }
 
 // 挂到 window 上，供非 Vue 场景或第三方脚本直接调用。
+// 使用 __CODEY_AI_ASSISTANT__ 命名空间避免与页面其他全局变量冲突。
 if (typeof window !== 'undefined') {
-  window.registerAiAssistantController = registerAiAssistantController
-  window.openSystemAiAssistant = openSystemAiAssistant
-  window.closeSystemAiAssistant = closeSystemAiAssistant
-  window.syncSystemAiAssistantPayload = syncSystemAiAssistantPayload
-  window.emitSystemAiAssistantEvent = emitSystemAiAssistantEvent
-  window.onSystemAiAssistantEvent = onSystemAiAssistantEvent
+  const bridge = {
+    registerAiAssistantController,
+    openSystemAiAssistant,
+    closeSystemAiAssistant,
+    syncSystemAiAssistantPayload,
+    emitSystemAiAssistantEvent,
+    onSystemAiAssistantEvent,
+  }
+  window.__CODEY_AI_ASSISTANT__ = bridge
+  // 保持独立挂载以兼容旧版调用方
+  Object.keys(bridge).forEach((key) => {
+    if (!window[key]) {
+      window[key] = bridge[key]
+    }
+  })
 }

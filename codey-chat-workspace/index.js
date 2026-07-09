@@ -11,6 +11,7 @@ export { getMessageBlocks, formatTime } from './chatPresentation.js'
 
 // 消息适配 / 解析工具
 export {
+  normalizeContent,
   parseModelOutputPayload,
   extractFinalSummaryText,
   normalizeFinalAssistantContent,

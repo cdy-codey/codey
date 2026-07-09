@@ -1,4 +1,4 @@
-function normalizeContent(value) {
+export function normalizeContent(value) {
   return typeof value === 'string' ? value : ''
 }
 
