@@ -1,16 +1,37 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
+import { AiChatWorkspace, closeSystemAiAssistant } from 'codey-chat-workspace'
+import { useAiAssistantHandlers } from '../composables/useAiAssistantHandlers'
 import { getExampleById } from '../examples/exampleRegistry'
 
 const route = useRoute()
 const router = useRouter()
+const { aiAssistantHandlers } = useAiAssistantHandlers()
 
 const activeExample = computed(() => getExampleById(route.params.exampleId))
 
+// AI 助手面板显隐控制
+const aiPanelVisible = ref(false)
+
+// 路由变动时关闭助手
+watch(
+  () => route.params.exampleId,
+  () => {
+    if (aiPanelVisible.value) {
+      closeSystemAiAssistant()
+      aiPanelVisible.value = false
+    }
+  },
+)
+
 function backToHome() {
   router.push('/')
+}
+
+function handleAiPanelVisibilityChange(visible) {
+  aiPanelVisible.value = visible
 }
 </script>
 
@@ -32,10 +53,33 @@ function backToHome() {
         </div>
       </header>
 
-      <div class="detail-stage">
-        <KeepAlive>
-          <component :is="activeExample.component" :key="activeExample.id" />
-        </KeepAlive>
+      <!-- 内容区 + AI 面板并排 -->
+      <div
+        class="detail-body"
+        :class="{ 'has-ai-panel': aiPanelVisible }"
+      >
+        <div class="detail-content-panel">
+          <KeepAlive>
+            <component :is="activeExample.component" :key="activeExample.id" />
+          </KeepAlive>
+        </div>
+        <div
+          class="detail-ai-panel"
+          :class="{ 'is-visible': aiPanelVisible }"
+        >
+          <AiChatWorkspace
+            v-bind="aiAssistantHandlers"
+            title="AI 助手"
+            subtitle="可结合当前页面上下文协助问答、分析和处理业务。"
+            :compact-header="true"
+            :show-working-directory="false"
+            @visibility-change="handleAiPanelVisibilityChange"
+           >
+            <template #toolbar>
+              <button class="ai-close-btn" @click="aiPanelVisible = false">关闭</button>
+            </template>
+          </AiChatWorkspace>
+        </div>
       </div>
     </template>
 
@@ -67,6 +111,7 @@ function backToHome() {
   border-radius: 8px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
+  flex-shrink: 0;
 }
 
 .detail-header-left {
@@ -101,9 +146,18 @@ function backToHome() {
   font-size: 12px;
 }
 
-.detail-stage {
+/* 内容区 + AI 面板并排布局 */
+.detail-body {
   flex: 1;
   min-height: 0;
+  display: flex;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.detail-content-panel {
+  flex: 1;
+  min-width: 0;
   padding: 8px;
   border-radius: 12px;
   background: #ffffff;
@@ -111,8 +165,40 @@ function backToHome() {
   overflow: hidden;
 }
 
-.detail-stage :deep(> *) {
+.detail-content-panel :deep(> *) {
   height: 100%;
+}
+
+.detail-ai-panel {
+  width: 0;
+  flex: 0 0 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #ffffff;
+  border: none;
+  transition: width 0.3s ease, flex-basis 0.3s ease;
+}
+
+.detail-ai-panel.is-visible {
+  width: 420px;
+  flex: 0 0 420px;
+  border: 1px solid #e5e7eb;
+}
+
+.ai-close-btn {
+  padding: 2px 8px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #606266;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ai-close-btn:hover {
+  color: #409eff;
+  border-color: #c6e2ff;
+  background: #ecf5ff;
 }
 
 @media (max-width: 900px) {
@@ -122,6 +208,16 @@ function backToHome() {
 
   .detail-tags {
     justify-content: flex-start;
+  }
+
+  .detail-body {
+    flex-direction: column;
+  }
+
+  .detail-ai-panel.is-visible {
+    width: 100%;
+    flex: 0 0 auto;
+    height: 460px;
   }
 }
 </style>

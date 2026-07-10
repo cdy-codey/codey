@@ -16,3 +16,7 @@ logs/
 # Claude Code
 /.claude/
 sessions/
+# npm credentials (do not commit)
+**/npm_token
+# chat-workspace build output
+codey-chat-workspace/dist/
