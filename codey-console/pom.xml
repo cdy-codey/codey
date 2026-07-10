@@ -18,7 +18,7 @@
         <dependency>
             <groupId>io.github.cdy-codey</groupId>
             <artifactId>codey-core</artifactId>
-            <version>${project.version}</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

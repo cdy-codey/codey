@@ -1,8 +1,6 @@
 <script setup>
+// 聊天工作区组件 — 纯原生实现，不依赖任何第三方 UI 组件库。
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Loading, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
-import 'element-plus/es/components/message-box/style/css'
 import { useAiChat } from './useAiChat'
 import { formatTime, getMessageBlocks } from './chatPresentation'
 import { emitSystemAiAssistantEvent, registerAiAssistantController } from './assistantBridge'
@@ -246,6 +244,43 @@ const currentFileResolved = ref(false)
 let taskEndedPromise = null
 let errorMessageTimer = null
 
+// 确认对话框状态，替代 ElMessageBox.confirm
+const confirmDialog = ref({
+  visible: false,
+  title: '',
+  message: '',
+  confirmText: '确认',
+  cancelText: '取消',
+  type: 'warning',
+  resolve: null,
+  reject: null,
+})
+
+function showConfirm(message, title, options = {}) {
+  return new Promise((resolve, reject) => {
+    confirmDialog.value = {
+      visible: true,
+      title,
+      message,
+      confirmText: options.confirmButtonText || '确认',
+      cancelText: options.cancelButtonText || '取消',
+      type: options.type || 'warning',
+      resolve,
+      reject,
+    }
+  })
+}
+
+function handleConfirmOk() {
+  confirmDialog.value.resolve?.()
+  confirmDialog.value.visible = false
+}
+
+function handleConfirmCancel() {
+  confirmDialog.value.reject?.()
+  confirmDialog.value.visible = false
+}
+
 function resolveAssistantProp(name) {
   if (Object.prototype.hasOwnProperty.call(runtimeAssistantProps.value, name)) {
     return runtimeAssistantProps.value[name]
@@ -320,7 +355,6 @@ function resolveCurrentWorkspacePath() {
   const baseDirectory = normalizeWorkspacePath(
     effectiveWorkingDirectoryValue.value || workingDirectory.value || '',
   )
-  // 去掉多余前缀（./ 或 workspace/），只保留实际目录层级
   const cleanBase = baseDirectory.replace(/^(?:\.\/|workspace\/)+/, '')
   return cleanBase ? `${cleanBase}/${fileKey}` : fileKey
 }
@@ -333,7 +367,6 @@ function resolvePayloadWorkspacePath() {
   const baseDirectory = normalizeWorkspacePath(
     effectiveWorkingDirectoryValue.value || workingDirectory.value || '',
   )
-  // 去掉多余前缀（./ 或 workspace/），只保留实际目录层级
   const cleanBase = baseDirectory.replace(/^(?:\.\/|workspace\/)+/, '')
   return cleanBase ? `${cleanBase}/${fileKey}` : fileKey
 }
@@ -397,8 +430,6 @@ async function syncPagePayloadToWorkspace(payloadOverride, reason = 'manual') {
 async function openAssistant(options = {}) {
   const hasAssistantPropsOverride = Object.prototype.hasOwnProperty.call(options || {}, 'assistantProps')
   if (hasAssistantPropsOverride) {
-    // 仅在外部显式传入 assistantProps 时覆盖运行时上下文，
-    // 避免组件内部重新打开或新建会话时把页面传入的工作目录、工作文件等信息清空。
     runtimeAssistantProps.value = normalizeAssistantOpenProps(options?.assistantProps)
   }
   currentFileResolved.value = false
@@ -409,7 +440,6 @@ async function openAssistant(options = {}) {
   }
   const nextScopeKey = resolveSessionScopeKey()
   if (nextScopeKey && nextScopeKey !== currentSessionScopeKey.value) {
-    // 工作目录和上次不同则立即重置会话，后续发送会自动走新建会话流程，避免复用旧 sessionId。
     await handleScopeChange(nextScopeKey)
   }
   assistantVisible.value = true
@@ -419,7 +449,6 @@ async function openAssistant(options = {}) {
     return
   }
   try {
-    // AI修改：每次打开助手时，把当前页面负载同步到工作区文件，便于模型直接读取最新上下文。
     const hasPagePayloadOverride = Object.prototype.hasOwnProperty.call(options || {}, 'pagePayload')
     if (hasPagePayloadOverride) {
       await syncPagePayloadToWorkspace(options.pagePayload, 'open')
@@ -480,14 +509,12 @@ function buildChatContext() {
     pagePayloadWorkspacePath ? `当前页面负载文件: ${pagePayloadWorkspacePath}` : '',
     '所有读取、搜索、修改、写入都必须限制在当前项目工作目录内。',
     '禁止跨出当前项目工作目录访问根目录下其他一级项目。',
-    '当用户提到“改哪里”或“当前文件”时，先读取当前打开文件或当前文件目录下相关文件，再决定修改目标。',
-    // 业务页面可按场景补充系统级约束，例如限制思考输出风格或口径。
+    '当用户提到"改哪里"或"当前文件"时，先读取当前打开文件或当前文件目录下相关文件，再决定修改目标。',
     systemPrompt,
   ].filter(Boolean)
   return {
     contextFiles: currentFileKey ? [currentFileKey] : [],
     contextNotes,
-    // 身份跟随页面场景传到底层，让会话自动筛选 skill 和 tool。
     identities: normalizeIdentityList(effectiveIdentitiesValue.value),
   }
 }
@@ -518,7 +545,6 @@ async function notifyTaskEnded(reason = 'manual') {
   taskEndedPromise = (async () => {
     const data = await queryHandler(
       buildWorkspaceRequestParams(targetPath, {
-        // 结束阶段按页面声明的模式读取结果，JSON 页读 query-json，源码页读工作区快照。
         readMode: effectiveTaskEndedReadMode.value,
       }),
     )
@@ -605,12 +631,10 @@ const {
     if (!beforeSendHandler) {
       return prompt
     }
-    // AI修改：发送前回调下沉到 useAiChat，确保所有发送入口都统一触发。 - 2026-06-29
     return await beforeSendHandler({
       prompt,
       workingDirectory: workingDirectory.value,
       currentFileKey: effectiveCurrentFileKey.value,
-      // 对业务层隐藏内部 reason 细节，before-send 场景统一由组件内部补齐。
       syncPagePayloadToWorkspace: (payload) => syncPagePayloadToWorkspace(payload, 'before-send'),
     })
   },
@@ -633,10 +657,8 @@ const {
     await emitAssistantCallback('onTaskCompleted', eventPayload)
     if (effectiveCurrentFileKey.value.trim()) {
       try {
-        // 任务完成后优先读取一次结果文件，业务页可直接通过回调接收结构化结果。
         await notifyTaskEnded('task-completed')
       } catch (error) {
-        // 结果文件可能尚未落盘，assistant-finished 阶段会再兜底读取一次。
         console.warn('[AiChatWorkspace] notifyTaskEnded (task-completed) 失败:', error)
       }
     }
@@ -655,7 +677,6 @@ const {
       try {
         await notifyTaskEnded('assistant-finished')
       } catch (error) {
-        // 保持主流程完成态，业务页可自行决定是否继续兜底处理。
         console.warn('[AiChatWorkspace] notifyTaskEnded (assistant-finished) 失败:', error)
       }
     }
@@ -705,10 +726,8 @@ const composerContainerStyle = computed(() => ({
 
 async function scrollMessagesToBottom() {
   await nextTick()
-  const messageListElement =
-    messageListRef.value?.wrapRef ||
-    messageListRef.value?.$el?.querySelector?.('.el-scrollbar__wrap') ||
-    messageListRef.value
+  // 原生 div 滚动容器，ref 直接指向 DOM 元素
+  const messageListElement = messageListRef.value
   if (!messageListElement) {
     return
   }
@@ -761,7 +780,6 @@ async function handleScopeChange(scopeKey) {
     return
   }
   currentSessionScopeKey.value = scopeKey
-  // 作用域变更后强制清空当前选中会话，避免继续携带旧目录下的 sessionId。
   await resetSessionScope()
   emit('session-change', '')
 }
@@ -771,11 +789,11 @@ async function handleDeleteSession(targetSessionId) {
     return
   }
   try {
-    await ElMessageBox.confirm('确认删除这个会话吗？删除后无法恢复。', '删除会话', {
+    // 使用原生确认对话框替代 ElMessageBox.confirm
+    await showConfirm('确认删除这个会话吗？删除后无法恢复。', '删除会话', {
       type: 'warning',
       confirmButtonText: '删除',
       cancelButtonText: '取消',
-      confirmButtonClass: 'el-button--danger',
     })
   } catch {
     return
@@ -790,11 +808,11 @@ async function handleClearSessions() {
     return
   }
   try {
-    await ElMessageBox.confirm('确认清空全部历史会话吗？该操作无法恢复。', '清空历史会话', {
+    // 使用原生确认对话框替代 ElMessageBox.confirm
+    await showConfirm('确认清空全部历史会话吗？该操作无法恢复。', '清空历史会话', {
       type: 'warning',
       confirmButtonText: '清空',
       cancelButtonText: '取消',
-      confirmButtonClass: 'el-button--danger',
     })
   } catch {
     return
@@ -866,7 +884,6 @@ function hasAssistantContent(message) {
 }
 
 function shouldShowAssistantThinkingPlaceholder(message) {
-  // 不展示思考明细且正文尚未返回时，用轻量状态提示替代大块空白区域。
   return !!(message?.live && !hasAssistantContent(message) && !shouldShowReasoning(message))
 }
 function getMessageShadow(role) {
@@ -956,7 +973,6 @@ function isToolMessage(role) {
 function getToolSummary(message) {
   const toolName = typeof message?.name === 'string' ? message.name.trim() : ''
   const content = typeof message?.content === 'string' ? message.content.trim() : ''
-  // AI修改：文件类工具优先展示外部传入的表单名称，避免把具体文件摘要直接暴露到工具行。 - 2026-06-29
   if (toolName.includes('文件')) {
     return effectiveFormDisplayName.value || '表单内容'
   }
@@ -975,12 +991,11 @@ function getToolSummary(message) {
   return content
 }
 
-// 思考内容默认只展示摘要，避免长链路推理直接挤占正文区域。
+// 对外暴露 API
 defineExpose({
   openAssistant,
   closeAssistant,
   toggleAssistant,
-  // 对外暴露内部发送态，便于页面复用统一 loading，而不再重复维护一份业务状态。
   isSending,
   syncPagePayloadToWorkspace,
   notifyTaskEnded,
@@ -1021,7 +1036,6 @@ watch(
     if (!message) {
       return
     }
-    // AI修改：错误提示默认 5 秒后自动消失，避免旧报错长时间停留在聊天面板里。 - 2026-06-29
     errorMessageTimer = setTimeout(() => {
       if (errorMessage.value === message) {
         clearErrorMessage()
@@ -1087,15 +1101,21 @@ watch(
 
 </script>
 <template>
+  <!-- 折叠态 -->
   <div v-if="effectiveCollapsible && collapsed" class="ai-chat-collapsed" @click="toggleCollapsed">
-    <el-icon class="collapsed-icon"><DArrowRight /></el-icon>
+    <!-- 右箭头 SVG 图标 -->
+    <svg class="collapsed-icon" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
+      <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+    </svg>
     <span class="collapsed-text">AI</span>
   </div>
 
+  <!-- 主面板 -->
   <div v-if="renderShell" class="ai-chat-shell" :style="shellStyle">
     <div
       style="display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; box-sizing: border-box;"
     >
+      <!-- 头部 -->
       <div
         v-if="effectiveShowHeader"
         class="chat-header"
@@ -1106,164 +1126,200 @@ watch(
           class="chat-header-body"
           style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex: 1; width: 100%; flex-wrap: wrap;"
         >
-          <el-space direction="vertical" size="small" class="chat-header-title">
-            <el-text size="large">{{ displayTitle }}</el-text>
-            <el-text v-if="displaySubtitle && !effectiveCompactHeader" type="info">{{ displaySubtitle }}</el-text>
-          </el-space>
+          <div class="chat-header-title" style="display: flex; flex-direction: column; gap: 4px; justify-content: center;">
+            <span class="ai-text-large">{{ displayTitle }}</span>
+            <span v-if="displaySubtitle && !effectiveCompactHeader" class="ai-text-info">{{ displaySubtitle }}</span>
+          </div>
 
-          <el-space wrap size="small" class="ai-toolbar">
+          <div class="ai-toolbar" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
             <slot name="toolbar" />
-            <el-button v-if="effectiveCollapsible" size="small" class="toolbar-secondary-button" @click.stop="toggleCollapsed">
-              <el-icon><DArrowLeft /></el-icon>
-            </el-button>
-            <!-- 暂时屏蔽历史会话入口，仅隐藏按钮展示，保留底层会话能力便于后续恢复。 -->
-            <el-button size="small" type="primary" class="toolbar-primary-button" @click="handleStartNewSession">新会话</el-button>
-          </el-space>
+            <button v-if="effectiveCollapsible" class="ai-btn toolbar-secondary-button" @click.stop="toggleCollapsed">
+              <!-- 左箭头 SVG 图标 -->
+              <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+              </svg>
+            </button>
+            <button class="ai-btn ai-btn--primary toolbar-primary-button" @click="handleStartNewSession">新会话</button>
+          </div>
         </div>
       </div>
 
+      <!-- 消息区域 -->
       <div style="display: flex; flex: 1; flex-direction: column; gap: 8px; width: 100%; min-height: 0; padding-top: 6px;">
-        <el-alert
-          v-if="errorMessage"
-          :title="errorMessage"
-          type="error"
-          :closable="true"
-          show-icon
-          @close="clearErrorMessage"
-        />
-
+        <!-- 错误提示 -->
         <div
-          style="flex: 1; min-height: 0; padding: 2px 0 0; box-sizing: border-box;"
+          v-if="errorMessage"
+          class="ai-alert ai-alert--error"
+          style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 6px; font-size: 13px;"
         >
-          <el-scrollbar ref="messageListRef" class="message-scrollbar" height="100%">
-            <div style="display: flex; flex-direction: column; gap: 0; width: 100%; padding: 0 6px 10px 0; box-sizing: border-box;">
-              <div
-                v-for="message in messages"
-                :key="message.id"
-                class="message-row"
-                :class="{
-                  'assistant-message-row': isAssistantMessage(message.role),
-                  'tool-message-row': isToolMessage(message.role),
-                }"
-                :style="getMessageContainerStyle(message.role)"
-              >
-                <el-avatar
-                  v-if="showMessageAvatar(message.role)"
-                  shape="square"
-                  :size="24"
-                  :style="getAvatarStyle(message.role)"
-                >
-                  {{ getAvatarLabel(message.role) }}
-                </el-avatar>
+          <!-- 错误图标 -->
+          <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" style="flex-shrink: 0;">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+          </svg>
+          <span style="flex: 1;">{{ errorMessage }}</span>
+          <button class="ai-alert-close" @click="clearErrorMessage" style="background: none; border: none; cursor: pointer; padding: 0; font-size: 16px; line-height: 1; color: inherit;">&times;</button>
+        </div>
 
-                <template v-if="isAssistantMessage(message.role)">
-                  <div :style="getAssistantBubbleStyle()">
-                    <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
-                      <transition name="reasoning-fade">
-                        <div
-                          v-if="shouldShowReasoning(message)"
-                          class="reasoning-panel"
-                        >
-                          <div class="reasoning-header">
-                            <div class="reasoning-title">
-                              <el-icon class="reasoning-loading-icon"><Loading /></el-icon>
-                              <span>思考中</span>
-                            </div>
-                            <span class="reasoning-tip">完成后自动收起</span>
+        <!-- 消息滚动区 -->
+        <div
+          ref="messageListRef"
+          class="message-scrollbar"
+          style="flex: 1; min-height: 0; padding: 2px 0 0; box-sizing: border-box; overflow-y: auto;"
+        >
+          <div style="display: flex; flex-direction: column; gap: 0; width: 100%; padding: 0 6px 10px 0; box-sizing: border-box;">
+            <div
+              v-for="message in messages"
+              :key="message.id"
+              class="message-row"
+              :class="{
+                'assistant-message-row': isAssistantMessage(message.role),
+                'tool-message-row': isToolMessage(message.role),
+              }"
+              :style="getMessageContainerStyle(message.role)"
+            >
+              <!-- 头像 -->
+              <div
+                v-if="showMessageAvatar(message.role)"
+                class="ai-avatar"
+                :style="{
+                  ...getAvatarStyle(message.role),
+                  width: '24px',
+                  height: '24px',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '4px',
+                  fontWeight: 600,
+                  userSelect: 'none',
+                }"
+              >
+                {{ getAvatarLabel(message.role) }}
+              </div>
+
+              <!-- 助手消息 -->
+              <template v-if="isAssistantMessage(message.role)">
+                <div :style="getAssistantBubbleStyle()">
+                  <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                    <transition name="reasoning-fade">
+                      <div
+                        v-if="shouldShowReasoning(message)"
+                        class="reasoning-panel"
+                      >
+                        <div class="reasoning-header">
+                          <div class="reasoning-title">
+                            <!-- Loading 旋转 SVG 图标 -->
+                            <svg class="reasoning-loading-icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="3">
+                              <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
+                            </svg>
+                            <span>思考中</span>
                           </div>
-                          <template v-if="reasoningBlockMap[message.id]?.length">
-                            <div class="reasoning-body">
-                              <template
-                                v-for="(block, blockIndex) in reasoningBlockMap[message.id]"
-                                :key="`reasoning-${message.id}-${blockIndex}`"
+                          <span class="reasoning-tip">完成后自动收起</span>
+                        </div>
+                        <template v-if="reasoningBlockMap[message.id]?.length">
+                          <div class="reasoning-body">
+                            <template
+                              v-for="(block, blockIndex) in reasoningBlockMap[message.id]"
+                              :key="`reasoning-${message.id}-${blockIndex}`"
+                            >
+                              <div
+                                v-if="block.type === 'text'"
+                                class="reasoning-text-block"
                               >
                                 <div
-                                  v-if="block.type === 'text'"
-                                  class="reasoning-text-block"
+                                  v-for="(paragraph, paragraphIndex) in block.paragraphs"
+                                  :key="`reasoning-${message.id}-${blockIndex}-${paragraphIndex}`"
+                                  class="reasoning-paragraph"
                                 >
-                                  <div
-                                    v-for="(paragraph, paragraphIndex) in block.paragraphs"
-                                    :key="`reasoning-${message.id}-${blockIndex}-${paragraphIndex}`"
-                                    class="reasoning-paragraph"
-                                  >
-                                    {{ paragraph }}
-                                  </div>
+                                  {{ paragraph }}
                                 </div>
+                              </div>
 
-                                <el-card v-else shadow="never" class="reasoning-code-card">
-                                  <template #header>{{ block.language || 'text' }}</template>
-                                  <el-scrollbar max-height="200px">
-                                    <pre style="margin: 0;">{{ block.content }}</pre>
-                                  </el-scrollbar>
-                                </el-card>
-                              </template>
-                            </div>
-                          </template>
-                        </div>
-                      </transition>
-                      <template v-if="hasAssistantContent(message)">
-                      <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
-                        <template
-                          v-for="(block, blockIndex) in messageBlockMap[message.id]"
-                          :key="`${message.id}-${blockIndex}`"
-                        >
-                          <div
-                            v-if="block.type === 'text'"
-                            style="color: #4b5563; line-height: 1.65; font-size: 14px;"
-                          >
-                            <div
-                              v-for="(paragraph, paragraphIndex) in block.paragraphs"
-                              :key="`${message.id}-${blockIndex}-${paragraphIndex}`"
-                              style="margin-bottom: 6px;"
-                            >
-                              {{ paragraph }}
-                            </div>
+                              <!-- 代码卡片 -->
+                              <div v-else class="ai-card reasoning-code-card">
+                                <div class="ai-card-header" style="padding: 8px 12px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);">
+                                  {{ block.language || 'text' }}
+                                </div>
+                                <div class="ai-card-body" style="padding: 10px 12px; max-height: 200px; overflow-y: auto;">
+                                  <pre style="margin: 0;">{{ block.content }}</pre>
+                                </div>
+                              </div>
+                            </template>
                           </div>
-
-                          <el-card v-else shadow="never">
-                            <template #header>{{ block.language || 'text' }}</template>
-                            <el-scrollbar max-height="240px">
-                              <pre style="margin: 0;">{{ block.content }}</pre>
-                            </el-scrollbar>
-                          </el-card>
                         </template>
                       </div>
-                      </template>
+                    </transition>
 
-                      <div v-else-if="shouldShowAssistantThinkingPlaceholder(message)" class="assistant-thinking-placeholder">
-                        <el-icon class="reasoning-loading-icon"><Loading /></el-icon>
-                        <span>正在思考中...</span>
-                      </div>
+                    <!-- 助手正文内容 -->
+                    <template v-if="hasAssistantContent(message)">
+                    <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                      <template
+                        v-for="(block, blockIndex) in messageBlockMap[message.id]"
+                        :key="`${message.id}-${blockIndex}`"
+                      >
+                        <div
+                          v-if="block.type === 'text'"
+                          style="color: #4b5563; line-height: 1.65; font-size: 14px;"
+                        >
+                          <div
+                            v-for="(paragraph, paragraphIndex) in block.paragraphs"
+                            :key="`${message.id}-${blockIndex}-${paragraphIndex}`"
+                            style="margin-bottom: 6px;"
+                          >
+                            {{ paragraph }}
+                          </div>
+                        </div>
+
+                        <div v-else class="ai-card" style="border-radius: 6px; border: 1px solid var(--el-border-color-lighter);">
+                          <div class="ai-card-header" style="padding: 8px 12px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);">
+                            {{ block.language || 'text' }}
+                          </div>
+                          <div class="ai-card-body" style="padding: 10px 12px; max-height: 240px; overflow-y: auto;">
+                            <pre style="margin: 0;">{{ block.content }}</pre>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                    </template>
+
+                    <div v-else-if="shouldShowAssistantThinkingPlaceholder(message)" class="assistant-thinking-placeholder">
+                      <!-- Loading 旋转 SVG 图标 -->
+                      <svg class="reasoning-loading-icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="3">
+                        <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
+                      </svg>
+                      <span>正在思考中...</span>
                     </div>
                   </div>
-                </template>
+                </div>
+              </template>
 
-                <template v-else-if="isToolMessage(message.role)">
-                  <div
-                    style="display: flex; align-items: center; gap: 6px; max-width: 88%; padding: 2px 0; color: var(--el-text-color-regular); font-size: 12px; line-height: 1.45; font-weight: 600;"
-                  >
-                    <span style="flex: 0 0 auto; color: var(--el-color-primary); font-size: 13px;">⚙</span>
-                    <strong style="flex: 0 0 auto; font-size: 13px; font-weight: 600; color: var(--el-text-color-primary);">{{ message.name || '工具调用' }}</strong>
-                    <span style="min-width: 0; color: var(--el-text-color-secondary); font-size: 13px; font-weight: 500;">{{ getToolSummary(message) }}</span>
-                  </div>
-                </template>
-
-                <el-card
-                  v-else
-                  class="message-bubble-card"
-                  :shadow="getMessageShadow(message.role)"
-                  :style="getMessageCardStyle(message.role)"
-                  :body-style="getMessageBodyStyle(message.role)"
+              <!-- 工具消息 -->
+              <template v-else-if="isToolMessage(message.role)">
+                <div
+                  style="display: flex; align-items: center; gap: 6px; max-width: 88%; padding: 2px 0; color: var(--el-text-color-regular); font-size: 12px; line-height: 1.45; font-weight: 600;"
                 >
+                  <span style="flex: 0 0 auto; color: var(--el-color-primary); font-size: 13px;">⚙</span>
+                  <strong style="flex: 0 0 auto; font-size: 13px; font-weight: 600; color: var(--el-text-color-primary);">{{ message.name || '工具调用' }}</strong>
+                  <span style="min-width: 0; color: var(--el-text-color-secondary); font-size: 13px; font-weight: 500;">{{ getToolSummary(message) }}</span>
+                </div>
+              </template>
+
+              <!-- 用户消息气泡 -->
+              <div
+                v-else
+                class="ai-card message-bubble-card"
+                :style="{ ...getMessageCardStyle(message.role), borderRadius: '6px' }"
+              >
+                <div :style="getMessageBodyStyle(message.role)">
                   <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
                     <div
                       v-if="showBubbleHeader(message.role)"
                       style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;"
                       :style="getBubbleHeaderStyle(message.role)"
                     >
-                      <el-tag :type="getRoleTagType(message.role)" size="small">
+                      <span class="ai-tag" :class="`ai-tag--${getRoleTagType(message.role)}`">
                         {{ getRoleLabel(message.role) }}
-                      </el-tag>
+                      </span>
                     </div>
 
                     <template v-if="messageBlockMap[message.id]?.length">
@@ -1282,120 +1338,163 @@ watch(
                             </div>
                           </div>
 
-                          <el-card v-else shadow="never">
-                            <template #header>{{ block.language || 'text' }}</template>
-                            <el-scrollbar max-height="240px">
+                          <div v-else class="ai-card" style="border-radius: 6px; border: 1px solid var(--el-border-color-lighter);">
+                            <div class="ai-card-header" style="padding: 8px 12px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);">
+                              {{ block.language || 'text' }}
+                            </div>
+                            <div class="ai-card-body" style="padding: 10px 12px; max-height: 240px; overflow-y: auto;">
                               <pre style="margin: 0;">{{ block.content }}</pre>
-                            </el-scrollbar>
-                          </el-card>
+                            </div>
+                          </div>
                         </template>
                       </div>
                     </template>
 
-                    <el-text v-else type="info">...</el-text>
+                    <span v-else class="ai-text-info">...</span>
                   </div>
-                </el-card>
+                </div>
               </div>
-
-              <el-skeleton v-if="isLoadingDetail" :rows="4" animated />
             </div>
-          </el-scrollbar>
+
+            <!-- 加载骨架 -->
+            <div v-if="isLoadingDetail" class="ai-skeleton" style="display: flex; flex-direction: column; gap: 8px; padding: 0 6px;">
+              <div v-for="i in 4" :key="i" class="ai-skeleton-row" style="height: 14px; border-radius: 4px;" />
+            </div>
+          </div>
         </div>
 
+        <!-- 输入区 -->
         <div :style="composerContainerStyle">
-          <el-input
-            v-if="effectiveShowWorkingDirectory"
-            v-model="workingDirectory"
-            placeholder="请输入工作目录"
-          >
-            <template #prepend>工作目录</template>
-          </el-input>
+          <!-- 工作目录输入 -->
+          <div v-if="effectiveShowWorkingDirectory" class="ai-input-group">
+            <span class="ai-input-prepend">工作目录</span>
+            <input
+              v-model="workingDirectory"
+              class="ai-input"
+              placeholder="请输入工作目录"
+            />
+          </div>
 
-          <el-input
+          <!-- 主输入框 -->
+          <textarea
             v-model="inputValue"
             class="chat-input"
-            type="textarea"
             :rows="effectiveComposerRows"
             :placeholder="displayPlaceholder"
-            resize="none"
             @keydown.ctrl.enter.prevent="handleSend(inputValue)"
           />
 
+          <!-- 状态栏 + 发送按钮 -->
           <div
             style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;"
           >
-            <el-space wrap size="small">
-              <el-text type="info">{{ compactStatus }}</el-text>
-              <el-text type="info">Ctrl + Enter 发送</el-text>
-            </el-space>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span class="ai-text-info">{{ compactStatus }}</span>
+              <span class="ai-text-info">Ctrl + Enter 发送</span>
+            </div>
 
-            <el-button
-              type="primary"
-              class="send-button"
-              :loading="isSending"
+            <button
+              class="ai-btn ai-btn--primary send-button"
               :disabled="!canSend"
               @click="handleSend(inputValue)"
             >
+              <!-- Loading 图标 -->
+              <svg v-if="isSending" class="ai-btn-spinner" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="3">
+                <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
+              </svg>
               {{ isSending ? '生成中...' : '发送' }}
-            </el-button>
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <el-drawer
-      v-model="historyDrawerVisible"
-      title="历史会话"
-      size="42%"
-    >
-      <el-space direction="vertical" fill size="large" style="width: 100%;">
-        <el-space wrap>
-          <el-button :loading="isLoadingSessions" @click="loadSessions(selectedSessionId)">刷新</el-button>
-          <el-button :disabled="!archivedSessions.length" @click="handleClearSessions">清空</el-button>
-        </el-space>
+    <!-- 历史会话抽屉 -->
+    <template v-if="historyDrawerVisible">
+      <!-- 遮罩层 -->
+      <div class="ai-drawer-backdrop" @click="historyDrawerVisible = false" />
+      <!-- 抽屉面板 -->
+      <div class="ai-drawer-panel" style="width: 42%;">
+        <div class="ai-drawer-header">
+          <h3 class="ai-drawer-title">历史会话</h3>
+          <button class="ai-drawer-close" @click="historyDrawerVisible = false">&times;</button>
+        </div>
+        <div class="ai-drawer-body">
+          <div style="display: flex; flex-direction: column; gap: 16px; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <button class="ai-btn" :disabled="isLoadingSessions" @click="loadSessions(selectedSessionId)">刷新</button>
+              <button class="ai-btn" :disabled="!archivedSessions.length" @click="handleClearSessions">清空</button>
+            </div>
 
-        <el-empty
-          v-if="!archivedSessions.length && !isLoadingSessions"
-          description="暂无历史会话"
-        />
+            <!-- 空态 -->
+            <div
+              v-if="!archivedSessions.length && !isLoadingSessions"
+              class="ai-empty"
+            >
+              <span class="ai-empty-description">暂无历史会话</span>
+            </div>
 
-        <el-table
-          v-else
-          :data="archivedSessions"
-          row-key="sessionId"
-          highlight-current-row
-          :current-row-key="selectedSessionId"
-          style="width: 100%;"
-        >
-          <el-table-column prop="title" label="会话标题" min-width="150" show-overflow-tooltip>
-            <template #default="{ row }">
-              {{ row.title || '未命名会话' }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="preview" label="摘要" min-width="220" show-overflow-tooltip>
-            <template #default="{ row }">
-              {{ row.preview || '暂无摘要' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="更新时间" width="180">
-            <template #default="{ row }">
-              {{ formatTime(row.updatedAt) }}
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="170" fixed="right">
-            <template #default="{ row }">
-              <el-space wrap>
-                <el-button link type="primary" @click="handleSelectSession(row.sessionId)">打开</el-button>
-                <el-button link type="danger" @click="handleDeleteSession(row.sessionId)">删除</el-button>
-              </el-space>
-            </template>
-          </el-table-column>
-        </el-table>
-      </el-space>
-    </el-drawer>
+            <!-- 会话表格 -->
+            <table v-else class="ai-table" style="width: 100%;">
+              <thead>
+                <tr>
+                  <th class="ai-table-th" style="min-width: 150px;">会话标题</th>
+                  <th class="ai-table-th" style="min-width: 220px;">摘要</th>
+                  <th class="ai-table-th" style="width: 180px;">更新时间</th>
+                  <th class="ai-table-th" style="width: 170px;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in archivedSessions"
+                  :key="row.sessionId"
+                  class="ai-table-row"
+                  :class="{ 'ai-table-row--active': selectedSessionId === row.sessionId }"
+                >
+                  <td class="ai-table-td" style="min-width: 150px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ row.title || '未命名会话' }}
+                  </td>
+                  <td class="ai-table-td" style="min-width: 220px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ row.preview || '暂无摘要' }}
+                  </td>
+                  <td class="ai-table-td" style="width: 180px;">
+                    {{ formatTime(row.updatedAt) }}
+                  </td>
+                  <td class="ai-table-td" style="width: 170px;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                      <button class="ai-btn-link ai-btn-link--primary" @click="handleSelectSession(row.sessionId)">打开</button>
+                      <button class="ai-btn-link ai-btn-link--danger" @click="handleDeleteSession(row.sessionId)">删除</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
+
+  <!-- 确认对话框（替代 ElMessageBox.confirm） -->
+  <template v-if="confirmDialog.visible">
+    <div class="ai-confirm-backdrop" />
+    <div class="ai-confirm-dialog">
+      <div class="ai-confirm-header">
+        <h4 class="ai-confirm-title">{{ confirmDialog.title }}</h4>
+        <button class="ai-confirm-close" @click="handleConfirmCancel">&times;</button>
+      </div>
+      <div class="ai-confirm-body">
+        <p class="ai-confirm-message">{{ confirmDialog.message }}</p>
+      </div>
+      <div class="ai-confirm-footer">
+        <button class="ai-btn" @click="handleConfirmCancel">{{ confirmDialog.cancelText }}</button>
+        <button class="ai-btn ai-btn--danger" @click="handleConfirmOk">{{ confirmDialog.confirmText }}</button>
+      </div>
+    </div>
+  </template>
 </template>
 <style scoped>
+/* ===== 基础变量 ===== */
 .ai-chat-shell {
   border-radius: 6px;
   font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -1415,12 +1514,390 @@ watch(
   --el-text-color-secondary: #6e7681;
 }
 
-.ai-chat-shell :deep(.el-button) {
+/* ===== 通用按钮 ===== */
+.ai-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   border-radius: 4px;
   min-height: 26px;
   padding: 5px 10px;
   font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  color: #303133;
+  white-space: nowrap;
+  user-select: none;
+  transition: all 0.1s ease;
+  box-sizing: border-box;
 }
+.ai-btn:hover {
+  color: #409eff;
+  border-color: #c6e2ff;
+  background-color: #ecf5ff;
+}
+.ai-btn:disabled {
+  color: #c0c4cc;
+  cursor: not-allowed;
+  background-color: #ffffff;
+  border-color: #ebeef5;
+}
+.ai-btn--primary {
+  background: #409eff;
+  border-color: #409eff;
+  color: #ffffff;
+}
+.ai-btn--primary:hover {
+  background: #337ecc;
+  border-color: #337ecc;
+  color: #ffffff;
+}
+.ai-btn--danger {
+  background: #f56c6c;
+  border-color: #f56c6c;
+  color: #ffffff;
+}
+.ai-btn--danger:hover {
+  background: #c45656;
+  border-color: #c45656;
+  color: #ffffff;
+}
+
+/* 按钮加载旋转图标 */
+.ai-btn-spinner {
+  animation: reasoning-spin 1.2s linear infinite;
+}
+
+/* 链接按钮 */
+.ai-btn-link {
+  background: none;
+  border: none;
+  padding: 2px;
+  font-size: 13px;
+  cursor: pointer;
+  color: inherit;
+}
+.ai-btn-link:hover {
+  text-decoration: underline;
+}
+.ai-btn-link--primary {
+  color: #409eff;
+}
+.ai-btn-link--danger {
+  color: #f56c6c;
+}
+
+/* ===== 标签 ===== */
+.ai-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  border: 1px solid;
+}
+.ai-tag--primary {
+  color: #409eff;
+  background: #ecf5ff;
+  border-color: #d9ecff;
+}
+.ai-tag--success {
+  color: #67c23a;
+  background: #f0f9eb;
+  border-color: #e1f3d8;
+}
+.ai-tag--info {
+  color: #909399;
+  background: #f4f4f5;
+  border-color: #e9e9eb;
+}
+
+/* ===== 文本 ===== */
+.ai-text-large {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.ai-text-info {
+  font-size: 13px;
+  color: #909399;
+}
+
+/* ===== 警告提示 ===== */
+.ai-alert--error {
+  color: #f56c6c;
+  background: #fef0f0;
+  border: 1px solid #fde2e2;
+}
+.ai-alert-close {
+  opacity: 0.6;
+}
+.ai-alert-close:hover {
+  opacity: 1;
+}
+
+/* ===== 卡片 ===== */
+.ai-card {
+  background: #ffffff;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.ai-card-header {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: #fafafa;
+}
+.ai-card-body {
+  padding: 10px 12px;
+}
+
+/* ===== 输入框组 ===== */
+.ai-input-group {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+.ai-input-prepend {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 13px;
+  color: #909399;
+  background: #f5f7fa;
+  border: 1px solid #dcdfe6;
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  white-space: nowrap;
+}
+.ai-input {
+  flex: 1;
+  padding: 5px 11px;
+  font-size: 13px;
+  border: 1px solid #dcdfe6;
+  border-radius: 0 4px 4px 0;
+  outline: none;
+  color: #303133;
+  background: #ffffff;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.ai-input:focus {
+  border-color: #409eff;
+}
+
+/* ===== 消息滚动区 ===== */
+.message-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.message-scrollbar::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+}
+.message-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.message-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #c0c4cc transparent;
+}
+
+/* ===== 骨架屏 ===== */
+.ai-skeleton-row {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ===== 确认对话框 ===== */
+.ai-confirm-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 3000;
+}
+.ai-confirm-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  z-index: 3001;
+  width: 400px;
+  max-width: 90vw;
+  padding: 20px;
+}
+.ai-confirm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.ai-confirm-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.ai-confirm-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #909399;
+  padding: 0;
+  line-height: 1;
+}
+.ai-confirm-close:hover {
+  color: #303133;
+}
+.ai-confirm-body {
+  margin-bottom: 20px;
+}
+.ai-confirm-message {
+  margin: 0;
+  font-size: 14px;
+  color: #606266;
+  line-height: 1.6;
+}
+.ai-confirm-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ===== 抽屉 ===== */
+.ai-drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+}
+.ai-drawer-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
+  z-index: 2001;
+  display: flex;
+  flex-direction: column;
+}
+.ai-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #ebeef5;
+}
+.ai-drawer-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.ai-drawer-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: #909399;
+  padding: 0;
+  line-height: 1;
+}
+.ai-drawer-close:hover {
+  color: #303133;
+}
+.ai-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+/* ===== 表格 ===== */
+.ai-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ai-table-th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #909399;
+  border-bottom: 1px solid #ebeef5;
+  background: #fafafa;
+}
+.ai-table-td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #ebeef5;
+  color: #303133;
+}
+.ai-table-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ai-table-row:hover {
+  background: #f5f7fa;
+}
+.ai-table-row--active {
+  background: #ecf5ff;
+}
+
+/* ===== 空态 ===== */
+.ai-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 0;
+  color: #c0c4cc;
+}
+.ai-empty-description {
+  font-size: 13px;
+}
+
+/* ===== 聊天框输入 ===== */
+.chat-input {
+  width: 100%;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  border: 1px solid #dcdfe6;
+  outline: none;
+  color: #303133;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.chat-input:focus {
+  border-color: #94ceff;
+  box-shadow: 0 0 0 1px #94ceff inset;
+}
+
+/* ===== 原有样式（保持不变） ===== */
 .assistant-thinking-placeholder {
   display: inline-flex;
   align-items: center;
@@ -1430,13 +1907,6 @@ watch(
   color: #94a3b8;
   font-size: 13px;
   line-height: 1.4;
-}
-.ai-chat-shell :deep(.el-card) {
-  border-radius: 6px;
-}
-
-.ai-chat-shell :deep(.el-text) {
-  font-size: 13px;
 }
 
 .ai-toolbar {
@@ -1464,11 +1934,7 @@ watch(
   gap: 8px !important;
 }
 
-.chat-header.compact :deep(.el-space) {
-  gap: 4px !important;
-}
-
-.chat-header.compact :deep(.el-text.is-large) {
+.chat-header.compact .ai-text-large {
   font-size: 14px;
   line-height: 1.2;
 }
@@ -1482,6 +1948,11 @@ watch(
   border-color: #dcdfe6;
   color: #303133;
 }
+.toolbar-secondary-button:hover {
+  background: #ffffff;
+  border-color: #c6e2ff;
+  color: #409eff;
+}
 
 .toolbar-primary-button {
   background: #409eff;
@@ -1489,13 +1960,8 @@ watch(
   color: #ffffff;
 }
 
-.message-bubble-card :deep(.el-card__body) {
-  border-radius: 0;
-}
-
-.message-scrollbar :deep(.el-scrollbar__wrap) {
-  padding-right: 4px;
-  box-sizing: border-box;
+.message-bubble-card {
+  border-radius: 6px;
 }
 
 .reasoning-panel {
@@ -1552,14 +2018,6 @@ watch(
   margin-bottom: 6px;
 }
 
-.reasoning-code-card :deep(.el-card__header) {
-  padding: 8px 12px;
-}
-
-.reasoning-code-card :deep(.el-card__body) {
-  padding: 10px 12px;
-}
-
 .reasoning-fade-enter-active,
 .reasoning-fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -1572,13 +2030,8 @@ watch(
 }
 
 @keyframes reasoning-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .message-row {
@@ -1594,22 +2047,19 @@ watch(
   margin-bottom: 1px;
 }
 
-.chat-input :deep(.el-textarea__inner) {
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-size: 13px;
-  line-height: 1.5;
+.send-button {
+  background: #409eff;
+  border-color: #409eff;
+  color: #ffffff;
+  font-size: 14px;
+  padding: 6px 16px;
+  min-height: 32px;
 }
-
-.chat-input :deep(.el-textarea__inner:focus) {
-  border-color: #94ceff;
-  box-shadow: 0 0 0 1px #94ceff inset;
-}
-
 .send-button:hover,
 .send-button:focus {
   background: #337ecc;
   border-color: #337ecc;
+  color: #ffffff;
 }
 
 .ai-chat-collapsed {

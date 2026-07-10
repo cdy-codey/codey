@@ -23,7 +23,7 @@
         <dependency>
             <groupId>io.github.cdy-codey</groupId>
             <artifactId>codey-boot-starter</artifactId>
-            <version>${project.version}</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

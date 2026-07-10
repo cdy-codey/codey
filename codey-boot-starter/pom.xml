@@ -18,12 +18,12 @@
         <dependency>
             <groupId>io.github.cdy-codey</groupId>
             <artifactId>codey-core</artifactId>
-            <version>${project.version}</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>io.github.cdy-codey</groupId>
             <artifactId>codey-common</artifactId>
-            <version>${project.version}</version>
+            <version>${revision}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

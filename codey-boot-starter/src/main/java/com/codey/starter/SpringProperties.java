@@ -13,15 +13,11 @@ public class SpringProperties extends WorkspaceDirectoryProperties {
     private String skillsDirectory;
     private String defaultSkillName;
     private Integer eventBufferSize = Integer.valueOf(200);
+    @NestedConfigurationProperty
+    private SessionLogProperties sessionLog = new SessionLogProperties();
 
     @NestedConfigurationProperty
     private ModelProperties model = new ModelProperties();
-
-    public SpringProperties() {
-        // 统一提供基础默认目录，避免 Spring Boot 接入方必须显式声明工作区与会话归档目录。
-        setWorkingDirectory("./workspace");
-        setSessionDirectory("./sessions");
-    }
 
     public String getSkillsDirectory() {
         return skillsDirectory;
@@ -47,11 +43,52 @@ public class SpringProperties extends WorkspaceDirectoryProperties {
         this.eventBufferSize = eventBufferSize;
     }
 
+    public SessionLogProperties getSessionLog() {
+        return sessionLog;
+    }
+
+    public void setSessionLog(SessionLogProperties sessionLog) {
+        this.sessionLog = sessionLog == null ? new SessionLogProperties() : sessionLog;
+    }
+
     public ModelProperties getModel() {
         return model;
     }
 
     public void setModel(ModelProperties model) {
         this.model = model == null ? new ModelProperties() : model;
+    }
+
+    /**
+     * 控制 core 会话日志是否写入 session-directory。
+     */
+    public static class SessionLogProperties {
+        private boolean enabled = true;
+        private Integer maxHistoryDays = Integer.valueOf(30);
+        private Integer cleanupIntervalMinutes = Integer.valueOf(24 * 60);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Integer getMaxHistoryDays() {
+            return maxHistoryDays;
+        }
+
+        public void setMaxHistoryDays(Integer maxHistoryDays) {
+            this.maxHistoryDays = maxHistoryDays;
+        }
+
+        public Integer getCleanupIntervalMinutes() {
+            return cleanupIntervalMinutes;
+        }
+
+        public void setCleanupIntervalMinutes(Integer cleanupIntervalMinutes) {
+            this.cleanupIntervalMinutes = cleanupIntervalMinutes;
+        }
     }
 }

@@ -1,44 +1,35 @@
 {
   "name": "codey-chat-workspace",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Codey AI 聊天工作区组件 — 可嵌入业务页面的智能对话面板，支持流式会话、历史管理、工作区上下文联动。",
   "type": "module",
-  "main": "./index.js",
-  "module": "./index.js",
+  "main": "./dist/codey-chat-workspace.cjs.js",
+  "module": "./dist/codey-chat-workspace.esm.js",
   "exports": {
-    ".": "./index.js",
-    "./*": "./*"
+    ".": {
+      "import": "./dist/codey-chat-workspace.esm.js",
+      "require": "./dist/codey-chat-workspace.cjs.js"
+    }
   },
   "files": [
-    "dist",
-    "index.js",
-    "AiChatWorkspace.vue",
-    "useAiChat.js",
-    "chatMessageAdapter.js",
-    "chatPresentation.js",
-    "assistantBridge.js"
+    "dist"
   ],
   "scripts": {
     "build": "vite build",
-    "prepublishOnly": "vite build"
+    "prepublishOnly": "npm run build",
+    "publish:dry": "node scripts/publish.js --dry-run",
+    "publish:run": "node scripts/publish.js"
   },
   "keywords": [
     "vue",
     "chat",
     "ai",
     "assistant",
-    "workspace",
-    "element-plus"
+    "workspace"
   ],
   "license": "MIT",
   "peerDependencies": {
-    "element-plus": "^2.0.0",
     "vue": "^3.4.0"
-  },
-  "peerDependenciesMeta": {
-    "vue-router": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

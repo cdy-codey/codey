@@ -13,14 +13,11 @@ export default defineConfig({
       fileName: (format) => `codey-chat-workspace.${format === 'es' ? 'esm' : 'cjs'}.js`,
     },
     rollupOptions: {
-      // 不打包 vue / element-plus，由使用者项目提供
-      external: ['vue', 'element-plus', '@element-plus/icons-vue', 'vue-router'],
+      // 不打包 vue，由使用者项目提供
+      external: ['vue'],
       output: {
         globals: {
           vue: 'Vue',
-          'element-plus': 'ElementPlus',
-          '@element-plus/icons-vue': 'ElementPlusIconsVue',
-          'vue-router': 'VueRouter',
         },
       },
     },
