@@ -91,10 +91,10 @@ flowchart LR
     %% 侧边栏与主体层的横向关联（体现安全机制对各层的拦截与观测）
     S_Main -.->|触发拦截/发布事件| S_Security
 
-    %% 主题配色（适配白色背景文档站点）
-    classDef default fill:#f8f9fa,stroke:#1976d2,stroke-width:1.5px,color:#202124
-    classDef security fill:#fff3e0,stroke:#e65100,stroke-width:1.5px,color:#e65100
-    classDef layer fill:#ffffff,stroke:#cfd8dc,stroke-width:2px,color:#37474f
+    %% 主题配色（高对比度纯黑白线框风格）
+    classDef default fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000
+    classDef security fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,stroke-dasharray: 5 5
+    classDef layer fill:#ffffff,stroke:#000000,stroke-width:2.5px,color:#000000
     
     class S_Security,WPS,TAC,HCS,VF,SEP security
     class L1,L2,L3,L4,L4_Tool,L4_Model,L3_Skill layer
