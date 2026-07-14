@@ -17,6 +17,7 @@ import com.codey.session.ModelOutputLogStore;
 import com.codey.session.SessionStore;
 import com.codey.skill.Skill;
 import com.codey.skill.SkillRegistry;
+import com.codey.skill.UiJsonRenderSkill;
 import com.codey.client.AgentClient;
 import com.codey.client.SessionEventListener;
 import com.codey.client.SessionEventPublisher;
@@ -77,6 +78,12 @@ public class AutoConfiguration {
     @ConditionalOnMissingBean
     public LocalWorkspaceGateway localWorkspaceGateway(Path WorkspaceRoot) {
         return new LocalWorkspaceGateway(WorkspaceRoot);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public UiJsonRenderSkill uiJsonRenderSkill() {
+        return new UiJsonRenderSkill();
     }
 
     @Bean

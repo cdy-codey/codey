@@ -16,10 +16,10 @@ const aiSummary = ref('')
 const scenario = ref(null)
 const lineItems = ref([])
 const lastSubmittedContextSignature = ref('')
-const PROCUREMENT_FORM_SKILL = 'procurement-form-agent'
+const PROCUREMENT_FORM_SKILL = ['procurement-form-agent', 'ui-json-render-agent']
 const AUTO_FILL_CHAT_MESSAGE = '请帮我自动填写当前表单。'
 // 业务示例额外补充一条面向用户展示的系统提示，约束思考内容更易读。
-const BUSINESS_AI_SYSTEM_PROMPT = '1.思考内容不要出现表单字段的英文名称，使用中文替代\n2.不要使用markdown格式输出'
+const BUSINESS_AI_SYSTEM_PROMPT = '1.思考内容不要出现表单字段的英文名称，使用中文替代'
 
 const formModel = reactive({
   urgencyLevel: '',
@@ -52,7 +52,6 @@ const totalAmount = computed(() =>
   lineItems.value.reduce((sum, item) => sum + toNumber(item.quantity) * toNumber(item.unitPrice), 0)
 )
 
-const aiWorkingDirectory = "business-procurement"
 const aiContextFileKey = "采购文件申请"
 
 function handleAiCollapseChange(collapsed) {
@@ -640,7 +639,7 @@ onMounted(async () => {
           :system-prompt-value="BUSINESS_AI_SYSTEM_PROMPT"
           :compact-header="true"
           :current-file-key="aiContextFileKey"    
-          :identities-value="['programming']"
+          :identities-value="['programming','workspace-core']"
           :load-history-on-mounted="true"
           :show-thinking="false"
           :show-working-directory="false"
@@ -684,8 +683,8 @@ onMounted(async () => {
 }
 
 .assistant-panel {
-  width: 420px;
-  flex: 0 0 420px;
+  width: 35%;
+  flex: 0 0 35%;
   /* 右侧聊天区需要给页面顶栏和外层留白预留高度，避免底部发送框被挤出视口。 */
   position: sticky;
   top: 12px;

@@ -181,8 +181,8 @@ function handleAiPanelVisibilityChange(visible) {
 }
 
 .detail-ai-panel.is-visible {
-  width: 420px;
-  flex: 0 0 420px;
+  width: 35%;
+  flex: 0 0 35%;
   border: 1px solid #e5e7eb;
 }
 

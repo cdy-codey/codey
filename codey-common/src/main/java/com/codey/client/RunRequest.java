@@ -11,6 +11,7 @@ import java.util.List;
 public class RunRequest {
     private String sessionId;
     private String skillName;
+    private List<String> skillNames = new ArrayList<String>();
     private String goal;
     private String workingDirectory;
     private String pagePath;
@@ -42,6 +43,14 @@ public class RunRequest {
 
     public void setSkillName(String skillName) {
         this.skillName = skillName;
+    }
+
+    public List<String> getSkillNames() {
+        return copyList(skillNames);
+    }
+
+    public void setSkillNames(List<String> skillNames) {
+        this.skillNames = copyList(skillNames);
     }
 
     public String getGoal() {

@@ -36,6 +36,11 @@ export function parseModelOutputPayload(payload) {
 }
 
 export function extractFinalSummaryText(payload) {
+  const finalResult = extractFinalResultPayload(payload)
+  const finalContent = extractAssistantContentFromFinalResult(finalResult)
+  if (finalContent) {
+    return finalContent
+  }
   const summaryCandidate = pickFinalSummaryCandidate(payload)
   if (!summaryCandidate) {
     return ''
@@ -49,6 +54,9 @@ export function normalizeFinalAssistantContent(currentContent, summary) {
   if (!normalizedContent) {
     return normalizedSummary
   }
+  if (looksLikeUiViewPayload(normalizedContent)) {
+    return normalizedContent
+  }
   if (!normalizedSummary) {
     return normalizedContent
   }
@@ -60,6 +68,46 @@ export function normalizeFinalAssistantContent(currentContent, summary) {
     return normalizedSummary
   }
   return normalizedContent
+}
+
+export function extractFinalResultPayload(payload) {
+  const finalResult = payload?.payload?.finalResult
+  if (finalResult && typeof finalResult === 'object' && !Array.isArray(finalResult)) {
+    return finalResult
+  }
+  return null
+}
+
+export function extractAssistantContentFromFinalResult(finalResult) {
+  if (!finalResult || typeof finalResult !== 'object') {
+    return ''
+  }
+  const view = finalResult.view
+  const viewContent = extractAssistantContentFromView(view)
+  if (viewContent) {
+    return viewContent
+  }
+  if (typeof finalResult.summary === 'string' && finalResult.summary.trim()) {
+    return finalResult.summary.trim()
+  }
+  return ''
+}
+
+export function extractAssistantContentFromView(view) {
+  if (typeof view === 'string' && view.trim()) {
+    return view.trim()
+  }
+  if (!view || typeof view !== 'object' || Array.isArray(view)) {
+    return ''
+  }
+  if (view._view_type === 'text') {
+    return normalizeContent(view.content).trim()
+  }
+  try {
+    return JSON.stringify(view)
+  } catch (error) {
+    return ''
+  }
 }
 
 export function buildToolResultPreview(payload) {
@@ -315,8 +363,8 @@ function parseStructuredToolContent(rawContent) {
 }
 
 function pickFinalSummaryCandidate(payload) {
-  if (payload?.payload && typeof payload.payload.summary === 'string' && payload.payload.summary.trim()) {
-    return payload.payload.summary
+  if (payload?.payload?.view) {
+    return extractAssistantContentFromView(payload.payload.view)
   }
   if (typeof payload?.message === 'string' && payload.message.trim()) {
     return payload.message
@@ -377,6 +425,9 @@ function pickSummaryField(parsedValue) {
   if (!parsedValue || typeof parsedValue !== 'object' || Array.isArray(parsedValue)) {
     return ''
   }
+  if (parsedValue.view) {
+    return extractAssistantContentFromView(parsedValue.view)
+  }
   const summary = normalizeContent(parsedValue.summary).trim()
   return summary
 }
@@ -396,6 +447,19 @@ function parseJsonSafely(value) {
 function looksLikeStructuredFinalPayload(value) {
   const content = unwrapMarkdownFence(value)
   return content.startsWith('{') && /"summary"\s*:|"status"\s*:/.test(content)
+}
+
+function looksLikeUiViewPayload(value) {
+  const content = unwrapMarkdownFence(value)
+  if (!content.startsWith('{')) {
+    return false
+  }
+  try {
+    const parsed = JSON.parse(content)
+    return !!(parsed && parsed._view_type)
+  } catch (error) {
+    return /"_view_type"\s*:/.test(content)
+  }
 }
 
 function extractSummaryFromLooseJson(value) {

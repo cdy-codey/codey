@@ -31,8 +31,8 @@ public class ResponseContractValidator {
         if (!"FINISH".equalsIgnoreCase(finalResult.getStatus().trim())) {
             return ResponseValidationResult.failed("Response contract failed: unsupported final status " + finalResult.getStatus());
         }
-        if (finalResult.getSummary() == null || finalResult.getSummary().trim().isEmpty()) {
-            return ResponseValidationResult.failed("Response contract failed: final summary is empty");
+        if (finalResult.getView() == null) {
+            return ResponseValidationResult.failed("Response contract failed: final view is empty");
         }
         if (Boolean.TRUE.equals(finalResult.getRequiresHumanConfirmation())
                 && (finalResult.getUncertaintyReason() == null || finalResult.getUncertaintyReason().trim().isEmpty())) {

@@ -1,6 +1,8 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import {
   buildToolResultPreview,
+  extractAssistantContentFromFinalResult,
+  extractFinalResultPayload,
   extractFinalSummaryText,
   normalizeContent,
   normalizeFinalAssistantContent,
@@ -113,6 +115,23 @@ export function useAiChat(options = {}) {
     return typeof rawValue === 'string' ? rawValue.trim() : defaultValue
   }
 
+  function resolveSkillNamesOption(name) {
+    const rawValue = typeof options?.[name] === 'function' ? options[name]() : options?.[name]
+    if (Array.isArray(rawValue)) {
+      return rawValue
+        .flatMap((item) => (typeof item === 'string' ? item.split(',') : []))
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    }
+    if (typeof rawValue === 'string') {
+      return rawValue
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+    }
+    return []
+  }
+
   function resolveIncludeThinking(explicitValue) {
     if (typeof explicitValue === 'boolean') {
       return explicitValue
@@ -136,9 +155,15 @@ export function useAiChat(options = {}) {
   // 避免用户切换文件后模型仍然沿用旧的文件路径。
   function buildRequestPayload(extra = {}) {
     const context = typeof options?.buildRequestContext === 'function' ? options.buildRequestContext() || {} : {}
-    const skillName = resolveStringOption('skillName', '')
+    const skillNames = resolveSkillNamesOption('skillName')
+    const explicitSkillNames = Array.isArray(extra.skillNames) ? normalizeStringArray(extra.skillNames) : null
+    const mergedSkillNames = explicitSkillNames && explicitSkillNames.length > 0 ? explicitSkillNames : skillNames
+    const skillName = typeof extra.skillName === 'string'
+      ? extra.skillName.trim()
+      : (mergedSkillNames[0] || '')
     return {
       skillName,
+      skillNames: mergedSkillNames,
       workingDirectory: workingDirectory.value,
       includeThinking: resolveIncludeThinking(extra.includeThinking),
       ...context,
@@ -397,23 +422,26 @@ function parseEventPayload(event) {
 
   function handleFinalSummary(payload) {
     const message = ensureActiveAssistantMessage()
-    // 最终摘要可能是纯文本，也可能是 JSON 字符串或 markdown code fence；这里统一提取可展示的 summary。
+    const finalResult = extractFinalResultPayload(payload)
+    const finalContent = extractAssistantContentFromFinalResult(finalResult)
     const summary = extractFinalSummaryText(payload)
-    // 流式阶段可能已把最终 FINISH JSON 塞进正文；这里统一收敛成给用户展示的自然语言摘要。
-    // AI修改：结束语提取成功后，优先把正文稳定成可展示文本，避免业务侧继续拿到伪 JSON - 2026-06-29
-    message.content = normalizeFinalAssistantContent(message.content, summary)
+    if (finalContent) {
+      message.content = finalContent
+    } else {
+      message.content = normalizeFinalAssistantContent(message.content, summary)
+    }
     const finalSummary = summary || message.content
-    // 对外暴露最终回答文本，便于业务页面按约定解析 JSON 并自动回填表单。
     invokeHook('onAssistantFinished', {
       sessionId: sessionId.value,
       summary: finalSummary,
       content: message.content,
+      finalResult,
       reasoning: message.reasoning,
       payload,
     })
     closeActiveAssistantMessage()
     isSending.value = false
-    invokeHook('onFinalSummary', { sessionId: sessionId.value, summary: finalSummary, payload })
+    invokeHook('onFinalSummary', { sessionId: sessionId.value, summary: finalSummary, finalResult, payload })
     loadSessions(sessionId.value)
   }
 
@@ -457,11 +485,24 @@ function parseEventPayload(event) {
       message.reasoning = parsedOutput.reasoning
     }
     if (parsedOutput.content && parsedOutput.content.length >= message.content.length) {
-      message.content = parsedOutput.content
+      message.content = normalizeStructuredAssistantContent(parsedOutput.content) || parsedOutput.content
     }
     mergeToolCalls(message, parsedOutput.toolCalls)
     if (parsedOutput.finishReason === 'tool_calls') {
       closeActiveAssistantMessage()
+    }
+  }
+
+  function normalizeStructuredAssistantContent(content) {
+    const normalized = normalizeContent(content).trim()
+    if (!normalized.startsWith('{')) {
+      return ''
+    }
+    try {
+      const parsed = JSON.parse(normalized)
+      return extractAssistantContentFromFinalResult(parsed)
+    } catch (error) {
+      return ''
     }
   }
 

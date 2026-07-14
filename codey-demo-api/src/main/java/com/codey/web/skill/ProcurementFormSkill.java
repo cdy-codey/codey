@@ -35,13 +35,18 @@ public class ProcurementFormSkill implements Skill {
                         + "detail.budgetAmount 必须与 items 的数量乘单价合计保持一致。\n"
                         + "完成修改后，必须调用校验文件；如果校验失败，继续修正直到 valid=true，再结束本轮任务。\n"
                         + "当用户要求自动填写、补全、优化、校正或完善表单时，应直接围绕采购申请字段执行，不要偏离采购申请场景。\n"
-                        + "优先使用“我已帮你完成...”或“当前表单已更新为...”这类业务确认语气。\n"
-                        + "最终返回给用户的内容必须是纯文本，禁止使用 Markdown、代码块、标题、表格或列表标记。");
+                        + "当最终结果进入完成态时，必须遵守底层 status + view 协议。\n"
+                        + "如果上层同时启用了 ui-json-render-agent，则优先使用结构化 view 返回结果：\n"
+                        + "1. 普通说明走 text view，例如：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"text\",\"content\":\"我已帮你完成采购申请优化，并完成校验。\"}}\n"
+                        + "2. 需要展示表单结果时走 form_data view。\n"
+                        + "3. 需要展示前后修改差异时走 diff_data view。\n"
+                        + "不要输出 markdown 标题、列表、表格，也不要在顶层 JSON 外补充解释文字。\n"
+                        + "业务语气仍然保持简洁确认式，例如“我已帮你完成...”或“当前表单已更新为...”。");
         definition.setAllowedToolBundles(Arrays.asList("workspace-core", "procurement"));
         definition.setSupportedIdentities(Arrays.asList("programming"));
         definition.setIdentityMatchMode(IdentityMatchMode.ANY);
-        // 业务页最终展示的是 summary，所以这里明确要求更像用户提示语，而不是执行回执。
-        definition.setOutputContract("Update workspace context file, validate it, and reply with a short business-friendly confirmation.");
+        // 业务 skill 仍负责“改文件 + 校验 + 业务确认”，但最终正文统一通过顶层 view 返回。
+        definition.setOutputContract("Update workspace context file, validate it, and return the final business-friendly result through the top-level view field.");
         definition.setMaxLoopCount(10);
         return definition;
     }

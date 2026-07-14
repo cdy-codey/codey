@@ -2,6 +2,7 @@ package com.codey.session;
 
 import com.codey.infra.ModelToolCall;
 import com.codey.loop.HumanDecision;
+import com.codey.loop.FinalResult;
 import com.codey.client.SessionEvent;
 import com.codey.client.SessionEventType;
 import com.codey.tool.ToolInvocation;
@@ -153,13 +154,21 @@ public final class SessionEventFactory {
         );
     }
 
-    public static SessionEvent finalSummary(String sessionId, String summary) {
+    public static SessionEvent finalSummary(String sessionId, FinalResult finalResult) {
+        Map<String, Object> payload = new LinkedHashMap<String, Object>();
+        if (finalResult != null) {
+            payload.put("status", finalResult.getStatus());
+            payload.put("view", finalResult.getView());
+            payload.put("requiresHumanConfirmation", finalResult.getRequiresHumanConfirmation());
+            payload.put("uncertaintyReason", finalResult.getUncertaintyReason());
+            payload.put("finalResult", finalResult);
+        }
         return new SessionEvent(
                 sessionId,
                 SessionEventType.FINAL_SUMMARY,
                 null,
-                summary,
-                singletonPayload("summary", summary)
+                finalResult == null ? null : finalResult.toDisplayText(),
+                payload
         );
     }
 

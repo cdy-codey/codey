@@ -11,7 +11,9 @@ import com.codey.session.SessionEventFactory;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CompletableFuture;
@@ -156,7 +158,9 @@ public class TaskRunnerAgentClient implements AgentClient {
         GenerateTask task = new GenerateTask();
         task.setSessionId(source.getSessionId());
         task.setGoal(source.getGoal());
-        task.setSkillName(resolveSkillName(source));
+        List<String> resolvedSkillNames = resolveSkillNames(source);
+        task.setSkillNames(resolvedSkillNames);
+        task.setSkillName(resolvedSkillNames.isEmpty() ? null : String.join(",", resolvedSkillNames));
         String sanitizedWorkingDirectory = resolveWorkingDirectory(source);
         task.setWorkingDirectory(sanitizedWorkingDirectory);
         task.setPagePath(source.getPagePath());
@@ -181,11 +185,33 @@ public class TaskRunnerAgentClient implements AgentClient {
         return RunResult.failed(result.getSessionId(), result.getErrorMessage());
     }
 
-    private String resolveSkillName(RunRequest request) {
-        if (request != null && !isBlank(request.getSkillName())) {
-            return request.getSkillName();
+    private List<String> resolveSkillNames(RunRequest request) {
+        Set<String> values = new LinkedHashSet<String>();
+        if (request != null && request.getSkillNames() != null) {
+            for (String item : request.getSkillNames()) {
+                addSkillNames(values, item);
+            }
         }
-        return defaultSkillName;
+        if (values.isEmpty()) {
+            addSkillNames(values, request == null ? null : request.getSkillName());
+        }
+        if (values.isEmpty()) {
+            addSkillNames(values, defaultSkillName);
+        }
+        return new ArrayList<String>(values);
+    }
+
+    private void addSkillNames(Set<String> values, String rawValue) {
+        if (isBlank(rawValue)) {
+            return;
+        }
+        String[] parts = rawValue.split(",");
+        for (String part : parts) {
+            String normalized = part == null ? "" : part.trim();
+            if (!normalized.isEmpty()) {
+                values.add(normalized);
+            }
+        }
     }
 
     private String resolveWorkingDirectory(RunRequest request) {

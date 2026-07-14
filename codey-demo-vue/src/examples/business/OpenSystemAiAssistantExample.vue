@@ -15,8 +15,8 @@ const aiPanelVisible = ref(false)
 const scenario = ref(null)
 const lineItems = ref([])
 const lastSubmittedContextSignature = ref('')
-const PROCUREMENT_FORM_SKILL = 'procurement-form-agent'
-const BUSINESS_AI_SYSTEM_PROMPT = '1.思考内容不要出现表单字段的英文名称，使用中文替代\n2.不要使用markdown格式输出'
+const PROCUREMENT_FORM_SKILL = ['procurement-form-agent', 'ui-json-render-agent']
+const BUSINESS_AI_SYSTEM_PROMPT = '1.思考内容不要出现表单字段的英文名称，使用中文替代'
 
 const formModel = reactive({
   urgencyLevel: '',
@@ -204,6 +204,7 @@ async function handleOpenAssistant() {
         placeholder: '例如：帮我完善采购申请理由，并给出更合理的设备配置建议',
         skillNameValue: PROCUREMENT_FORM_SKILL,
         systemPromptValue: BUSINESS_AI_SYSTEM_PROMPT,
+        identitiesValue: ['programming','workspace-core'],
         welcomeMessage:'您好！我是您的codey助手，可以帮您填写和审查采购申请单。请问有什么可以帮助您的？',
         welcomeSuggestions: [
           '帮我检查表单是否符合政府采购规定',

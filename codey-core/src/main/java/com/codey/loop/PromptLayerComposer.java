@@ -58,9 +58,10 @@ public class PromptLayerComposer {
         return "## Final Result Format\n\n"
                 + "- 如需继续调用工具，必须使用 OpenAI 标准 tool_calls。\n"
                 + "- 当任务完成且不再需要工具时，只输出一个顶层 JSON 对象，不要输出 markdown 代码块，不要补充额外解释。\n"
-                + "- 顶层 JSON 只允许使用这些字段：status、summary、requiresHumanConfirmation、uncertaintyReason。\n"
-                + "- 合法示例：{\"status\":\"FINISH\",\"summary\":\"...\"}\n"
-                + "- 不要输出这种包装结构：{\"result\":{\"status\":\"FINISH\",\"summary\":\"...\"}}\n"
+                + "- 顶层 JSON 只允许使用这些字段：status、view、requiresHumanConfirmation、uncertaintyReason。\n"
+                + "- view 是最终展示内容的唯一入口。纯文本也必须放进 view 中，例如：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"text\",\"content\":\"...\"}}\n"
+                + "- 结构化内容也必须放进 view 中，例如：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"form_data\",\"modules\":[...]}}\n"
+                + "- 不要输出这种包装结构：{\"result\":{\"status\":\"FINISH\",\"view\":{...}}}\n"
                 + "- requiresHumanConfirmation 为 true 时，必须同时提供 uncertaintyReason。";
     }
 

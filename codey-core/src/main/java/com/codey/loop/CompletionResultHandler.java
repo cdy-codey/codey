@@ -38,7 +38,7 @@ final class CompletionResultHandler {
             return null;
         }
         replanService.appendAssistantResponse(session, modelResponse.getContent(), modelResponse.getReasoningContent(), null);
-        sessionStore.appendEvent(SessionEventFactory.finalSummary(session.getSessionId(), finalResult.getSummary()));
-        return TaskResult.finished(session.getSessionId(), finalResult.getSummary());
+        sessionStore.appendEvent(SessionEventFactory.finalSummary(session.getSessionId(), finalResult));
+        return TaskResult.finished(session.getSessionId(), finalResult.toDisplayText());
     }
 }

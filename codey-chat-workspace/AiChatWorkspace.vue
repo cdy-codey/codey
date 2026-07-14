@@ -19,7 +19,7 @@ const props = defineProps({
     default: '输入你的目标，例如：请解释核心聊天流程',
   },
   skillNameValue: {
-    type: String,
+    type: [String, Array],
     default: '',
   },
   systemPromptValue: {
@@ -246,6 +246,16 @@ const messageListRef = ref(null)
 const currentSessionScopeKey = ref('')
 const collapsed = ref(props.defaultCollapsed)
 const assistantVisible = ref(props.defaultVisible)
+const activeTableModal = ref(null)
+
+function openTableModal(moduleData) {
+  activeTableModal.value = moduleData
+}
+
+function closeTableModal() {
+  activeTableModal.value = null
+}
+
 const runtimeAssistantProps = ref({})
 let unregisterAssistantController = () => {}
 const currentFileResolved = ref(false)
@@ -637,7 +647,7 @@ const {
   deleteHistorySession: (...args) => resolveAssistantFunctionProp('deleteHistorySession')?.(...args),
   clearHistorySessions: (...args) => resolveAssistantFunctionProp('clearHistorySessions')?.(...args),
   createEventSource: (...args) => resolveAssistantFunctionProp('createEventSource')?.(...args),
-  skillName: () => resolveAssistantStringProp('skillNameValue', ''),
+  skillName: () => resolveAssistantProp('skillNameValue'),
   includeThinking: () => effectiveShowThinking.value,
   welcomeMessage: () => effectiveWelcomeMessage.value,
   welcomeSuggestions: () => effectiveWelcomeSuggestions.value,
@@ -702,7 +712,10 @@ const {
 })
 
 const messageBlockMap = computed(() =>
-  Object.fromEntries(messages.value.map((message) => [message.id, getMessageBlocks(message.content)]))
+  Object.fromEntries(messages.value.map((message) => {
+    const isFinished = message.status === 'FINISH' || message.status === 'ERROR' || message.status === 'STOP' || message.status === 'CANCELED'
+    return [message.id, getMessageBlocks(message.content, isFinished ? 'FINISH' : message.status)]
+  }))
 )
 const reasoningBlockMap = computed(() =>
   Object.fromEntries(messages.value.map((message) => [message.id, getMessageBlocks(message.reasoning)]))
@@ -1333,6 +1346,75 @@ watch(
                           </div>
                         </div>
 
+                        <div v-else-if="block.parsedUiView" class="ai-form-data-container">
+                          <div v-if="block.parsedUiView.streaming" class="ai-form-streaming-placeholder" style="padding: 12px 0; color: #94a3b8; display: flex; align-items: center; gap: 8px;">
+                            <svg class="ai-loading-icon" viewBox="0 0 24 24" width="1.2em" height="1.2em" fill="none" stroke="currentColor" stroke-width="3" style="animation: reasoning-spin 1.2s linear infinite;">
+                              <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
+                            </svg>
+                          </div>
+                          <template v-else-if="block.parsedUiView._view_type === 'form_data'" v-for="(module, mIdx) in block.parsedUiView.modules" :key="mIdx">
+                            <!-- Object View -->
+                            <div v-if="module.type === 'object'" class="ai-form-module ai-card" style="margin-bottom: 8px;">
+                              <div class="ai-card-header ai-form-module-header" v-if="module.title" style="background: #f0f4ff; color: #1d4ed8; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; align-items: center; gap: 6px;">
+                                <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
+                                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                                </svg>
+                                <span class="ai-form-module-title">{{ module.title }}</span>
+                              </div>
+                              <div class="ai-card-body ai-form-module-body" style="padding: 10px 12px;">
+                                <div v-for="(val, key) in module.data" :key="key" class="ai-form-field" style="display: flex; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
+                                  <div class="ai-form-field-label" style="width: 140px; color: #64748b; font-size: 13px; flex-shrink: 0;">{{ key }}</div>
+                                  <div class="ai-form-field-value" style="flex: 1; color: #334155; font-size: 13px; font-weight: 500;">{{ val }}</div>
+                                </div>
+                              </div>
+                            </div>
+                            <!-- List View -->
+                            <div v-else-if="module.type === 'list'" class="ai-form-module ai-card" style="margin-bottom: 8px;">
+                              <div class="ai-card-header ai-form-module-header" v-if="module.title" style="background: #f0f4ff; color: #1d4ed8; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; justify-content: space-between; align-items: center;">
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
+                                    <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
+                                  </svg>
+                                  <span class="ai-form-module-title">{{ module.title }}</span>
+                                </div>
+                                <button class="ai-btn-link ai-btn-link--primary" style="font-size: 12px;" @click="openTableModal(module)">查看更多</button>
+                              </div>
+                              <div class="ai-card-body ai-form-module-body" style="padding: 0; overflow-x: auto;">
+                                <table class="ai-form-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                  <thead>
+                                    <tr>
+                                      <th v-for="h in (module.headers || []).slice(0, 6)" :key="h" class="ai-table-th" style="padding: 8px 12px; text-align: left; background: #f8fafc; color: #64748b; font-weight: 500; border-bottom: 1px solid #e2e8f0; white-space: nowrap;">{{ h }}</th>
+                                      <th v-if="(module.headers || []).length > 6" class="ai-table-th" style="padding: 8px 12px; text-align: center; background: #f8fafc; color: #94a3b8; border-bottom: 1px solid #e2e8f0;">...</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr v-for="(row, rIdx) in (module.data || [])" :key="rIdx" class="ai-table-row">
+                                      <td v-for="h in (module.headers || []).slice(0, 6)" :key="h" class="ai-table-td" style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; color: #334155; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis;">{{ row[h] }}</td>
+                                      <td v-if="(module.headers || []).length > 6" class="ai-table-td" style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">...</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                                <div v-if="(module.headers || []).length > 6" class="ai-form-table-more" @click="openTableModal(module)" style="padding: 10px; text-align: center; color: #3b82f6; font-size: 12px; cursor: pointer; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                                  共 {{ module.headers.length }} 个字段，点击查看完整表格
+                                </div>
+                              </div>
+                            </div>
+                          </template>
+                          <div v-else-if="block.parsedUiView._view_type === 'diff_data'" class="ai-form-module ai-card" style="margin-bottom: 8px;">
+                            <div class="ai-card-header ai-form-module-header" style="background: #f8fafc; color: #334155; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);">
+                              {{ block.parsedUiView.title || '变更对比' }}
+                            </div>
+                            <div class="ai-card-body ai-form-module-body" style="padding: 10px 12px;">
+                              <div v-for="(change, cIdx) in (block.parsedUiView.changes || [])" :key="cIdx" style="display: grid; grid-template-columns: 120px 1fr 20px 1fr; gap: 8px; align-items: start; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
+                                <div style="color: #64748b; font-size: 13px;">{{ change.field }}</div>
+                                <div style="color: #94a3b8; font-size: 13px; text-decoration: line-through; word-break: break-word;">{{ change.old_value }}</div>
+                                <div style="color: #cbd5e1; text-align: center;">→</div>
+                                <div style="color: #334155; font-size: 13px; font-weight: 600; word-break: break-word;">{{ change.new_value }}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                         <div v-else class="ai-card" style="border-radius: 6px; border: 1px solid var(--el-border-color-lighter);">
                           <div class="ai-card-header" style="padding: 8px 12px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);">
                             {{ block.language || 'text' }}
@@ -1558,22 +1640,51 @@ watch(
   </div>
 
   <!-- 确认对话框（替代 ElMessageBox.confirm） -->
-  <template v-if="confirmDialog.visible">
-    <div class="ai-confirm-backdrop" />
-    <div class="ai-confirm-dialog">
-      <div class="ai-confirm-header">
-        <h4 class="ai-confirm-title">{{ confirmDialog.title }}</h4>
-        <button class="ai-confirm-close" @click="handleConfirmCancel">&times;</button>
+  <Teleport to="body">
+    <template v-if="confirmDialog.visible">
+      <div class="ai-confirm-backdrop" style="z-index: 9998;" />
+      <div class="ai-confirm-dialog" style="z-index: 9999;">
+        <div class="ai-confirm-header">
+          <h4 class="ai-confirm-title">{{ confirmDialog.title }}</h4>
+          <button class="ai-confirm-close" @click="handleConfirmCancel">&times;</button>
+        </div>
+        <div class="ai-confirm-body">
+          <p class="ai-confirm-message">{{ confirmDialog.message }}</p>
+        </div>
+        <div class="ai-confirm-footer">
+          <button class="ai-btn" @click="handleConfirmCancel">{{ confirmDialog.cancelText }}</button>
+          <button class="ai-btn ai-btn--danger" @click="handleConfirmOk">{{ confirmDialog.confirmText }}</button>
+        </div>
       </div>
-      <div class="ai-confirm-body">
-        <p class="ai-confirm-message">{{ confirmDialog.message }}</p>
+    </template>
+  </Teleport>
+
+  <!-- 表单数据弹窗（查看更多） -->
+  <Teleport to="body">
+    <template v-if="activeTableModal">
+      <div class="ai-confirm-backdrop" @click="closeTableModal" style="z-index: 9998;" />
+      <div class="ai-confirm-dialog" style="width: fit-content; min-width: 600px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column; z-index: 9999;">
+        <div class="ai-confirm-header" style="margin-bottom: 0; padding-bottom: 12px; border-bottom: 1px solid var(--el-border-color-lighter);">
+          <h4 class="ai-confirm-title">{{ activeTableModal.title || '数据列表' }}</h4>
+          <button class="ai-confirm-close" @click="closeTableModal">&times;</button>
+        </div>
+        <div class="ai-confirm-body" style="flex: 1; overflow: auto; padding-top: 16px; margin-bottom: 0;">
+          <table class="ai-form-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr>
+                <th v-for="h in activeTableModal.headers" :key="h" class="ai-table-th" style="padding: 8px 16px; text-align: left; background: #f8fafc; color: #64748b; font-weight: 500; border-bottom: 1px solid #e2e8f0; white-space: nowrap; position: sticky; top: 0; z-index: 1;">{{ h }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, rIdx) in activeTableModal.data" :key="rIdx" class="ai-table-row">
+                <td v-for="h in activeTableModal.headers" :key="h" class="ai-table-td" style="padding: 10px 16px; border-bottom: 1px solid #e2e8f0; color: #334155; white-space: nowrap;">{{ row[h] }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="ai-confirm-footer">
-        <button class="ai-btn" @click="handleConfirmCancel">{{ confirmDialog.cancelText }}</button>
-        <button class="ai-btn ai-btn--danger" @click="handleConfirmOk">{{ confirmDialog.confirmText }}</button>
-      </div>
-    </div>
-  </template>
+    </template>
+  </Teleport>
 </template>
 <style scoped>
 /* ===== 基础变量 ===== */

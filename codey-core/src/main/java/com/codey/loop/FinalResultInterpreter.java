@@ -1,7 +1,10 @@
 package com.codey.loop;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -22,12 +25,15 @@ public class FinalResultInterpreter {
             if (!looksLikeJsonObject(normalized)) {
                 return parsePlainText(normalized);
             }
+            if (normalized.contains("\"_view_type\"") && !normalized.contains("\"status\"")) {
+                return parseRawView(normalized);
+            }
             FinalResult finalResult = objectMapper.readValue(normalized, FinalResult.class);
             if (isBlank(finalResult.getStatus())) {
                 return FinalResultParseResult.failure("Parse error: missing status");
             }
-            if (isBlank(finalResult.getSummary())) {
-                return FinalResultParseResult.failure("Parse error: missing summary");
+            if (finalResult.getView() == null) {
+                return FinalResultParseResult.failure("Parse error: missing view");
             }
             return FinalResultParseResult.success(finalResult);
         } catch (Exception exception) {
@@ -41,7 +47,14 @@ public class FinalResultInterpreter {
         }
         FinalResult finalResult = new FinalResult();
         finalResult.setStatus("FINISH");
-        finalResult.setSummary(content.trim());
+        finalResult.setView(createTextView(content.trim()));
+        return FinalResultParseResult.success(finalResult);
+    }
+
+    private FinalResultParseResult parseRawView(String content) throws JsonProcessingException {
+        FinalResult finalResult = new FinalResult();
+        finalResult.setStatus("FINISH");
+        finalResult.setView(objectMapper.readValue(content, Object.class));
         return FinalResultParseResult.success(finalResult);
     }
 
@@ -135,5 +148,12 @@ public class FinalResultInterpreter {
 
     private boolean looksLikeJsonObject(String value) {
         return value != null && value.trim().startsWith("{") && value.trim().endsWith("}");
+    }
+
+    private Map<String, Object> createTextView(String content) {
+        Map<String, Object> view = new LinkedHashMap<String, Object>();
+        view.put("_view_type", "text");
+        view.put("content", content);
+        return view;
     }
 }

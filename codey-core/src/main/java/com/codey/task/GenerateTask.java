@@ -12,6 +12,7 @@ import java.util.List;
 public class GenerateTask {
     private String sessionId;
     private String skillName;
+    private List<String> skillNames = new ArrayList<String>();
     private String goal;
     private String workingDirectory;
     private String pagePath;
@@ -36,6 +37,14 @@ public class GenerateTask {
 
     public void setSkillName(String skillName) {
         this.skillName = skillName;
+    }
+
+    public List<String> getSkillNames() {
+        return skillNames == null ? new ArrayList<String>() : new ArrayList<String>(skillNames);
+    }
+
+    public void setSkillNames(List<String> skillNames) {
+        this.skillNames = skillNames == null ? new ArrayList<String>() : new ArrayList<String>(skillNames);
     }
 
     public String getGoal() {

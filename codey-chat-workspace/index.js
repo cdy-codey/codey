@@ -13,6 +13,7 @@ export { getMessageBlocks, formatTime } from './chatPresentation.js'
 export {
   normalizeContent,
   parseModelOutputPayload,
+  extractAssistantContentFromFinalResult,
   extractFinalSummaryText,
   normalizeFinalAssistantContent,
   buildToolResultPreview,
