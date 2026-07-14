@@ -69,7 +69,8 @@ function handleAiPanelVisibilityChange(visible) {
         >
           <AiChatWorkspace
             v-bind="aiAssistantHandlers"
-            title="AI 助手"
+            title="codey"
+            welcome-message="您好！我是您的AI助手，可以帮您填写和审查采购申请单。请问有什么可以帮助您的"
             subtitle="可结合当前页面上下文协助问答、分析和处理业务。"
             :compact-header="true"
             :show-working-directory="false"

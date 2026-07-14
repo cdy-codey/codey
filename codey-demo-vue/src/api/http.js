@@ -1,4 +1,4 @@
-﻿const DEFAULT_HEADERS = {
+const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
 }
 
@@ -50,6 +50,25 @@ function unwrapResponseBody(body) {
     return body.data ?? null
   }
   return body
+}
+
+/**
+ * 文件上传专用方法，使用 FormData 以 multipart/form-data 方式提交。
+ */
+export async function uploadFile(url, file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+  })
+
+  const body = await readResponseBody(response)
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, response))
+  }
+  return unwrapResponseBody(body)
 }
 
 function readErrorMessage(body, response) {

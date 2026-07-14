@@ -20,3 +20,7 @@ sessions/
 **/npm_token
 # chat-workspace build output
 codey-chat-workspace/dist/
+
+# Uploaded attachments (do not commit)
+uploads/
+**/uploads/

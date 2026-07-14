@@ -153,17 +153,29 @@ export function useAiChat(options = {}) {
   const canSend = computed(() => inputValue.value.trim().length > 0 && !isSending.value)
 
   function createWelcomeMessages() {
+    const suggestions = resolveWelcomeSuggestions()
     return [
       {
         id: nextMessageId('assistant'),
         role: 'assistant',
-        content: options.welcomeMessage || '直接输入目标即可开始，会话会按 console 的方式持续保持。',
+        content: resolveStringOption('welcomeMessage', '直接输入目标即可开始，会话会按 console 的方式持续保持。'),
         reasoning: '',
         name: '',
         toolCalls: [],
         live: false,
+        suggestions: suggestions.length > 0 ? suggestions : undefined,
       },
     ]
+  }
+
+  function resolveWelcomeSuggestions() {
+    const rawValue = typeof options?.welcomeSuggestions === 'function'
+      ? options.welcomeSuggestions()
+      : options?.welcomeSuggestions
+    if (!Array.isArray(rawValue)) {
+      return []
+    }
+    return rawValue.filter((item) => typeof item === 'string' && item.trim().length > 0)
   }
 
   function nextMessageId(prefix) {

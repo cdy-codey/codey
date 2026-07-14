@@ -1,2 +1,13 @@
-﻿server:
+server:
   port: 18080
+
+# 文件上传配置
+spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# 附件上传目录（Demo 环境直接放在项目运行目录下）
+upload:
+  directory: ./uploads

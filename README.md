@@ -77,6 +77,100 @@ codey/
 
 ## 技术架构
 
+### 核心业务运行机制
+
+Codey 的核心设计是把大模型能力与真实业务场景做结合。下图展示了从调用方发起请求，到经历技能约束、编排调度、安全拦截，最终执行工具的完整业务流转：
+
+```mermaid
+flowchart LR
+    %% 全局方向从左到右，模拟侧边栏（安全） + 主体层级的布局
+
+    %% 左侧：侧边栏（贯穿全局的安全与审计机制）
+    subgraph S_Security [安全与观测层]
+        direction TB
+        WPS[路径沙箱越界防护]
+        TAC[运行时越权拦截]
+        HCS[高风险写操作确认]
+        VF[写后结果校验]
+        SEP[全链路事件发布]
+        
+        WPS --- TAC --- HCS --- VF --- SEP
+    end
+
+    %% 右侧：主体分层架构（自上而下）
+    subgraph S_Main [Codey 核心业务架构]
+        direction TB
+
+        subgraph L1 [1. 业务接入层]
+            direction LR
+            Client[调用方: Web / CLI / SDK]
+            AC[AgentClient 统一入口]
+            Client -->|注入业务工具与身份| AC
+        end
+
+        subgraph L2 [2. 会话调度层]
+            direction LR
+            TR[TaskRunnerAgentClient<br/>Turn 串行与线程池调度]
+            TF[TaskRunnerFactory<br/>会话与任务构建]
+            TR --> TF
+        end
+
+        subgraph L3 [3. 核心编排层]
+            direction LR
+            LO{LoopOrchestrator<br/>循环驱动器}
+            
+            subgraph L3_Skill [技能编排与权限隔离]
+                direction TB
+                SS[基于身份隔离]
+                SR[工具白名单]
+                TEP[按边界隔离可见工具]
+                SS --> SR --> TEP
+            end
+            
+            L3_Skill -.->|注入受限Schema| LO
+        end
+
+        subgraph L4 [4. 执行底座]
+            direction LR
+            
+            subgraph L4_Tool [工具执行]
+                direction TB
+                TCP[并行批处理与结果回灌]
+                TEX[ToolExecutor 实际执行]
+                TRG[工具池_含注入业务工具]
+                TCP --> TEX --> TRG
+            end
+            
+            subgraph L4_Model [大模型网关]
+                direction TB
+                MG[解析运行时配置]
+                HG[HttpModelGateway]
+                LLM[(LLM Provider)]
+                MG --> HG --> LLM
+            end
+        end
+
+        %% 主体层级内部的上下连接
+        L1 --> L2
+        L2 --> L3
+        L3 --> L4
+    end
+
+    %% 侧边栏与主体层的横向关联（体现安全机制对各层的拦截与观测）
+    S_Main -.->|触发拦截/发布事件| S_Security
+
+    %% 主题配色（采用暗黑赛博风，青色/蓝绿点缀）
+    classDef default fill:#0b192c,stroke:#00e5ff,stroke-width:2px,color:#ffffff
+    classDef security fill:#0a1128,stroke:#1de9b6,stroke-width:2px,color:#a7ffeb
+    classDef layer fill:#12233a,stroke:#00b8d4,stroke-width:1px,color:#e0f7fa
+    
+    class S_Security,WPS,TAC,HCS,VF,SEP security
+    class L1,L2,L3,L4,L4_Tool,L4_Model,L3_Skill layer
+    class Client,AC,TR,TF,LO,SS,SR,TEP,TCP,TEX,TRG,MG,HG,LLM default
+```
+
+> **详细的机制解析与源码对应入口，请参阅 👉 [Codey 业务架构图与原理解析](docs/business-architecture.md)**
+
 ### 后端
 
 - Java 8

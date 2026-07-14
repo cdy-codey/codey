@@ -12,10 +12,21 @@ export function registerAiAssistantController(controller) {
 
 export async function openSystemAiAssistant(options = {}) {
   if (!assistantController?.openAssistant) {
+    // 详细日志：controller 未注册，说明 AiChatWorkspace 组件未挂载或未调用 registerAiAssistantController
+    console.error(
+      '[openSystemAiAssistant] 助手控制器未注册。请确认 AiChatWorkspace 组件已挂载且调用了 registerAiAssistantController。',
+      { hasController: !!assistantController, optionsKeys: Object.keys(options || {}) }
+    )
     return false
   }
-  await assistantController.openAssistant(options)
-  return true
+  try {
+    await assistantController.openAssistant(options)
+    return true
+  } catch (error) {
+    // 详细日志：openAssistant 内部抛出异常
+    console.error('[openSystemAiAssistant] openAssistant 执行异常:', error)
+    throw error
+  }
 }
 
 export async function closeSystemAiAssistant() {

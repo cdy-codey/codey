@@ -218,6 +218,14 @@ const props = defineProps({
     type: Boolean,
     default: true,
   },
+  welcomeMessage: {
+    type: String,
+    default: '直接输入任务即可开始。',
+  },
+  welcomeSuggestions: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const emit = defineEmits([
@@ -333,6 +341,11 @@ const effectiveIdentitiesValue = computed(() => {
   return Array.isArray(value) ? value : []
 })
 const effectiveShowThinking = computed(() => resolveAssistantBooleanProp('showThinking', true))
+const effectiveWelcomeMessage = computed(() => resolveAssistantStringProp('welcomeMessage', '直接输入任务即可开始。'))
+const effectiveWelcomeSuggestions = computed(() => {
+  const value = resolveAssistantProp('welcomeSuggestions')
+  return Array.isArray(value) ? value.filter((s) => typeof s === 'string' && s.trim()) : []
+})
 const effectiveComposerRows = computed(() => {
   const value = Number(resolveAssistantProp('composerRows'))
   return Number.isFinite(value) && value > 0 ? value : 3
@@ -456,6 +469,8 @@ async function openAssistant(options = {}) {
     }
     await syncPagePayloadToWorkspace(effectivePagePayloadValue.value, 'open')
   } catch (error) {
+    // 详细日志：同步页面负载到工作区失败，便于排查网络 / 权限 / 数据格式等问题
+    console.error('[openAssistant] syncPagePayloadToWorkspace 失败:', error)
     errorMessage.value = error?.message || '同步页面负载到工作区失败'
   }
 }
@@ -623,7 +638,8 @@ const {
   createEventSource: (...args) => resolveAssistantFunctionProp('createEventSource')?.(...args),
   skillName: () => resolveAssistantStringProp('skillNameValue', ''),
   includeThinking: () => effectiveShowThinking.value,
-  welcomeMessage: '直接输入任务即可开始。',
+  welcomeMessage: () => effectiveWelcomeMessage.value,
+  welcomeSuggestions: () => effectiveWelcomeSuggestions.value,
   buildRequestContext: buildChatContext,
   filterArchivedSession: matchArchivedSessionScope,
   onBeforeSend: async ({ prompt }) => {
@@ -764,6 +780,14 @@ async function handleSend(prompt = inputValue.value) {
     errorMessage.value = error?.message || '发送前同步上下文失败'
     throw error
   }
+}
+
+// 点击建议语句自动发送
+function sendSuggestion(suggestionText) {
+  if (isSending.value) {
+    return
+  }
+  handleSend(suggestionText)
 }
 
 async function handleStartNewSession() {
@@ -1177,24 +1201,49 @@ watch(
               }"
               :style="getMessageContainerStyle(message.role)"
             >
-              <!-- 头像 -->
+              <!-- 头像：AI助手显示机器人图标 -->
               <div
                 v-if="showMessageAvatar(message.role)"
                 class="ai-avatar"
                 :style="{
                   ...getAvatarStyle(message.role),
-                  width: '24px',
-                  height: '24px',
+                  width: '28px',
+                  height: '28px',
                   fontSize: '12px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: '4px',
+                  borderRadius: '6px',
                   fontWeight: 600,
                   userSelect: 'none',
                 }"
               >
-                {{ getAvatarLabel(message.role) }}
+                <!-- AI机器人头像 SVG -->
+                <svg
+                  v-if="isAssistantMessage(message.role)"
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <!-- 机器人头部 -->
+                  <rect x="3" y="8" width="18" height="13" rx="3" />
+                  <!-- 天线 -->
+                  <line x1="12" y1="3" x2="12" y2="8" />
+                  <circle cx="12" cy="2.5" r="1.2" fill="currentColor" stroke="none" />
+                  <!-- 左眼 -->
+                  <circle cx="9" cy="14" r="1.5" fill="currentColor" stroke="none" />
+                  <!-- 右眼 -->
+                  <circle cx="15" cy="14" r="1.5" fill="currentColor" stroke="none" />
+                  <!-- 嘴巴 -->
+                  <line x1="9.5" y1="18" x2="14.5" y2="18" />
+                </svg>
+                <!-- 工具消息保留文字标识 -->
+                <span v-else>{{ getAvatarLabel(message.role) }}</span>
               </div>
 
               <!-- 助手消息 -->
@@ -1278,6 +1327,25 @@ watch(
                             <pre style="margin: 0;">{{ block.content }}</pre>
                           </div>
                         </div>
+                      </template>
+                    </div>
+
+                    <!-- 欢迎消息建议语句，点击自动发送 -->
+                    <div v-if="message.suggestions?.length" style="display: flex; flex-direction: column; gap: 2px; margin-top: 10px;">
+                      <template v-for="(suggestion, sIdx) in message.suggestions" :key="`sug-${sIdx}`">
+                        <button
+                          class="welcome-suggestion-btn"
+                          :disabled="isSending"
+                          @click="sendSuggestion(suggestion)"
+                        >
+                          <span class="suggestion-index">{{ sIdx + 1 }}.</span>
+                          <span class="suggestion-text">{{ suggestion }}</span>
+                          <!-- 箭头图标 -->
+                          <svg class="suggestion-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                          </svg>
+                        </button>
                       </template>
                     </div>
                     </template>
@@ -2060,6 +2128,56 @@ watch(
   background: #337ecc;
   border-color: #337ecc;
   color: #ffffff;
+}
+
+/* 欢迎消息建议链接 */
+.welcome-suggestion-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #6366f1;
+  background: none;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  width: fit-content;
+}
+.welcome-suggestion-btn:hover {
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
+}
+.welcome-suggestion-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.suggestion-text {
+  min-width: 0;
+}
+
+.suggestion-index {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #a5b4fc;
+}
+.welcome-suggestion-btn:hover .suggestion-index {
+  color: #6366f1;
+}
+
+.suggestion-arrow {
+  flex-shrink: 0;
+  color: #a5b4fc;
+  transition: all 0.15s ease;
+}
+.welcome-suggestion-btn:hover .suggestion-arrow {
+  color: #4f46e5;
+  transform: translateX(3px);
 }
 
 .ai-chat-collapsed {

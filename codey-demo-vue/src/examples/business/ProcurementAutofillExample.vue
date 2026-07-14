@@ -32,7 +32,12 @@ const formModel = reactive({
   budgetAmount: 0,
   requestReason: '',
   exceedReason: '',
+  // 需求附件列表，每个附件包含 originalName, storedName, size, uploadTime 等字段
+  attachments: [],
 })
+
+const uploading = ref(false)
+const uploadInputRef = ref(null)
 
 const optionMaps = reactive({
   urgencyOptions: [],
@@ -57,6 +62,14 @@ function handleAiCollapseChange(collapsed) {
 function toNumber(value) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+// 格式化文件大小显示
+function formatFileSize(bytes) {
+  if (bytes == null || !Number.isFinite(bytes)) return '未知'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function mapOptions(list = []) {
@@ -126,6 +139,7 @@ function buildContextSnapshot() {
     purchaseTypeOptions: scenario.value?.purchaseTypeOptions || [],
     catalogScopeOptions: scenario.value?.catalogScopeOptions || [],
     aiInstruction: scenario.value?.aiInstruction || '',
+    attachments: formModel.attachments || [],
   }
 }
 
@@ -167,6 +181,7 @@ function applyScenarioContext(context) {
   optionMaps.categoryOptions = mapOptions(context?.categoryOptions)
   optionMaps.purchaseTypeOptions = mapOptions(context?.purchaseTypeOptions)
   optionMaps.catalogScopeOptions = mapOptions(context?.catalogScopeOptions)
+  formModel.attachments = Array.isArray(context?.attachments) ? [...context.attachments] : []
   recalculateBudgetAmount()
 }
 
@@ -212,6 +227,37 @@ function removeLineItem(index) {
   recalculateBudgetAmount()
 }
 
+// 打开文件选择器并上传附件
+function handleUploadAttachment() {
+  uploadInputRef.value?.click()
+}
+
+// 文件选择变化时触发上传
+async function handleFileChange(event) {
+  const file = event.target?.files?.[0]
+  if (!file) return
+
+  uploading.value = true
+  try {
+    const result = await businessScenarioApi.uploadAttachment(file)
+    formModel.attachments.push(result)
+    ElMessage.success(`附件 "${file.name}" 上传成功`)
+  } catch (error) {
+    ElMessage.error(error.message || '附件上传失败')
+  } finally {
+    uploading.value = false
+    // 清空 input，以便重复上传同名文件
+    if (uploadInputRef.value) {
+      uploadInputRef.value.value = ''
+    }
+  }
+}
+
+// 移除已上传附件
+function removeAttachment(index) {
+  formModel.attachments.splice(index, 1)
+}
+
 function applyAiAutofillPayload(payload = {}) {
   const header = payload.header || {}
   const detail = payload.detail || {}
@@ -243,6 +289,11 @@ function applyAiAutofillPayload(payload = {}) {
   formModel.budgetAmount = budgetAmount > 0 ? budgetAmount : totalAmount.value
   if (!budgetAmount) {
     recalculateBudgetAmount()
+  }
+
+  // AI 返回的附件列表直接替换当前附件
+  if (Array.isArray(payload.attachments)) {
+    formModel.attachments = [...payload.attachments]
   }
 }
 
@@ -444,6 +495,42 @@ onMounted(async () => {
                 </el-form>
               </div>
 
+              <!-- 需求附件上传区域 -->
+              <div class="attachment-section">
+                <div class="attachment-header">
+                  <span class="attachment-label">需求附件</span>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    :loading="uploading"
+                    @click="handleUploadAttachment"
+                  >
+                    上传附件
+                  </el-button>
+                  <!-- 隐藏的原生文件选择器 -->
+                  <input
+                    ref="uploadInputRef"
+                    type="file"
+                    style="display: none"
+                    @change="handleFileChange"
+                  />
+                </div>
+                <div v-if="formModel.attachments.length === 0" class="attachment-empty">
+                  暂无附件，点击"上传附件"添加需求相关文件
+                </div>
+                <div v-else class="attachment-list">
+                  <div
+                    v-for="(attachment, index) in formModel.attachments"
+                    :key="attachment.storedName || index"
+                    class="attachment-item"
+                  >
+                    <span class="attachment-name">{{ attachment.originalName }}</span>
+                    <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
+                    <el-button link type="danger" size="small" @click="removeAttachment(index)">删除</el-button>
+                  </div>
+                </div>
+              </div>
+
               <el-table :data="lineItems" border class="line-item-table">
                 <el-table-column prop="rowNo" label="序号" width="60" align="center" />
                 <el-table-column label="需求部门" min-width="110">
@@ -547,6 +634,8 @@ onMounted(async () => {
           subtitle="发送前会自动把当前页面查询结构同步到工作区，AI 完成后直接回填页面并同步最新上下文。"
           placeholder="例如：帮我完善采购申请理由，并给出更合理的设备配置建议"
           v-bind="aiAssistantHandlers"
+          welcome-message="您好！我是您的AI助手，可以帮您填写和审查采购申请单。请问有什么可以帮助您的？"
+          :welcome-suggestions="['帮我检查表单是否符合政府采购规定','帮我校验和补充表单内容','帮我从采购需求文件中提取信息填到表单']"
           :skill-name-value="PROCUREMENT_FORM_SKILL"
           :system-prompt-value="BUSINESS_AI_SYSTEM_PROMPT"
           :compact-header="true"
@@ -677,6 +766,63 @@ onMounted(async () => {
 
 .tips-alert {
   margin-bottom: 12px;
+}
+
+.attachment-section {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.attachment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.attachment-label {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.attachment-empty {
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.attachment-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.attachment-name {
+  flex: 1;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-size {
+  color: #94a3b8;
+  flex-shrink: 0;
 }
 
 .line-item-table {

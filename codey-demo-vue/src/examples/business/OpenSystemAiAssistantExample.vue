@@ -199,11 +199,17 @@ async function handleOpenAssistant() {
     const opened = await openSystemAiAssistant({
       pagePayload: contextSnapshot,
       assistantProps: {
-        title: 'AI 智能分析助手',
+        title: 'codey',
         subtitle: '发送前会自动把当前页面查询结构同步到工作区，AI 完成后直接回填页面并同步最新上下文。',
         placeholder: '例如：帮我完善采购申请理由，并给出更合理的设备配置建议',
         skillNameValue: PROCUREMENT_FORM_SKILL,
         systemPromptValue: BUSINESS_AI_SYSTEM_PROMPT,
+        welcomeMessage:'您好！我是您的codey助手，可以帮您填写和审查采购申请单。请问有什么可以帮助您的？',
+        welcomeSuggestions: [
+          '帮我检查表单是否符合政府采购规定',
+          '帮我校验和补充表单内容',
+          '帮我从采购需求文件中提取信息填到表单',
+        ],
         workingDirectoryValue: aiWorkingDirectory,
         currentFileKey: aiContextFileKey,
         formDisplayName: '采购申请表单',
@@ -237,6 +243,8 @@ async function handleOpenAssistant() {
     })
     if (!opened) {
       aiLoading.value = false
+      // 详细日志：openSystemAiAssistant 返回 false，通常是因为 AiChatWorkspace 未挂载
+      console.error('[handleOpenAssistant] openSystemAiAssistant 返回 false，助手控制器不可用')
       ElMessage.error('AI 助手当前不可用，请稍后重试')
       return
     }
@@ -244,6 +252,8 @@ async function handleOpenAssistant() {
     aiLoading.value = false
   } catch (error) {
     aiLoading.value = false
+    // 详细日志：openSystemAiAssistant 内部抛出异常
+    console.error('[handleOpenAssistant] 打开 AI 助手失败:', error)
     ElMessage.error(error?.message || '打开 AI 助手失败')
   }
 }
