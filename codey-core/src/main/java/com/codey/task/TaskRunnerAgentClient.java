@@ -192,7 +192,7 @@ public class TaskRunnerAgentClient implements AgentClient {
         if (request != null && !isBlank(request.getWorkingDirectory())) {
             return WorkspacePathSupport.sanitizeWorkingDirectory(request.getWorkingDirectory(), workspaceRoot);
         }
-        return WorkspacePathSupport.sanitizeWorkingDirectory(defaultWorkingDirectory, workspaceRoot);
+        return null;
     }
 
     private List<String> sanitizeContextFiles(List<String> contextFiles) {

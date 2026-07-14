@@ -46,7 +46,7 @@ public class DownloadAttachmentToWorkspaceTool extends AbstractTool {
     public ToolDescriptor descriptor() {
         return new ToolDescriptor(
                 "download_attachment_to_workspace",
-                "下载附件到工作目录",
+                "下载附件",
                 "将已上传的附件文件读取并转换为 TXT 格式，保存到当前工作目录中，供 AI 读取分析。"
                         + "支持纯文本文件直接复制，以及常见二进制文件的内容提取。",
                 buildParameters()
@@ -58,7 +58,6 @@ public class DownloadAttachmentToWorkspaceTool extends AbstractTool {
         // 该工具读取上传文件并写入工作目录，属于读写混合操作
         return ToolCapability.standard();
     }
-
     @Override
     public ToolMetadata metadata() {
         ToolMetadata metadata = ToolMetadata.standard();

@@ -16,7 +16,7 @@ const STREAM_EVENT_TYPES = [
   'tool_execution_started',
   'tool_call',
   'verification',
-  'human_decision',
+  //'human_decision',
   'task_status',
   'final_summary',
   'model_output',
@@ -59,7 +59,7 @@ function createChatApiAdapter(options = {}) {
 export function useAiChat(options = {}) {
   const chatApi = createChatApiAdapter(options)
   const historyEnabled = resolveBooleanOption('historyEnabled', true)
-  const workingDirectory = ref(options.defaultWorkingDirectory || '../')
+  const workingDirectory = ref(options.defaultWorkingDirectory || '')
   const inputValue = ref('')
   const sessionId = ref('')
   const selectedSessionId = ref('')
@@ -480,7 +480,7 @@ function parseEventPayload(event) {
     tool_execution_started: () => {},
     debug_trace: () => {},
     verification: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
-    human_decision: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
+   //human_decision: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
   }
 
   function handleStreamEvent(eventType, event) {
@@ -557,14 +557,16 @@ function parseEventPayload(event) {
 
     try {
       errorMessage.value = ''
+      isSending.value = true
+      const liveSessionId = await ensureLiveSession(goal)
+
       const promptAfterHook = await invokeAsyncHook('onBeforeSend', {
         prompt: goal,
       })
       const finalPrompt = typeof promptAfterHook === 'string' && promptAfterHook.trim()
         ? promptAfterHook.trim()
         : goal
-      isSending.value = true
-      const liveSessionId = await ensureLiveSession(finalPrompt)
+
       messages.value.push(createMessage('user', finalPrompt))
       syncLiveSessionSummary(finalPrompt)
       inputValue.value = ''

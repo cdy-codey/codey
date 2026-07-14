@@ -28,6 +28,7 @@ public class ProcurementFormSkill implements Skill {
                         + "当你需要参考相似采购明细时，调用 search_procurement_history_items 获取历史成交样例，并优先使用 queryField 和 queryValue 按字段查询，例如 itemName、brandModel、department、supplier。\n"
                         + "当你需要判断价格是否合理时，调用 query_procurement_asset_configuration 获取配置与价格参考，并优先使用 queryField 和 queryValue 按字段查询，例如 itemName、scene、category、recommendedBrands。\n"
                         + "当用户要求从附件提取信息，先从表单里面提取附件信息，然后根据附件信息检查工作目录是否有该附件的txt格式版，如果没有则调用附件下载工具到工作区后再次检查确认，没有附件则直接回复用户未找到相关文件"
+                        + "当工具支持一次性一次性入参多个时候，务必一次性入参多个，不能分多次调用。\n"
                         + "你只能修改 header、detail、items 中与表单填写有关的值，不能破坏查询接口返回的整体 JSON 结构。\n"
                         + "采购场景要特别关注价格真实性与合理性，严禁保留 0 元、明显失真的价格或与规格品牌明显不匹配的价格。\n"
                         + "目录类型只能填写“目录内”或“目录外”，并且要结合政府采购统一采购目录判断，目录外项目要在理由中体现合规依据。\n"

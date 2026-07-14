@@ -40,7 +40,7 @@ public class DescribeProcurementFormFieldsTool extends AbstractTool {
         return new ToolDescriptor(
                 "describe_procurement_form_fields",
                 "查询采购申请单字段说明",
-                "返回计算机采购表单字段说明，包含字段含义、类型、是否必填、约束和示例值。",
+                "获取采购表单各字段的详细说明、枚举值定义和填充规则。不需要入参，已全部返回。",
                 buildParameters()
         );
     }
@@ -63,20 +63,15 @@ public class DescribeProcurementFormFieldsTool extends AbstractTool {
     @Override
     public ToolResult execute(ToolInvocation invocation, ToolContext context) {
         try {
-            String fieldKey = readOptionalString(invocation, "fieldKey");
             // 打印工具调用日志，便于直接在后端控制台确认 AI 是否实际触发了该工具。
             LOGGER.info(
-                    "Procurement tool called: tool={}, requestId={}, sessionId={}, fieldKey={}",
+                    "Procurement tool called: tool={}, requestId={}, sessionId={}",
                     "describe_procurement_form_fields",
                     context == null ? null : context.getRequestId(),
-                    context == null ? null : context.getSessionId(),
-                    fieldKey
+                    context == null ? null : context.getSessionId()
             );
-            String content = toPrettyJson(referenceDataService.getFormFieldGuide(fieldKey));
-            String summary = fieldKey == null
-                    ? "已返回采购表单字段说明。"
-                    : "已返回字段说明: " + fieldKey;
-            return ToolResult.ok(content, summary);
+            String content = toPrettyJson(referenceDataService.getFormFieldGuide(null));
+            return ToolResult.ok(content, "已返回采购表单字段说明。");
         } catch (Exception exception) {
             return ToolResult.fail("describe_procurement_form_fields failed: " + exception.getMessage());
         }
@@ -85,13 +80,7 @@ public class DescribeProcurementFormFieldsTool extends AbstractTool {
     private Map<String, Object> buildParameters() {
         Map<String, Object> parameters = new LinkedHashMap<String, Object>();
         parameters.put("type", "object");
-
-        Map<String, Object> properties = new LinkedHashMap<String, Object>();
-        properties.put("fieldKey", stringProperty(
-                "可选。指定字段路径，例如 header.purchaseType 或 items[].unitPrice；留空则返回全部字段说明。"
-        ));
-
-        parameters.put("properties", properties);
+        parameters.put("properties", new LinkedHashMap<String, Object>());
         parameters.put("additionalProperties", Boolean.FALSE);
         return parameters;
     }

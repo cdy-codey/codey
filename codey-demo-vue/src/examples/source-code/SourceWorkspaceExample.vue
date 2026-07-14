@@ -26,9 +26,7 @@ const workspaceTree = computed(() => workspaceSnapshot.value?.entries || [])
 const workspaceRoot = ref('')
 const workspaceFileCount = computed(() => workspaceSnapshot.value?.fileCount || 0)
 const effectiveWorkingDirectory = computed(() => {
-  const root = workspaceSnapshot.value?.rootPath || ''
-  const wsId = workspaceSnapshot.value?.workspaceId || ''
-  return wsId ? `${root}/${wsId}` : root
+  return 'code-source'
 })
 const aiCollapsed = ref(false)
 const aiIdentities = ['programming', 'workspace']
@@ -61,7 +59,7 @@ function resolveNextFile(snapshot) {
 }
 
 function applyCurrentFile(file) {
-  activeFileKey.value = file?.fileKey || file?.path || ''
+  activeFileKey.value = file?.path || ''
   editorContent.value = file?.content || ''
 }
 
@@ -84,7 +82,7 @@ async function loadWorkspaceRoot(options = {}) {
   } = options
   loadingWorkspace.value = true
   try {
-    const snapshot = await workspaceApi.query('')
+    const snapshot = await workspaceApi.query('code-source')
     await applySnapshot(snapshot, preferredPath)
     if (successMessage) {
       ElMessage.success(successMessage)
@@ -192,7 +190,8 @@ async function createWorkspaceEntry(options = {}) {
   if (!entryName) {
     return
   }
-  const path = parentFileKey ? `${parentFileKey}/${entryName}` : entryName
+  const basePath = parentFileKey || 'code-source'
+  const path = `${basePath}/${entryName}`
 
   creatingEntry.value = true
   try {

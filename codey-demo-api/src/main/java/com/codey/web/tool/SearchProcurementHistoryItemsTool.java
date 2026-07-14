@@ -40,7 +40,7 @@ public class SearchProcurementHistoryItemsTool extends AbstractTool {
         return new ToolDescriptor(
                 "search_procurement_history_items",
                 "查询历史采购明细",
-                "按字段查询历史计算机采购明细 demo 列表。优先使用 queryField 和 queryValue，例如按 itemName、brandModel、department、supplier 查询。",
+                "按字段查询历史计算机采购明细 demo 列表。支持多字段组合查询，入参为一个对象，键为字段名，值为查询关键字。",
                 buildParameters()
         );
     }
@@ -63,21 +63,31 @@ public class SearchProcurementHistoryItemsTool extends AbstractTool {
     @Override
     public ToolResult execute(ToolInvocation invocation, ToolContext context) {
         try {
-            String queryField = readOptionalString(invocation, "queryField");
-            String queryValue = readOptionalString(invocation, "queryValue");
-            // 打印工具调用日志，便于直接在后端控制台确认 AI 是否实际触发了该工具。
+            Map<String, String> queries = new LinkedHashMap<String, String>();
+            if (invocation != null && invocation.getArguments() != null) {
+                Map<String, Object> args = invocation.getArguments();
+                Object queriesObj = args.get("queries");
+                if (queriesObj instanceof Map) {
+                    Map<?, ?> map = (Map<?, ?>) queriesObj;
+                    for (Map.Entry<?, ?> entry : map.entrySet()) {
+                        if (entry.getKey() != null && entry.getValue() != null) {
+                            queries.put(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+                        }
+                    }
+                }
+            }
+
             LOGGER.info(
-                    "Procurement tool called: tool={}, requestId={}, sessionId={}, queryField={}, queryValue={}",
+                    "Procurement tool called: tool={}, requestId={}, sessionId={}, queries={}",
                     "search_procurement_history_items",
                     context == null ? null : context.getRequestId(),
                     context == null ? null : context.getSessionId(),
-                    queryField,
-                    queryValue
+                    queries
             );
-            String content = toPrettyJson(referenceDataService.searchHistoryItems(queryField, queryValue));
-            String summary = queryField == null || queryValue == null
+            String content = toPrettyJson(referenceDataService.searchHistoryItems(queries));
+            String summary = queries.isEmpty()
                     ? "已返回历史采购明细参考列表。"
-                    : "已返回历史采购明细参考: " + queryField + "=" + queryValue;
+                    : "已返回历史采购明细参考: " + queries;
             return ToolResult.ok(content, summary);
         } catch (Exception exception) {
             return ToolResult.fail("search_procurement_history_items failed: " + exception.getMessage());
@@ -89,12 +99,13 @@ public class SearchProcurementHistoryItemsTool extends AbstractTool {
         parameters.put("type", "object");
 
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
-        properties.put("queryField", stringProperty(
-                "可选。指定查询字段名。支持 historyId、department、itemName、category、brandModel、specification、supplier、usageScene。"
-        ));
-        properties.put("queryValue", stringProperty(
-                "可选。指定查询字段值，例如 queryField=itemName 时可传 台式计算机，queryField=brandModel 时可传 ThinkPad。"
-        ));
+        
+        Map<String, Object> queriesProperty = new LinkedHashMap<String, Object>();
+        queriesProperty.put("type", "object");
+        queriesProperty.put("description", "可选。多条件查询对象。键为字段名（如 historyId, department, itemName, category, brandModel, specification, supplier, usageScene），值为需要匹配的关键字。");
+        queriesProperty.put("additionalProperties", stringProperty("查询关键字的值"));
+        
+        properties.put("queries", queriesProperty);
 
         parameters.put("properties", properties);
         parameters.put("additionalProperties", Boolean.FALSE);

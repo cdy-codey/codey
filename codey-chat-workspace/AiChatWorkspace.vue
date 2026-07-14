@@ -48,7 +48,7 @@ const props = defineProps({
   },
   defaultWorkingDirectory: {
     type: String,
-    default: '../',
+    default: null,
   },
   height: {
     type: String,
@@ -606,6 +606,7 @@ function matchArchivedSessionScope(entry) {
 const {
   workingDirectory,
   inputValue,
+  sessionId,
   selectedSessionId,
   isLoadingSessions,
   isLoadingDetail,
@@ -1097,6 +1098,19 @@ watch(
   },
   {
     flush: 'post',
+  }
+)
+
+watch(
+  () => sessionId.value,
+  (newSessionId) => {
+    if (!effectiveWorkingDirectoryValue.value && newSessionId) {
+      workingDirectory.value = newSessionId
+    }
+  },
+  {
+    immediate: true,
+    flush: 'sync',
   }
 )
 

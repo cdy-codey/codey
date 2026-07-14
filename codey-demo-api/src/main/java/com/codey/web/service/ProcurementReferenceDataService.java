@@ -64,22 +64,28 @@ public class ProcurementReferenceDataService {
     /**
      * 返回历史采购明细样例，支持按关键字模糊过滤。
      */
-    public Map<String, Object> searchHistoryItems(String queryField, String queryValue) {
-        List<Map<String, Object>> allItems = buildHistoryItems();
-        List<Map<String, Object>> matchedItems = filterByField(allItems, HISTORY_QUERY_FIELDS, queryField, queryValue);
+    public Map<String, Object> searchHistoryItems(Map<String, String> queries) {
+        List<Map<String, Object>> matchedItems = buildHistoryItems();
+        if (queries != null && !queries.isEmpty()) {
+            for (Map.Entry<String, String> entry : queries.entrySet()) {
+                String field = entry.getKey();
+                String value = entry.getValue();
+                if (HISTORY_QUERY_FIELDS.contains(field) && value != null && !value.trim().isEmpty()) {
+                    matchedItems = filterByField(matchedItems, HISTORY_QUERY_FIELDS, field, value.trim());
+                }
+            }
+        }
 
         Map<String, Object> payload = new LinkedHashMap<String, Object>();
         payload.put("scenario", "计算机采购");
         payload.put("queryType", "list");
         payload.put("supportedQueryFields", HISTORY_QUERY_FIELDS);
-        payload.put("queryExample", "queryField=itemName, queryValue=台式计算机");
-        payload.put("queryField", queryField);
-        payload.put("queryValue", queryValue);
+        payload.put("queries", queries);
         payload.put("matchedCount", matchedItems.size());
         payload.put("items", matchedItems);
-        payload.put("summary", isBlank(queryField) || isBlank(queryValue)
+        payload.put("summary", queries == null || queries.isEmpty()
                 ? "已返回全部历史计算机采购明细 demo 数据，可按 supportedQueryFields 指定字段查询。"
-                : "已返回历史采购明细列表，请按 queryField/queryValue 继续筛选。");
+                : "已返回历史采购明细列表。");
         return payload;
     }
 

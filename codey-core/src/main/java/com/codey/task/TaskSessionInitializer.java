@@ -17,7 +17,11 @@ public class TaskSessionInitializer {
             session.setSkillName(skill.definition().getName());
         }
         session.setModelConfig(task.getModelConfig());
-        session.setWorkingDirectory(task.getWorkingDirectory());
+        String wd = task.getWorkingDirectory();
+        if (wd == null || wd.trim().isEmpty()) {
+            wd = session.getSessionId();
+        }
+        session.setWorkingDirectory(wd);
         session.setTargetPagePath(task.getPagePath());
         session.setApiSpecPath(task.getApiSpecPath());
         session.setUserGoal(task.getGoal());
