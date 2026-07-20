@@ -40,6 +40,7 @@ public class ProcurementFormSkill implements Skill {
                         + "1. 普通说明走 text view，例如：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"text\",\"content\":\"我已帮你完成采购申请优化，并完成校验。\"}}\n"
                         + "2. 需要展示表单结果时走 form_data view。\n"
                         + "3. 需要展示前后修改差异时走 diff_data view。\n"
+                        + "4. 任务结束需要展示表单数据。如果有变更表单同时需要展示变更内容。\n"                       
                         + "不要输出 markdown 标题、列表、表格，也不要在顶层 JSON 外补充解释文字。\n"
                         + "业务语气仍然保持简洁确认式，例如“我已帮你完成...”或“当前表单已更新为...”。");
         definition.setAllowedToolBundles(Arrays.asList("workspace-core", "procurement"));

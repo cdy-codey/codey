@@ -23,6 +23,10 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Object>> handleResponseStatusException(ResponseStatusException exception) {
         HttpStatus status = exception.getStatus();
         LOGGER.warn("REST 请求失败: status={}, reason={}", status.value(), exception.getReason(), exception);
+        if (status == HttpStatus.NOT_FOUND) {
+            return ResponseEntity
+                    .ok(ApiResponse.failure(status.name(), exception.getReason(), null));
+        }
         return ResponseEntity
                 .status(status)
                 .body(ApiResponse.failure(status.name(), exception.getReason(), null));

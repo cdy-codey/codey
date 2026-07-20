@@ -5,6 +5,7 @@ import com.codey.client.ChatSession;
 import com.codey.client.RunRequest;
 import com.codey.client.SessionEventHub;
 import com.codey.web.common.ApiResponse;
+import com.codey.web.service.ChatSessionLifecycleService;
 import com.codey.web.service.DemoSessionModelConfigService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -28,15 +29,18 @@ public class ChatController {
     private final SessionEventHub sessionEventHub;
     private final ChatSessionDisplayOptionsStore displayOptionsStore;
     private final DemoSessionModelConfigService demoSessionModelConfigService;
+    private final ChatSessionLifecycleService chatSessionLifecycleService;
 
     public ChatController(AgentClient agentClient,
                                  SessionEventHub sessionEventHub,
                                  ChatSessionDisplayOptionsStore displayOptionsStore,
-                                 DemoSessionModelConfigService demoSessionModelConfigService) {
+                                 DemoSessionModelConfigService demoSessionModelConfigService,
+                                 ChatSessionLifecycleService chatSessionLifecycleService) {
         this.agentClient = agentClient;
         this.sessionEventHub = sessionEventHub;
         this.displayOptionsStore = displayOptionsStore;
         this.demoSessionModelConfigService = demoSessionModelConfigService;
+        this.chatSessionLifecycleService = chatSessionLifecycleService;
     }
 
     @PostMapping("/sessions")
@@ -44,6 +48,10 @@ public class ChatController {
         try {
             RunRequest normalized = normalize(request);
             ChatSession session = agentClient.openSession(normalized);
+            chatSessionLifecycleService.registerSession(
+                    session == null ? null : session.getSessionId(),
+                    normalized == null ? null : normalized.getWorkingDirectory()
+            );
             saveDisplayOptions(session == null ? null : session.getSessionId(), normalized);
             return ApiResponse.success("会话已创建", session);
         } catch (IllegalArgumentException ex) {
@@ -64,6 +72,7 @@ public class ChatController {
             RunRequest normalized = normalize(request);
             normalized.setSessionId(sessionId);
             ChatSession session = agentClient.openSession(normalized);
+            chatSessionLifecycleService.registerSession(sessionId, normalized.getWorkingDirectory());
             saveDisplayOptions(sessionId, normalized);
             return ApiResponse.success("会话已恢复", session);
         } catch (IllegalArgumentException ex) {
@@ -81,6 +90,7 @@ public class ChatController {
             RunRequest normalized = normalize(request);
             saveDisplayOptions(sessionId, normalized);
             agentClient.submitTurn(sessionId, normalized);
+            chatSessionLifecycleService.touchSession(sessionId);
             return ApiResponse.success("消息已送达，处理结果将通过事件流返回",
                     new MessageAcceptedResponse(sessionId, "accepted"));
         } catch (IllegalArgumentException ex) {
@@ -105,6 +115,20 @@ public class ChatController {
     public ApiResponse<Void> closeSessionByPost(@PathVariable("sessionId") String sessionId) {
         closeSession(sessionId);
         return ApiResponse.success("会话已关闭", null);
+    }
+
+    @DeleteMapping("/sessions/{sessionId}/delete")
+    public void deleteSession(@PathVariable("sessionId") String sessionId) {
+        chatSessionLifecycleService.deleteSessionContent(sessionId);
+    }
+
+    /**
+     * 删除会话内容时同时清理归档和临时工作目录，便于前端统一走 POST 语义。
+     */
+    @PostMapping("/sessions/{sessionId}/delete")
+    public ApiResponse<Void> deleteSessionByPost(@PathVariable("sessionId") String sessionId) {
+        deleteSession(sessionId);
+        return ApiResponse.success("会话内容已删除", null);
     }
 
     private RunRequest normalize(RunRequest request) {

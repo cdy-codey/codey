@@ -2,6 +2,7 @@ package com.codey.web.api;
 
 import com.codey.web.common.ApiResponse;
 import com.codey.web.config.WebDemoProperties;
+import com.codey.web.service.ChatSessionLifecycleService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.codey.tools.ToolRegistry;
@@ -41,14 +42,17 @@ public class SessionArchiveController {
     private final ObjectMapper objectMapper;
     private final ToolRegistry toolRegistry;
     private final String configuredSessionDirectory;
+    private final ChatSessionLifecycleService chatSessionLifecycleService;
 
     public SessionArchiveController(ObjectMapper objectMapper,
                                     ToolRegistry toolRegistry,
-                                    WebDemoProperties properties) {
+                                    WebDemoProperties properties,
+                                    ChatSessionLifecycleService chatSessionLifecycleService) {
         this.objectMapper = objectMapper;
         this.toolRegistry = toolRegistry;
         // 历史归档目录与 Web Demo 其他目录配置统一收口到 WebDemoProperties，避免默认值失效。
         this.configuredSessionDirectory = properties.getSessionDirectory();
+        this.chatSessionLifecycleService = chatSessionLifecycleService;
     }
 
     @GetMapping("/sessions")
@@ -131,7 +135,11 @@ public class SessionArchiveController {
         if (!Files.isDirectory(sessionDir)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到指定会话");
         }
-        deleteSessionArchives(sessionId, requestRoot, resolveEventArchiveRoot(requestRoot), resolveModelOutputArchiveRoot(requestRoot));
+        try {
+            chatSessionLifecycleService.deleteSessionContent(sessionId);
+        } catch (IllegalStateException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), exception);
+        }
     }
 
     /**
@@ -149,9 +157,11 @@ public class SessionArchiveController {
         if (requestRoot == null) {
             return;
         }
-        clearArchiveDirectory(requestRoot.resolve("model-inputs"));
-        clearArchiveDirectory(resolveModelOutputArchiveRoot(requestRoot));
-        clearEventLogs(resolveEventArchiveRoot(requestRoot));
+        try {
+            chatSessionLifecycleService.clearSessionContent();
+        } catch (IllegalStateException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), exception);
+        }
     }
 
     @PostMapping("/sessions/clear")

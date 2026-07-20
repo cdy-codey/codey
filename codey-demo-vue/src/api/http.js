@@ -12,6 +12,9 @@ export async function fetchJson(url, options = {}) {
   })
 
   const body = await readResponseBody(response)
+  if (isBusinessFailure(body)) {
+    throw buildBusinessError(body)
+  }
   if (!response.ok) {
     throw new Error(readErrorMessage(body, response))
   }
@@ -52,6 +55,17 @@ function unwrapResponseBody(body) {
   return body
 }
 
+function isBusinessFailure(body) {
+  return !!(body && typeof body === 'object' && body.success === false)
+}
+
+function buildBusinessError(body) {
+  const error = new Error(body?.message || '请求失败')
+  error.code = body?.code || 'REQUEST_FAILED'
+  error.response = body || null
+  return error
+}
+
 /**
  * 文件上传专用方法，使用 FormData 以 multipart/form-data 方式提交。
  */
@@ -65,6 +79,9 @@ export async function uploadFile(url, file) {
   })
 
   const body = await readResponseBody(response)
+  if (isBusinessFailure(body)) {
+    throw buildBusinessError(body)
+  }
   if (!response.ok) {
     throw new Error(readErrorMessage(body, response))
   }
