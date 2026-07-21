@@ -17,6 +17,7 @@
     <properties>
         <!-- Demo 模块仅用于示例演示，不进入公共 Maven 仓库。 -->
         <maven.deploy.skip>true</maven.deploy.skip>
+        <central.publishing.skip>true</central.publishing.skip>
     </properties>
 
     <dependencies>

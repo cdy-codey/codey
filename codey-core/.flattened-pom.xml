@@ -4,7 +4,10 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.cdy-codey</groupId>
   <artifactId>codey-core</artifactId>
-  <version>0.1.5</version>
+  <version>0.1.10</version>
+  <name>codey-core</name>
+  <description>Skill-driven Java console AI code agent.</description>
+  <url>https://github.com/cdy-codey/codey/codey-core</url>
   <licenses>
     <license>
       <name>Apache License 2.0</name>
@@ -12,11 +15,24 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
+  <developers>
+    <developer>
+      <id>cdy</id>
+      <name>cdy</name>
+      <email>273797002@qq.com</email>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://github.com/cdy-codey/codey.git/codey-core</connection>
+    <developerConnection>scm:git:https://github.com/cdy-codey/codey.git/codey-core</developerConnection>
+    <tag>v0.1.10</tag>
+    <url>https://github.com/cdy-codey/codey/codey-core</url>
+  </scm>
   <dependencies>
     <dependency>
       <groupId>io.github.cdy-codey</groupId>
       <artifactId>codey-common</artifactId>
-      <version>0.1.5</version>
+      <version>0.1.10</version>
       <scope>compile</scope>
     </dependency>
     <dependency>

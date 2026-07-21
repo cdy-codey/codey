@@ -36,7 +36,7 @@
 
     <properties>
         <!-- 多模块统一版本号，后续发版只需要修改这一处。 -->
-        <revision>0.1.5</revision>
+        <revision>0.1.10</revision>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -100,6 +100,7 @@
                 <version>1.4.1</version>
                 <configuration>
                     <updatePomFile>true</updatePomFile>
+                    <flattenMode>oss</flattenMode>
                 </configuration>
                 <executions>
                     <execution>

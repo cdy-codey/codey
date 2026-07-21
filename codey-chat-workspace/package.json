@@ -1,6 +1,6 @@
 {
   "name": "codey-chat-workspace",
-  "version": "1.0.2",
+  "version": "1.0.5",
   "description": "Codey AI 聊天工作区组件 — 可嵌入业务页面的智能对话面板，支持流式会话、历史管理、工作区上下文联动。",
   "type": "module",
   "main": "./dist/codey-chat-workspace.cjs.js",
