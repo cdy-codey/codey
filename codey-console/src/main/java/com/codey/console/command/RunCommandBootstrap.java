@@ -105,7 +105,8 @@ final class RunCommandBootstrap {
                 ".",
                 null,
                 null,
-                workspaceRoot
+                workspaceRoot,
+                sessionStore
         );
         InteractiveChatConsole interactiveChatConsole = options.isInteractiveMode()
                 ? interactiveChatFactory.create(

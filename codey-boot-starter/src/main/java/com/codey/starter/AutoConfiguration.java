@@ -268,8 +268,9 @@ public class AutoConfiguration {
     public AgentClient AgentClient(TaskRunner taskRunner,
                                    SpringProperties properties,
                                    Path WorkspaceRoot,
-                                   SessionEventPublisher sessionEventPublisher) {
-        return new DefaultAgentClient(taskRunner, properties, WorkspaceRoot, sessionEventPublisher);
+                                   SessionEventPublisher sessionEventPublisher,
+                                   SessionStore sessionStore) {
+        return new DefaultAgentClient(taskRunner, properties, WorkspaceRoot, sessionEventPublisher, sessionStore);
     }
 
     private ModelConfig toModelConfig(ModelProperties properties) {

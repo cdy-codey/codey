@@ -22,7 +22,7 @@ import java.util.TimeZone;
  * 为了方便人工分析和查看，事件会先格式化后再写入文件。
  * 为了避免流式思考按单字落盘，这里会先做短缓冲，再按句子或长度聚合写入。
  */
-public class JsonlSessionStore implements SessionStore {
+public class JsonlSessionStore implements SessionStore, SessionDirectoryAware {
     private static final int THINKING_FLUSH_THRESHOLD = 120;
     private static final int MAX_INLINE_STRING_LENGTH = 4096;
     private static final int MAX_COLLECTION_ITEMS = 32;
@@ -36,6 +36,11 @@ public class JsonlSessionStore implements SessionStore {
     public JsonlSessionStore(Path sessionDir) {
         this.sessionDir = sessionDir;
         this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    }
+
+    @Override
+    public Path getSessionDirectory() {
+        return sessionDir;
     }
 
     @Override

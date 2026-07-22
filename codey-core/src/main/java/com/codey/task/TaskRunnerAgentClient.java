@@ -7,7 +7,10 @@ import com.codey.client.RunResult;
 import com.codey.client.SessionEventPublisher;
 import com.codey.config.ModelProperties;
 import com.codey.infra.WorkspacePathSupport;
+import com.codey.session.CoreSessionLifecycleManager;
+import com.codey.session.SessionStore;
 import com.codey.session.SessionEventFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,12 +30,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  * console 和 Spring Boot 都应复用这条 DTO 调用链。
  */
 public class TaskRunnerAgentClient implements AgentClient {
+    private static final long DEFAULT_TEMPORARY_SESSION_IDLE_EXPIRE_SECONDS = 3600L;
+    private static final long DEFAULT_SESSION_CLEANUP_INTERVAL_MILLIS = 60_000L;
+
     private final TaskRunner taskRunner;
     private final String defaultSkillName;
     private final String defaultWorkingDirectory;
     private final Path workspaceRoot;
     private final ModelProperties defaultModelConfig;
     private final SessionEventPublisher sessionEventPublisher;
+    private final CoreSessionLifecycleManager sessionLifecycleManager;
     private final ConcurrentMap<String, TaskRunner.ChatSessionHandle> sessions =
             new ConcurrentHashMap<String, TaskRunner.ChatSessionHandle>();
     /**
@@ -69,12 +76,23 @@ public class TaskRunnerAgentClient implements AgentClient {
                                  ModelProperties defaultModelConfig,
                                  SessionEventPublisher sessionEventPublisher,
                                  Path workspaceRoot) {
+        this(taskRunner, defaultSkillName, defaultWorkingDirectory, defaultModelConfig, sessionEventPublisher, workspaceRoot, null);
+    }
+
+    public TaskRunnerAgentClient(TaskRunner taskRunner,
+                                 String defaultSkillName,
+                                 String defaultWorkingDirectory,
+                                 ModelProperties defaultModelConfig,
+                                 SessionEventPublisher sessionEventPublisher,
+                                 Path workspaceRoot,
+                                 SessionStore sessionStore) {
         this.taskRunner = taskRunner;
         this.defaultSkillName = defaultSkillName;
         this.defaultWorkingDirectory = defaultWorkingDirectory;
         this.workspaceRoot = workspaceRoot;
         this.defaultModelConfig = copyModelConfig(defaultModelConfig);
         this.sessionEventPublisher = sessionEventPublisher;
+        this.sessionLifecycleManager = createSessionLifecycleManager(sessionStore, workspaceRoot);
     }
 
     @Override
@@ -97,6 +115,9 @@ public class TaskRunnerAgentClient implements AgentClient {
             throw new IllegalStateException("打开会话失败，未返回 sessionId");
         }
         sessions.put(sessionId, handle);
+        if (sessionLifecycleManager != null) {
+            sessionLifecycleManager.registerSession(sessionId, request);
+        }
         return new ChatSession(sessionId);
     }
 
@@ -108,6 +129,9 @@ public class TaskRunnerAgentClient implements AgentClient {
         TaskRunner.ChatSessionHandle handle = sessions.get(sessionId);
         if (handle == null) {
             throw new IllegalStateException("未找到会话: " + sessionId);
+        }
+        if (sessionLifecycleManager != null) {
+            sessionLifecycleManager.touchSession(sessionId);
         }
         return toResult(taskRunner.runChatTurn(handle, toSessionTurnTask(request)));
     }
@@ -138,6 +162,29 @@ public class TaskRunnerAgentClient implements AgentClient {
         if (!isBlank(sessionId)) {
             sessions.remove(sessionId);
             sessionTurnChains.remove(sessionId);
+        }
+    }
+
+    @Override
+    public void deleteSessionContent(String sessionId) {
+        if (isBlank(sessionId)) {
+            return;
+        }
+        if (sessionLifecycleManager != null) {
+            sessionLifecycleManager.deleteSessionContent(sessionId);
+            return;
+        }
+        closeSession(sessionId);
+    }
+
+    @Override
+    public void clearSessionContent() {
+        if (sessionLifecycleManager != null) {
+            sessionLifecycleManager.clearSessionContent();
+            return;
+        }
+        for (String sessionId : new ArrayList<String>(sessions.keySet())) {
+            closeSession(sessionId);
         }
     }
 
@@ -284,6 +331,9 @@ public class TaskRunnerAgentClient implements AgentClient {
     private void executeSubmittedTurn(TaskRunner.ChatSessionHandle handle, GenerateTask task) {
         String sessionId = handle == null ? null : handle.getSessionId();
         try {
+            if (sessionLifecycleManager != null && !isBlank(sessionId)) {
+                sessionLifecycleManager.touchSession(sessionId);
+            }
             TaskResult result = taskRunner.runChatTurn(handle, task);
             if (result != null && result.isSuccess()) {
                 publishTaskStatus(sessionId, "completed", true, true, result.getSummary());
@@ -301,6 +351,21 @@ public class TaskRunnerAgentClient implements AgentClient {
             return;
         }
         sessionEventPublisher.publish(SessionEventFactory.taskStatus(sessionId, status, terminal, success, message));
+    }
+
+    private CoreSessionLifecycleManager createSessionLifecycleManager(SessionStore sessionStore, Path workspaceRoot) {
+        if (sessionStore == null) {
+            return null;
+        }
+        return new CoreSessionLifecycleManager(
+                this,
+                null,
+                sessionStore,
+                new ObjectMapper().findAndRegisterModules(),
+                workspaceRoot,
+                DEFAULT_TEMPORARY_SESSION_IDLE_EXPIRE_SECONDS,
+                DEFAULT_SESSION_CLEANUP_INTERVAL_MILLIS
+        );
     }
 
     private static final class TurnExecutorThreadFactory implements ThreadFactory {

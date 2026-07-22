@@ -4,7 +4,7 @@ export function getMessageBlocks(content, status) {
   if (!source.trim()) {
     return []
   }
-  
+
   const isFinished = status === 'FINISH' || status === 'ERROR' || status === 'STOP' || status === 'CANCELED'
 
   // 容错处理：如果大模型直接输出了裸的 JSON 字符串（没有使用 ```json 包裹），进行特殊拦截
@@ -23,14 +23,14 @@ export function getMessageBlocks(content, status) {
           language: 'json',
           content: trimmedSource,
           parsedUiView: { streaming: true },
-          streaming: true
+          streaming: true,
         }]
       } else {
         // 已结束但解析失败，当作普通代码块展示错误内容，不再 loading
         return [{
           type: 'code',
           language: 'json',
-          content: trimmedSource
+          content: trimmedSource,
         }]
       }
     }
@@ -83,18 +83,18 @@ export function getMessageBlocks(content, status) {
           // 如果已结束，尝试容错解析
           try {
             parsedUiView = resolveUiViewPayload(JSON.parse(unclosedContent))
-          } catch(e) {
-             // 保持 null，展示原码
+          } catch (e) {
+            // 保持 null，展示原码
           }
         }
       }
-      
+
       blocks.push({
         type: 'code',
         language,
         content: unclosedContent,
         parsedUiView,
-        streaming: !isFinished
+        streaming: !isFinished,
       })
     } else {
       pushTextBlock(blocks, remaining)
@@ -139,10 +139,147 @@ function pushTextBlock(blocks, content) {
   if (!normalized) {
     return
   }
-  blocks.push({
-    type: 'text',
-    paragraphs: normalized.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean),
-  })
+  blocks.push(...parseMarkdownLikeBlocks(normalized))
+}
+
+function parseMarkdownLikeBlocks(content) {
+  const lines = normalizeLineBreaks(content).split('\n')
+  const blocks = []
+  let paragraphLines = []
+
+  function flushParagraph() {
+    if (!paragraphLines.length) {
+      return
+    }
+    const paragraph = paragraphLines.join('\n').trim()
+    paragraphLines = []
+    if (!paragraph) {
+      return
+    }
+    blocks.push({
+      type: 'text',
+      paragraphs: [paragraph],
+    })
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const trimmedLine = line.trim()
+
+    if (!trimmedLine) {
+      flushParagraph()
+      continue
+    }
+
+    const headingMatch = /^(#{1,6})\s*(\S.*)$/.exec(trimmedLine)
+    if (headingMatch) {
+      flushParagraph()
+      blocks.push({
+        type: 'heading',
+        level: Math.min(headingMatch[1].length, 6),
+        text: headingMatch[2].trim(),
+      })
+      continue
+    }
+
+    if (isMarkdownDivider(trimmedLine)) {
+      flushParagraph()
+      blocks.push({
+        type: 'divider',
+      })
+      continue
+    }
+
+    if (looksLikeMarkdownTable(lines, index)) {
+      flushParagraph()
+      const tableBlock = consumeMarkdownTable(lines, index)
+      if (tableBlock) {
+        blocks.push(tableBlock.block)
+        index = tableBlock.nextIndex
+        continue
+      }
+    }
+
+    paragraphLines.push(line.replace(/\s+$/, ''))
+  }
+
+  flushParagraph()
+  return blocks
+}
+
+function normalizeLineBreaks(content) {
+  return typeof content === 'string' ? content.replace(/\r\n?/g, '\n') : ''
+}
+
+function isMarkdownDivider(line) {
+  return /^([-*_])(?:\s*\1){2,}\s*$/.test(line)
+}
+
+function looksLikeMarkdownTable(lines, startIndex) {
+  if (startIndex + 1 >= lines.length) {
+    return false
+  }
+  const headerCells = splitMarkdownTableRow(lines[startIndex])
+  const separatorCells = splitMarkdownTableRow(lines[startIndex + 1])
+  if (headerCells.length < 2 || headerCells.length !== separatorCells.length) {
+    return false
+  }
+  return separatorCells.every((cell) => /^:?-{3,}:?$/.test(cell))
+}
+
+function consumeMarkdownTable(lines, startIndex) {
+  const headers = splitMarkdownTableRow(lines[startIndex])
+  const separatorCells = splitMarkdownTableRow(lines[startIndex + 1])
+  if (!headers.length || headers.length !== separatorCells.length) {
+    return null
+  }
+
+  const rows = []
+  let index = startIndex + 2
+  while (index < lines.length) {
+    const currentLine = lines[index]
+    const trimmedLine = currentLine.trim()
+    if (!trimmedLine) {
+      break
+    }
+    const cells = splitMarkdownTableRow(currentLine)
+    if (cells.length < 2) {
+      break
+    }
+    rows.push(padTableRow(cells, headers.length))
+    index += 1
+  }
+
+  return {
+    block: {
+      type: 'table',
+      headers,
+      rows,
+    },
+    nextIndex: index - 1,
+  }
+}
+
+function splitMarkdownTableRow(line) {
+  if (typeof line !== 'string' || !line.includes('|')) {
+    return []
+  }
+  let normalized = line.trim()
+  if (normalized.startsWith('|')) {
+    normalized = normalized.slice(1)
+  }
+  if (normalized.endsWith('|')) {
+    normalized = normalized.slice(0, -1)
+  }
+  return normalized.split('|').map((cell) => cell.trim())
+}
+
+function padTableRow(cells, targetLength) {
+  const row = Array.isArray(cells) ? cells.slice(0, targetLength) : []
+  while (row.length < targetLength) {
+    row.push('')
+  }
+  return row
 }
 
 export function formatTime(value) {

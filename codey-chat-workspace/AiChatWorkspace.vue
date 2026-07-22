@@ -130,6 +130,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  autoSendOnOpen: {
+    type: [Object, String],
+    default: null,
+  },
   historyEnabled: {
     type: Boolean,
     default: true,
@@ -332,6 +336,30 @@ function normalizeAssistantOpenProps(value) {
   return { ...value }
 }
 
+function normalizeAutoSendOnOpenConfig(value) {
+  if (typeof value === 'string') {
+    const prompt = value.trim()
+    return {
+      enabled: !!prompt,
+      prompt,
+      onlyWhenEmpty: true,
+    }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {
+      enabled: false,
+      prompt: '',
+      onlyWhenEmpty: true,
+    }
+  }
+  const prompt = typeof value.prompt === 'string' ? value.prompt.trim() : ''
+  return {
+    enabled: value.enabled !== false && !!prompt,
+    prompt,
+    onlyWhenEmpty: value.onlyWhenEmpty !== false,
+  }
+}
+
 const displayTitle = computed(() => resolveAssistantStringProp('title', 'AI 助手'))
 const displaySubtitle = computed(() => resolveAssistantStringProp('subtitle', ''))
 const displayPlaceholder = computed(() => resolveAssistantStringProp('placeholder', ''))
@@ -360,6 +388,7 @@ const effectiveWelcomeSuggestions = computed(() => {
   const value = resolveAssistantProp('welcomeSuggestions')
   return Array.isArray(value) ? value.filter((s) => typeof s === 'string' && s.trim()) : []
 })
+const effectiveAutoSendOnOpen = computed(() => normalizeAutoSendOnOpenConfig(resolveAssistantProp('autoSendOnOpen')))
 const effectiveTenantIdValue = computed(() => resolveAssistantStringProp('tenantIdValue', ''))
 const effectiveComposerRows = computed(() => {
   const value = Number(resolveAssistantProp('composerRows'))
@@ -473,26 +502,32 @@ async function openAssistant(options = {}) {
   if (hasAssistantPropsOverride) {
     refreshWelcomeMessages()
   }
+  const shouldAutoSendAfterOpen = shouldAutoSendOnOpen()
   assistantVisible.value = true
   emit('visibility-change', true)
   const shouldSyncPayload = options?.syncPayload ?? resolveAssistantBooleanProp('syncPayloadOnOpen', true)
-  if (!shouldSyncPayload) {
-    return
+  if (shouldSyncPayload) {
+    try {
+      // 打开即同步页面上下文时，先确保工作会话已经建立，
+      // 避免工作区 push 抢在新会话创建之前发出。
+      await ensureSessionReady()
+      const hasPagePayloadOverride = Object.prototype.hasOwnProperty.call(options || {}, 'pagePayload')
+      if (hasPagePayloadOverride) {
+        await syncPagePayloadToWorkspace(options.pagePayload, 'open')
+      } else {
+        await syncPagePayloadToWorkspace(effectivePagePayloadValue.value, 'open')
+      }
+    } catch (error) {
+      // 详细日志：同步页面负载到工作区失败，便于排查网络 / 权限 / 数据格式等问题
+      console.error('[openAssistant] syncPagePayloadToWorkspace 失败:', error)
+      applyUiError(error, '同步页面负载到工作区失败', 'AiChatWorkspace.openAssistant')
+    }
   }
   try {
-    // 打开即同步页面上下文时，先确保工作会话已经建立，
-    // 避免工作区 push 抢在新会话创建之前发出。
-    await ensureSessionReady()
-    const hasPagePayloadOverride = Object.prototype.hasOwnProperty.call(options || {}, 'pagePayload')
-    if (hasPagePayloadOverride) {
-      await syncPagePayloadToWorkspace(options.pagePayload, 'open')
-      return
-    }
-    await syncPagePayloadToWorkspace(effectivePagePayloadValue.value, 'open')
+    await tryAutoSendOnOpen(shouldAutoSendAfterOpen)
   } catch (error) {
-    // 详细日志：同步页面负载到工作区失败，便于排查网络 / 权限 / 数据格式等问题
-    console.error('[openAssistant] syncPagePayloadToWorkspace 失败:', error)
-    applyUiError(error, '同步页面负载到工作区失败', 'AiChatWorkspace.openAssistant')
+    console.error('[openAssistant] autoSendOnOpen 执行失败:', error)
+    applyUiError(error, '自动发送首条消息失败', 'AiChatWorkspace.openAssistant')
   }
 }
 
@@ -661,6 +696,7 @@ const {
   inputValue,
   sessionId,
   selectedSessionId,
+  isLiveSession,
   isLoadingSessions,
   isLoadingDetail,
   isSending,
@@ -850,6 +886,38 @@ async function handleSend(prompt = inputValue.value) {
     }
     throw error
   }
+}
+
+function isWelcomeOnlyViewForAutoSend() {
+  return (
+    messages.value.length === 1
+    && messages.value[0]?.role === 'assistant'
+    && !sessionId.value
+    && !selectedSessionId.value
+    && !isLiveSession.value
+    && !isSending.value
+    && !isLoadingDetail.value
+  )
+}
+
+function shouldAutoSendOnOpen() {
+  const config = effectiveAutoSendOnOpen.value
+  if (!config.enabled || !config.prompt || isSending.value) {
+    return false
+  }
+  // 默认仅在欢迎态首开时自动发送，避免反复打开面板或恢复历史会话时重复提交同一句。
+  if (config.onlyWhenEmpty && !isWelcomeOnlyViewForAutoSend()) {
+    return false
+  }
+  return true
+}
+
+async function tryAutoSendOnOpen(shouldSend = shouldAutoSendOnOpen()) {
+  if (!shouldSend) {
+    return
+  }
+  await nextTick()
+  await handleSend(effectiveAutoSendOnOpen.value.prompt)
 }
 
 // 点击建议语句自动发送
@@ -1396,9 +1464,58 @@ watch(
                           <div
                             v-for="(paragraph, paragraphIndex) in block.paragraphs"
                             :key="`${message.id}-${blockIndex}-${paragraphIndex}`"
-                            style="margin-bottom: 6px;"
+                            style="margin-bottom: 6px; white-space: pre-wrap;"
                           >
                             {{ paragraph }}
+                          </div>
+                        </div>
+
+                        <div
+                          v-else-if="block.type === 'heading'"
+                          class="ai-markdown-heading"
+                          :class="`ai-markdown-heading--${block.level || 2}`"
+                        >
+                          {{ block.text }}
+                        </div>
+
+                        <div
+                          v-else-if="block.type === 'divider'"
+                          class="ai-markdown-divider"
+                        />
+
+                        <div
+                          v-else-if="block.type === 'table'"
+                          class="ai-markdown-table-card ai-card"
+                        >
+                          <div class="ai-markdown-table-scroll">
+                            <table class="ai-form-table ai-markdown-table">
+                              <thead>
+                                <tr>
+                                  <th
+                                    v-for="(header, headerIndex) in block.headers || []"
+                                    :key="`${message.id}-${blockIndex}-header-${headerIndex}`"
+                                    class="ai-table-th"
+                                  >
+                                    {{ header }}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr
+                                  v-for="(row, rowIndex) in block.rows || []"
+                                  :key="`${message.id}-${blockIndex}-row-${rowIndex}`"
+                                  class="ai-table-row"
+                                >
+                                  <td
+                                    v-for="(header, cellIndex) in block.headers || []"
+                                    :key="`${message.id}-${blockIndex}-row-${rowIndex}-cell-${cellIndex}`"
+                                    class="ai-table-td"
+                                  >
+                                    {{ row[cellIndex] }}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
                           </div>
                         </div>
 
@@ -1569,9 +1686,58 @@ watch(
                             <div
                               v-for="(paragraph, paragraphIndex) in block.paragraphs"
                               :key="`${message.id}-${blockIndex}-${paragraphIndex}`"
-                              style="margin-bottom: 6px;"
+                              style="margin-bottom: 6px; white-space: pre-wrap;"
                             >
                               {{ paragraph }}
+                            </div>
+                          </div>
+
+                          <div
+                            v-else-if="block.type === 'heading'"
+                            class="ai-markdown-heading"
+                            :class="`ai-markdown-heading--${block.level || 2}`"
+                          >
+                            {{ block.text }}
+                          </div>
+
+                          <div
+                            v-else-if="block.type === 'divider'"
+                            class="ai-markdown-divider"
+                          />
+
+                          <div
+                            v-else-if="block.type === 'table'"
+                            class="ai-markdown-table-card ai-card"
+                          >
+                            <div class="ai-markdown-table-scroll">
+                              <table class="ai-form-table ai-markdown-table">
+                                <thead>
+                                  <tr>
+                                    <th
+                                      v-for="(header, headerIndex) in block.headers || []"
+                                      :key="`${message.id}-${blockIndex}-user-header-${headerIndex}`"
+                                      class="ai-table-th"
+                                    >
+                                      {{ header }}
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr
+                                    v-for="(row, rowIndex) in block.rows || []"
+                                    :key="`${message.id}-${blockIndex}-user-row-${rowIndex}`"
+                                    class="ai-table-row"
+                                  >
+                                    <td
+                                      v-for="(header, cellIndex) in block.headers || []"
+                                      :key="`${message.id}-${blockIndex}-user-row-${rowIndex}-cell-${cellIndex}`"
+                                      class="ai-table-td"
+                                    >
+                                      {{ row[cellIndex] }}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
                             </div>
                           </div>
 
@@ -1924,6 +2090,53 @@ watch(
 }
 .ai-card-body {
   padding: 10px 12px;
+}
+
+.ai-markdown-heading {
+  margin: 4px 0 2px;
+  color: #1e293b;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.ai-markdown-heading--1 {
+  font-size: 20px;
+}
+
+.ai-markdown-heading--2 {
+  font-size: 18px;
+}
+
+.ai-markdown-heading--3 {
+  font-size: 16px;
+}
+
+.ai-markdown-heading--4,
+.ai-markdown-heading--5,
+.ai-markdown-heading--6 {
+  font-size: 14px;
+}
+
+.ai-markdown-divider {
+  width: 100%;
+  height: 1px;
+  margin: 4px 0 8px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e1 100%);
+}
+
+.ai-markdown-table-card {
+  border-radius: 8px;
+}
+
+.ai-markdown-table-scroll {
+  overflow-x: auto;
+}
+
+.ai-markdown-table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: 13px;
 }
 
 /* ===== 输入框组 ===== */

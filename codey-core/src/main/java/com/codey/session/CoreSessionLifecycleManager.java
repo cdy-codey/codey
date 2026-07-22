@@ -1,15 +1,10 @@
-package com.codey.web.service;
+package com.codey.session;
 
 import com.codey.client.AgentClient;
+import com.codey.client.RunRequest;
 import com.codey.client.SessionEventHub;
-import com.codey.starter.SpringProperties;
-import com.codey.web.api.ChatSessionDisplayOptionsStore;
-import com.codey.web.config.WebDemoProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -26,50 +21,50 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 统一管理会话生命周期，补齐临时/永久会话的落盘元数据与清理逻辑。
+ * core 内核级会话生命周期管理器。
+ * 负责自动写入 session-meta、维护活跃时间，并按元数据/归档自动清理过期会话。
  */
-@Service
-public class ChatSessionLifecycleService {
+public class CoreSessionLifecycleManager {
     private static final String SESSION_TYPE_TEMPORARY = "temporary";
     private static final String SESSION_TYPE_PERSISTENT = "persistent";
+    private static final long DEFAULT_CLEANUP_INTERVAL_MILLIS = 60_000L;
 
     private final AgentClient agentClient;
     private final SessionEventHub sessionEventHub;
-    private final ChatSessionDisplayOptionsStore displayOptionsStore;
+    private final SessionStore sessionStore;
     private final ObjectMapper objectMapper;
     private final Path workspaceRoot;
-    private final Path preferredSessionRoot;
-    private final Path demoSessionRoot;
     private final long temporarySessionIdleExpireMillis;
+    private final long cleanupIntervalMillis;
+    private volatile long lastCleanupAt;
 
-    public ChatSessionLifecycleService(AgentClient agentClient,
+    public CoreSessionLifecycleManager(AgentClient agentClient,
                                        SessionEventHub sessionEventHub,
-                                       ChatSessionDisplayOptionsStore displayOptionsStore,
+                                       SessionStore sessionStore,
                                        ObjectMapper objectMapper,
-                                       WebDemoProperties webDemoProperties,
-                                       SpringProperties springProperties,
-                                       @Value("${codey.temporary-session.idle-expire-seconds:3600}") long temporarySessionIdleExpireSeconds) {
+                                       Path workspaceRoot,
+                                       long temporarySessionIdleExpireSeconds) {
+        this(agentClient, sessionEventHub, sessionStore, objectMapper, workspaceRoot, temporarySessionIdleExpireSeconds, DEFAULT_CLEANUP_INTERVAL_MILLIS);
+    }
+
+    public CoreSessionLifecycleManager(AgentClient agentClient,
+                                       SessionEventHub sessionEventHub,
+                                       SessionStore sessionStore,
+                                       ObjectMapper objectMapper,
+                                       Path workspaceRoot,
+                                       long temporarySessionIdleExpireSeconds,
+                                       long cleanupIntervalMillis) {
         this.agentClient = agentClient;
         this.sessionEventHub = sessionEventHub;
-        this.displayOptionsStore = displayOptionsStore;
+        this.sessionStore = sessionStore;
         this.objectMapper = objectMapper;
-        this.workspaceRoot = webDemoProperties.resolveWorkingDirectoryRoot();
-        this.preferredSessionRoot = springProperties.resolveSessionDirectoryRoot(this.workspaceRoot);
-        this.demoSessionRoot = webDemoProperties.resolveSessionDirectoryRoot(this.workspaceRoot);
+        this.workspaceRoot = workspaceRoot == null ? null : workspaceRoot.toAbsolutePath().normalize();
         this.temporarySessionIdleExpireMillis = Math.max(temporarySessionIdleExpireSeconds, 1L) * 1000L;
+        this.cleanupIntervalMillis = Math.max(cleanupIntervalMillis, 1L);
+        this.lastCleanupAt = 0L;
     }
 
-    /**
-     * 只在建会话时判定一次类型，后续轮次即使 workingDirectory 变成 sessionId 也不改类型。
-     */
-    public void registerSession(String sessionId, String requestedWorkingDirectory) {
-        registerSession(sessionId, requestedWorkingDirectory, null);
-    }
-
-    /**
-     * 注册会话并携带租户ID，便于调用层后续按租户维度做业务操作。
-     */
-    public void registerSession(String sessionId, String requestedWorkingDirectory, String tenantId) {
+    public void registerSession(String sessionId, RunRequest request) {
         if (isBlank(sessionId)) {
             return;
         }
@@ -80,17 +75,19 @@ public class ChatSessionLifecycleService {
             metadata.setSessionId(sessionId);
             metadata.setCreatedAt(now);
         }
+        String requestedWorkingDirectory = request == null ? null : request.getWorkingDirectory();
         if (isBlank(metadata.getSessionType())) {
             metadata.setSessionType(isBlank(requestedWorkingDirectory) ? SESSION_TYPE_TEMPORARY : SESSION_TYPE_PERSISTENT);
         }
         if (isBlank(metadata.getWorkingDirectory())) {
             metadata.setWorkingDirectory(resolveStoredWorkingDirectory(sessionId, requestedWorkingDirectory, metadata.getSessionType()));
         }
-        if (!isBlank(tenantId) && isBlank(metadata.getTenantId())) {
-            metadata.setTenantId(tenantId);
+        if (request != null && !isBlank(request.getTenantId()) && isBlank(metadata.getTenantId())) {
+            metadata.setTenantId(request.getTenantId());
         }
         metadata.setLastActiveAt(now);
         writeSessionMetadata(metadata);
+        maybeCleanupExpiredTemporarySessions();
     }
 
     public void touchSession(String sessionId) {
@@ -105,17 +102,7 @@ public class ChatSessionLifecycleService {
         }
         metadata.setLastActiveAt(now);
         writeSessionMetadata(metadata);
-    }
-
-    /**
-     * 按会话 ID 查询租户 ID，供调用层业务操作使用。
-     */
-    public String getTenantId(String sessionId) {
-        if (isBlank(sessionId)) {
-            return null;
-        }
-        SessionMetadata metadata = readSessionMetadata(sessionId);
-        return metadata == null ? null : metadata.getTenantId();
+        maybeCleanupExpiredTemporarySessions();
     }
 
     public void deleteSessionContent(String sessionId) {
@@ -136,11 +123,6 @@ public class ChatSessionLifecycleService {
         }
     }
 
-    /**
-     * 定时回收会话内容。
-     * 只有 session-meta 中明确存在的永久会话，或未过期的临时会话会被保留。
-     */
-    @Scheduled(fixedDelayString = "#{${codey.temporary-session.cleanup-interval-seconds:60} * 1000}")
     public void cleanupExpiredTemporarySessions() {
         long now = System.currentTimeMillis();
         for (String sessionId : collectKnownSessionIds()) {
@@ -148,6 +130,21 @@ public class ChatSessionLifecycleService {
                 continue;
             }
             deleteSessionContent(sessionId);
+        }
+    }
+
+    public void maybeCleanupExpiredTemporarySessions() {
+        long now = System.currentTimeMillis();
+        if (now - lastCleanupAt < cleanupIntervalMillis) {
+            return;
+        }
+        synchronized (this) {
+            now = System.currentTimeMillis();
+            if (now - lastCleanupAt < cleanupIntervalMillis) {
+                return;
+            }
+            cleanupExpiredTemporarySessions();
+            lastCleanupAt = now;
         }
     }
 
@@ -170,9 +167,12 @@ public class ChatSessionLifecycleService {
     }
 
     private void clearRuntimeState(String sessionId) {
-        agentClient.closeSession(sessionId);
-        sessionEventHub.clear(sessionId);
-        displayOptionsStore.clear(sessionId);
+        if (agentClient != null) {
+            agentClient.closeSession(sessionId);
+        }
+        if (sessionEventHub != null) {
+            sessionEventHub.clear(sessionId);
+        }
     }
 
     private void deleteArchives(String sessionId) {
@@ -185,6 +185,9 @@ public class ChatSessionLifecycleService {
     }
 
     private void deleteTemporaryWorkspace(String sessionId) {
+        if (workspaceRoot == null) {
+            return;
+        }
         Path temporaryWorkspace = workspaceRoot.resolve(sessionId).normalize();
         if (!temporaryWorkspace.startsWith(workspaceRoot)) {
             return;
@@ -198,32 +201,6 @@ public class ChatSessionLifecycleService {
             return SESSION_TYPE_TEMPORARY.equals(metadata.getSessionType());
         }
         return SESSION_TYPE_TEMPORARY.equals(resolveSessionTypeFromArchives(sessionId));
-    }
-
-    private Long resolveLastActiveAt(String sessionId) {
-        SessionMetadata metadata = readSessionMetadata(sessionId);
-        if (metadata != null && metadata.getLastActiveAt() != null) {
-            return metadata.getLastActiveAt();
-        }
-        Long archiveLastModified = resolveArchiveLastModified(sessionId);
-        if (archiveLastModified != null) {
-            return archiveLastModified;
-        }
-        Path temporaryWorkspace = workspaceRoot.resolve(sessionId).normalize();
-        if (Files.exists(temporaryWorkspace)) {
-            return lastModifiedTime(temporaryWorkspace);
-        }
-        return null;
-    }
-
-    private Long resolveArchiveLastModified(String sessionId) {
-        Long latest = null;
-        for (Path sessionRoot : resolveSessionRoots()) {
-            latest = maxTime(latest, latestFileTime(sessionRoot.resolve("model-inputs").resolve(sessionId)));
-            latest = maxTime(latest, latestFileTime(sessionRoot.resolve("model-outputs").resolve(sessionId)));
-            latest = maxTime(latest, lastModifiedTimeIfExists(sessionRoot.resolve(sessionId + ".jsonl")));
-        }
-        return latest;
     }
 
     private SessionMetadata buildFallbackMetadata(String sessionId) {
@@ -327,7 +304,7 @@ public class ChatSessionLifecycleService {
             return;
         }
         try {
-            Path metadataDir = preferredSessionRoot.resolve("session-meta");
+            Path metadataDir = resolvePreferredSessionRoot().resolve("session-meta");
             Files.createDirectories(metadataDir);
             objectMapper.writerWithDefaultPrettyPrinter()
                     .writeValue(metadataDir.resolve(metadata.getSessionId() + ".json").toFile(), metadata);
@@ -393,11 +370,23 @@ public class ChatSessionLifecycleService {
 
     private List<Path> resolveSessionRoots() {
         List<Path> roots = new ArrayList<Path>();
-        addUnique(roots, preferredSessionRoot);
-        addUnique(roots, demoSessionRoot);
+        addUnique(roots, resolvePreferredSessionRoot());
         addUnique(roots, Paths.get("").toAbsolutePath().normalize().resolve("sessions"));
         addUnique(roots, Paths.get("").toAbsolutePath().normalize().resolve("codey").resolve("sessions"));
         return roots;
+    }
+
+    private Path resolvePreferredSessionRoot() {
+        if (sessionStore instanceof SessionDirectoryAware) {
+            Path sessionDirectory = ((SessionDirectoryAware) sessionStore).getSessionDirectory();
+            if (sessionDirectory != null) {
+                return sessionDirectory.toAbsolutePath().normalize();
+            }
+        }
+        if (workspaceRoot != null) {
+            return workspaceRoot.resolve(".codey").resolve("sessions").toAbsolutePath().normalize();
+        }
+        return Paths.get(".codey").toAbsolutePath().normalize().resolve("sessions");
     }
 
     private void addUnique(List<Path> roots, Path candidate) {
@@ -426,57 +415,6 @@ public class ChatSessionLifecycleService {
             normalized = normalized.substring(1);
         }
         return normalized;
-    }
-
-    private Long latestFileTime(Path root) {
-        if (root == null || !Files.exists(root)) {
-            return null;
-        }
-        final long[] latest = new long[]{0L};
-        try {
-            Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    latest[0] = Math.max(latest[0], attrs.lastModifiedTime().toMillis());
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-                    latest[0] = Math.max(latest[0], attrs.lastModifiedTime().toMillis());
-                    return FileVisitResult.CONTINUE;
-                }
-            });
-        } catch (IOException exception) {
-            return null;
-        }
-        return latest[0] <= 0L ? null : Long.valueOf(latest[0]);
-    }
-
-    private Long lastModifiedTimeIfExists(Path path) {
-        if (path == null || !Files.exists(path)) {
-            return null;
-        }
-        return lastModifiedTime(path);
-    }
-
-    private Long lastModifiedTime(Path path) {
-        try {
-            FileTime fileTime = Files.getLastModifiedTime(path);
-            return Long.valueOf(fileTime.toMillis());
-        } catch (IOException exception) {
-            return null;
-        }
-    }
-
-    private Long maxTime(Long left, Long right) {
-        if (left == null) {
-            return right;
-        }
-        if (right == null) {
-            return left;
-        }
-        return Long.valueOf(Math.max(left.longValue(), right.longValue()));
     }
 
     private void deleteRecursively(Path path) {
@@ -518,7 +456,7 @@ public class ChatSessionLifecycleService {
     }
 
     /**
-     * 元数据单独落盘，避免仅靠 workingDirectory 文本推断“临时/永久”产生歧义。
+     * 会话元数据单独落盘，避免仅靠 workingDirectory 文本推断生命周期类型产生歧义。
      */
     public static class SessionMetadata {
         private String sessionId;

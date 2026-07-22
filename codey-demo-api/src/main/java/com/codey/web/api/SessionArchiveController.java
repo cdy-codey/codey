@@ -2,7 +2,7 @@ package com.codey.web.api;
 
 import com.codey.web.common.ApiResponse;
 import com.codey.web.config.WebDemoProperties;
-import com.codey.web.service.ChatSessionLifecycleService;
+import com.codey.client.AgentClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.codey.tools.ToolRegistry;
@@ -40,19 +40,19 @@ import java.util.Map;
 @RequestMapping("/api/chat/history")
 public class SessionArchiveController {
     private final ObjectMapper objectMapper;
+    private final AgentClient agentClient;
     private final ToolRegistry toolRegistry;
     private final String configuredSessionDirectory;
-    private final ChatSessionLifecycleService chatSessionLifecycleService;
 
     public SessionArchiveController(ObjectMapper objectMapper,
+                                    AgentClient agentClient,
                                     ToolRegistry toolRegistry,
-                                    WebDemoProperties properties,
-                                    ChatSessionLifecycleService chatSessionLifecycleService) {
+                                    WebDemoProperties properties) {
         this.objectMapper = objectMapper;
+        this.agentClient = agentClient;
         this.toolRegistry = toolRegistry;
         // 历史归档目录与 Web Demo 其他目录配置统一收口到 WebDemoProperties，避免默认值失效。
         this.configuredSessionDirectory = properties.getSessionDirectory();
-        this.chatSessionLifecycleService = chatSessionLifecycleService;
     }
 
     @GetMapping("/sessions")
@@ -136,7 +136,7 @@ public class SessionArchiveController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "未找到指定会话");
         }
         try {
-            chatSessionLifecycleService.deleteSessionContent(sessionId);
+            agentClient.deleteSessionContent(sessionId);
         } catch (IllegalStateException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), exception);
         }
@@ -158,7 +158,7 @@ public class SessionArchiveController {
             return;
         }
         try {
-            chatSessionLifecycleService.clearSessionContent();
+            agentClient.clearSessionContent();
         } catch (IllegalStateException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), exception);
         }

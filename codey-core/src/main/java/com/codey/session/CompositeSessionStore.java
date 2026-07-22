@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 将同一份会话事件同时转发给多个底层存储实现。
  */
-public class CompositeSessionStore implements SessionStore {
+public class CompositeSessionStore implements SessionStore, SessionDirectoryAware {
     private final List<SessionStore> delegates = new ArrayList<SessionStore>();
 
     public CompositeSessionStore(SessionStore... delegates) {
@@ -41,5 +41,18 @@ public class CompositeSessionStore implements SessionStore {
             }
         }
         return consumed;
+    }
+
+    @Override
+    public java.nio.file.Path getSessionDirectory() {
+        for (SessionStore delegate : delegates) {
+            if (delegate instanceof SessionDirectoryAware) {
+                java.nio.file.Path sessionDirectory = ((SessionDirectoryAware) delegate).getSessionDirectory();
+                if (sessionDirectory != null) {
+                    return sessionDirectory;
+                }
+            }
+        }
+        return null;
     }
 }

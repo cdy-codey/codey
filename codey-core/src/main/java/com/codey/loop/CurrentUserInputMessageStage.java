@@ -19,11 +19,5 @@ final class CurrentUserInputMessageStage implements PromptMessageStage {
         if (!PromptMessageTextSupport.isBlank(session.getUserGoal())) {
             messages.add(ModelMessage.user(session.getUserGoal().trim()));
         }
-        StringBuilder builder = new StringBuilder();
-        PromptMessageTextSupport.appendUserProvidedFiles(builder, session.getUserContextFiles());
-        PromptMessageTextSupport.appendUserProvidedNotes(builder, session.getUserContextNotes());
-        if (builder.length() > 0) {
-            messages.add(ModelMessage.user(builder.toString().trim()));
-        }
     }
 }

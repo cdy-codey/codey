@@ -18,6 +18,14 @@ public interface AgentClient {
 
     void closeSession(String sessionId);
 
+    default void deleteSessionContent(String sessionId) {
+        throw new UnsupportedOperationException("当前 AgentClient 不支持删除会话内容");
+    }
+
+    default void clearSessionContent() {
+        throw new UnsupportedOperationException("当前 AgentClient 不支持清空会话内容");
+    }
+
     default String run(String goal) {
         RunResult result = run(RunRequest.ofGoal(goal));
         if (result.isSuccess()) {
