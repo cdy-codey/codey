@@ -28,6 +28,9 @@ import com.codey.tool.ToolSpec;
 import com.codey.mcp.ApplyPatchTool;
 import com.codey.mcp.DeleteFileTool;
 import com.codey.mcp.EditFileTool;
+import com.codey.mcp.EditJsonTool;
+import com.codey.mcp.ReadJsonTool;
+import com.codey.mcp.SearchJsonTool;
 import com.codey.tools.ToolRegistry;
 import com.codey.mcp.WriteFileTool;
 import com.codey.verify.Verifier;
@@ -150,6 +153,20 @@ public class AutoConfiguration {
     @Bean
     @Qualifier("BuiltinTool")
     @ConditionalOnMissingBean
+    public ReadJsonTool readJsonTool() {
+        return new ReadJsonTool();
+    }
+
+    @Bean
+    @Qualifier("BuiltinTool")
+    @ConditionalOnMissingBean
+    public SearchJsonTool searchJsonTool() {
+        return new SearchJsonTool();
+    }
+
+    @Bean
+    @Qualifier("BuiltinTool")
+    @ConditionalOnMissingBean
     public WriteFileTool writeFileTool() {
         return new WriteFileTool();
     }
@@ -159,6 +176,13 @@ public class AutoConfiguration {
     @ConditionalOnMissingBean
     public EditFileTool editFileTool() {
         return new EditFileTool();
+    }
+
+    @Bean
+    @Qualifier("BuiltinTool")
+    @ConditionalOnMissingBean
+    public EditJsonTool editJsonTool() {
+        return new EditJsonTool();
     }
 
     @Bean

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.cdy-codey</groupId>
   <artifactId>codey</artifactId>
-  <version>0.1.10</version>
+  <version>0.1.11</version>
   <packaging>pom</packaging>
   <name>codey</name>
   <description>Codey parent build and public release definition for common, core and Spring Boot starter modules.</description>
@@ -26,7 +26,7 @@
   <scm>
     <connection>scm:git:https://github.com/cdy-codey/codey.git</connection>
     <developerConnection>scm:git:https://github.com/cdy-codey/codey.git</developerConnection>
-    <tag>v0.1.10</tag>
+    <tag>v0.1.11</tag>
     <url>https://github.com/cdy-codey/codey</url>
   </scm>
 </project>
