@@ -20,6 +20,7 @@ public class RunRequest {
     private List<String> contextNotes = new ArrayList<String>();
     private List<String> chatHistory = new ArrayList<String>();
     private List<String> identities = new ArrayList<String>();
+    private String tenantId;
     private ModelProperties modelConfig;
     private boolean includeThinking = true;
 
@@ -115,6 +116,14 @@ public class RunRequest {
 
     public void setIdentities(List<String> identities) {
         this.identities = copyList(identities);
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
     public ModelProperties getModelConfig() {

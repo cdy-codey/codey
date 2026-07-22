@@ -21,6 +21,7 @@ public class GenerateTask {
     private List<String> contextNotes = new ArrayList<String>();
     private List<String> chatHistory = new ArrayList<String>();
     private List<String> identities = new ArrayList<String>();
+    private String tenantId;
     private ModelProperties modelConfig;
 
     public String getSessionId() {
@@ -109,6 +110,14 @@ public class GenerateTask {
 
     public void setIdentities(List<String> identities) {
         this.identities = identities == null ? new ArrayList<String>() : new ArrayList<String>(identities);
+    }
+
+    public String getTenantId() {
+        return tenantId;
+    }
+
+    public void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
     }
 
     public ModelProperties getModelConfig() {

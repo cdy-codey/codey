@@ -6,6 +6,7 @@ import com.codey.tool.ToolContext;
 
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -13,6 +14,8 @@ import java.util.Map;
  * 该类型承载路径解析与工作区边界能力，不属于对外 common。
  */
 public class WorkspaceToolContext implements ToolContext {
+    private static final String ATTR_TENANT_ID = "tenantId";
+
     private final Path workspaceRoot;
     private final String workingDirectory;
     private final WorkspaceGateway workspaceGateway;
@@ -62,6 +65,25 @@ public class WorkspaceToolContext implements ToolContext {
         );
     }
 
+    /**
+     * 注入租户 ID 到工具上下文，供调用层工具按租户维度做业务操作。
+     */
+    public WorkspaceToolContext withTenantId(String tenantId) {
+        if (tenantId == null || tenantId.isEmpty()) {
+            return this;
+        }
+        Map<String, Object> merged = new LinkedHashMap<String, Object>(attributes);
+        merged.put(ATTR_TENANT_ID, tenantId);
+        return new WorkspaceToolContext(
+                workspaceRoot,
+                workingDirectory,
+                workspaceGateway,
+                requestId,
+                sessionId,
+                Collections.unmodifiableMap(merged)
+        );
+    }
+
     @Override
     public String getRequestId() {
         return requestId;
@@ -75,6 +97,12 @@ public class WorkspaceToolContext implements ToolContext {
     @Override
     public Map<String, Object> getAttributes() {
         return attributes;
+    }
+
+    @Override
+    public String getTenantId() {
+        Object value = getAttribute(ATTR_TENANT_ID);
+        return value == null ? null : String.valueOf(value);
     }
 
     public Path resolvePath(String path) {

@@ -78,6 +78,28 @@ export function useAiChat(options = {}) {
   const activeAssistantId = ref('')
   const resumeContext = ref(null)
 
+  function isJsonParseLikeError(error) {
+    const message = typeof error?.message === 'string' ? error.message.toLowerCase() : ''
+    return !!(
+      error instanceof SyntaxError
+      || message.includes('json')
+      && (
+        message.includes('parse')
+        || message.includes('unexpected token')
+        || message.includes('unexpected end')
+        || message.includes('unterminated')
+      )
+    )
+  }
+
+  function applyUserFacingError(error, fallbackMessage, scope = 'useAiChat') {
+    if (isJsonParseLikeError(error)) {
+      console.warn(`[${scope}] 捕获到 JSON 解析异常，已忽略界面提示:`, error)
+      return
+    }
+    errorMessage.value = error?.message || fallbackMessage
+  }
+
   function invokeHook(name, payload) {
     if (typeof options?.[name] !== 'function') {
       return
@@ -165,6 +187,7 @@ export function useAiChat(options = {}) {
       skillName,
       skillNames: mergedSkillNames,
       workingDirectory: workingDirectory.value,
+      tenantId: context.tenantId || '',
       includeThinking: resolveIncludeThinking(extra.includeThinking),
       ...context,
       ...extra,
@@ -264,6 +287,24 @@ export function useAiChat(options = {}) {
     messages.value = createWelcomeMessages()
   }
 
+  function refreshWelcomeMessages() {
+    // 仅在尚未进入任何会话、界面仍停留在欢迎态时刷新欢迎文案，
+    // 避免 openSystemAiAssistant 动态注入 assistantProps 后首次打开仍显示旧文案。
+    const isWelcomeOnlyView =
+      messages.value.length === 1
+      && messages.value[0]?.role === 'assistant'
+      && !sessionId.value
+      && !selectedSessionId.value
+      && !isLiveSession.value
+      && !resumeContext.value
+      && !isSending.value
+      && !isLoadingDetail.value
+    if (!isWelcomeOnlyView) {
+      return
+    }
+    messages.value = createWelcomeMessages()
+  }
+
   function ensureActiveAssistantMessage() {
     const currentId = activeAssistantId.value
     if (currentId) {
@@ -345,7 +386,7 @@ export function useAiChat(options = {}) {
         selectedSessionId.value = preferredSessionId
       }
     } catch (error) {
-      errorMessage.value = error.message || '读取会话列表失败'
+      applyUserFacingError(error, '读取会话列表失败', 'useAiChat.loadSessions')
     } finally {
       isLoadingSessions.value = false
     }
@@ -367,7 +408,7 @@ export function useAiChat(options = {}) {
         connectionStatus.value = '历史会话'
       }
     } catch (error) {
-      errorMessage.value = error.message || '读取会话详情失败'
+      applyUserFacingError(error, '读取会话详情失败', 'useAiChat.selectSession')
     } finally {
       isLoadingDetail.value = false
     }
@@ -590,6 +631,10 @@ function parseEventPayload(event) {
     return sessionId.value
   }
 
+  async function ensureSessionReady(firstPrompt = '') {
+    return ensureLiveSession(firstPrompt)
+  }
+
   async function sendPrompt(prompt = inputValue.value) {
     const goal = normalizeContent(prompt).trim()
     if (!goal || isSending.value) {
@@ -619,7 +664,7 @@ function parseEventPayload(event) {
       )
     } catch (error) {
       isSending.value = false
-      errorMessage.value = error.message || '发送消息失败'
+      applyUserFacingError(error, '发送消息失败', 'useAiChat.sendPrompt')
     }
   }
 
@@ -678,7 +723,7 @@ function parseEventPayload(event) {
       }
       await loadSessions(selectedSessionId.value)
     } catch (error) {
-      errorMessage.value = error.message || '删除会话失败'
+      applyUserFacingError(error, '删除会话失败', 'useAiChat.deleteSession')
     }
   }
 
@@ -702,7 +747,7 @@ function parseEventPayload(event) {
       resetSessionView()
       await loadSessions()
     } catch (error) {
-      errorMessage.value = error.message || '清理会话失败'
+      applyUserFacingError(error, '清理会话失败', 'useAiChat.clearSessions')
     }
   }
 
@@ -738,10 +783,12 @@ function parseEventPayload(event) {
     loadSessions,
     selectSession,
     sendPrompt,
+    ensureSessionReady,
     startNewSession,
     resetSessionScope,
     deleteSession,
     clearSessions,
     hydrateLatestHistory,
+    refreshWelcomeMessages,
   }
 }

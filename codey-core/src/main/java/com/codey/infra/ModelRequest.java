@@ -14,6 +14,7 @@ public class ModelRequest {
     private List<ModelMessage> messages = new ArrayList<ModelMessage>();
     private List<ModelToolDefinition> tools = new ArrayList<ModelToolDefinition>();
     private ModelProperties modelConfig;
+    private ModelRequestType requestType = ModelRequestType.BUSINESS;
     private ModelStreamListener streamListener;
 
     public String getSessionId() {
@@ -47,6 +48,14 @@ public class ModelRequest {
 
     public void setModelConfig(ModelProperties modelConfig) {
         this.modelConfig = copyModelConfig(modelConfig);
+    }
+
+    public ModelRequestType getRequestType() {
+        return requestType == null ? ModelRequestType.BUSINESS : requestType;
+    }
+
+    public void setRequestType(ModelRequestType requestType) {
+        this.requestType = requestType == null ? ModelRequestType.BUSINESS : requestType;
     }
 
     /**

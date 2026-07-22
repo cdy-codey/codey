@@ -39,6 +39,22 @@ final class ExecutionState {
         return Collections.unmodifiableList(modelTranscript);
     }
 
+    List<ModelMessage> getTranscriptBeforeLatestBundle() {
+        int cutoff = latestBundleStartIndex();
+        if (cutoff <= 0) {
+            return new ArrayList<ModelMessage>();
+        }
+        return new ArrayList<ModelMessage>(modelTranscript.subList(0, cutoff));
+    }
+
+    void discardTranscriptBeforeLatestBundle() {
+        int cutoff = latestBundleStartIndex();
+        if (cutoff <= 0) {
+            return;
+        }
+        modelTranscript.subList(0, cutoff).clear();
+    }
+
     void appendToolResult(String content) {
         toolResults.add(content);
     }
@@ -160,6 +176,38 @@ final class ExecutionState {
         }
         modelTranscript.clear();
         modelTranscript.addAll(sanitized);
+    }
+
+    /**
+     * 保留最近一次助手输出及其对应 tool 结果，前面的 transcript 允许被摘要折叠。
+     */
+    private int latestBundleStartIndex() {
+        if (modelTranscript.isEmpty()) {
+            return 0;
+        }
+        int lastIndex = modelTranscript.size() - 1;
+        ModelMessage lastMessage = modelTranscript.get(lastIndex);
+        if (lastMessage == null) {
+            return lastIndex;
+        }
+        if (lastMessage.isToolResult()) {
+            int start = lastIndex;
+            while (start >= 0) {
+                ModelMessage current = modelTranscript.get(start);
+                if (current == null || !current.isToolResult()) {
+                    break;
+                }
+                start--;
+            }
+            if (start >= 0) {
+                ModelMessage candidate = modelTranscript.get(start);
+                if (candidate != null && candidate.hasToolCalls()) {
+                    return start;
+                }
+            }
+            return Math.max(0, start + 1);
+        }
+        return lastIndex;
     }
 
     private String safe(String value) {

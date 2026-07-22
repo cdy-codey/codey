@@ -26,6 +26,24 @@ final class ConversationState {
         return Collections.unmodifiableList(chatHistory);
     }
 
+    List<String> getChatHistoryBeforeRecentTail(int keepRecentCount) {
+        if (keepRecentCount < 0) {
+            keepRecentCount = 0;
+        }
+        int cutoff = Math.max(0, chatHistory.size() - keepRecentCount);
+        return new ArrayList<String>(chatHistory.subList(0, cutoff));
+    }
+
+    void discardChatHistoryBeforeRecentTail(int keepRecentCount) {
+        if (keepRecentCount < 0) {
+            keepRecentCount = 0;
+        }
+        int removable = Math.max(0, chatHistory.size() - keepRecentCount);
+        for (int index = 0; index < removable; index++) {
+            chatHistory.remove(0);
+        }
+    }
+
     List<String> getInteractionHistory() {
         return Collections.unmodifiableList(interactionHistory);
     }

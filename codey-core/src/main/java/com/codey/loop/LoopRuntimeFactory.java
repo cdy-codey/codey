@@ -25,11 +25,17 @@ final class LoopRuntimeFactory {
                                 ToolExposurePlanner toolExposurePlanner,
                                 int stagnationRoundsThreshold) {
         ReplanService replanService = new ReplanService();
+        ContextSummaryService contextSummaryService = new ContextSummaryService(
+                promptAssembler,
+                modelGateway,
+                sessionStore
+        );
         LoopTurnPreparer loopTurnPreparer = new LoopTurnPreparer(
                 toolExposurePlanner,
                 promptAssembler,
                 promptContractValidator,
-                sessionStore
+                sessionStore,
+                contextSummaryService
         );
         ToolCallProcessor toolCallProcessor = new ToolCallProcessor(
                 toolExecutor,
@@ -57,7 +63,8 @@ final class LoopRuntimeFactory {
                 loopTurnPreparer,
                 modelTurnExecutor,
                 toolCallProcessor,
-                completionResultHandler
+                completionResultHandler,
+                contextSummaryService
         );
         return new TurnLoopRunner(loopTurnEngine, stagnationRoundsThreshold);
     }

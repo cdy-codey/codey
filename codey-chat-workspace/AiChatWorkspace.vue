@@ -34,6 +34,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  tenantIdValue: {
+    type: String,
+    default: '',
+  },
   pagePayloadValue: {
     type: [Object, Array, String, Number, Boolean],
     default: null,
@@ -356,6 +360,7 @@ const effectiveWelcomeSuggestions = computed(() => {
   const value = resolveAssistantProp('welcomeSuggestions')
   return Array.isArray(value) ? value.filter((s) => typeof s === 'string' && s.trim()) : []
 })
+const effectiveTenantIdValue = computed(() => resolveAssistantStringProp('tenantIdValue', ''))
 const effectiveComposerRows = computed(() => {
   const value = Number(resolveAssistantProp('composerRows'))
   return Number.isFinite(value) && value > 0 ? value : 3
@@ -465,6 +470,9 @@ async function openAssistant(options = {}) {
   if (nextScopeKey && nextScopeKey !== currentSessionScopeKey.value) {
     await handleScopeChange(nextScopeKey)
   }
+  if (hasAssistantPropsOverride) {
+    refreshWelcomeMessages()
+  }
   assistantVisible.value = true
   emit('visibility-change', true)
   const shouldSyncPayload = options?.syncPayload ?? resolveAssistantBooleanProp('syncPayloadOnOpen', true)
@@ -472,6 +480,9 @@ async function openAssistant(options = {}) {
     return
   }
   try {
+    // 打开即同步页面上下文时，先确保工作会话已经建立，
+    // 避免工作区 push 抢在新会话创建之前发出。
+    await ensureSessionReady()
     const hasPagePayloadOverride = Object.prototype.hasOwnProperty.call(options || {}, 'pagePayload')
     if (hasPagePayloadOverride) {
       await syncPagePayloadToWorkspace(options.pagePayload, 'open')
@@ -481,7 +492,7 @@ async function openAssistant(options = {}) {
   } catch (error) {
     // 详细日志：同步页面负载到工作区失败，便于排查网络 / 权限 / 数据格式等问题
     console.error('[openAssistant] syncPagePayloadToWorkspace 失败:', error)
-    errorMessage.value = error?.message || '同步页面负载到工作区失败'
+    applyUiError(error, '同步页面负载到工作区失败', 'AiChatWorkspace.openAssistant')
   }
 }
 
@@ -540,6 +551,7 @@ function buildChatContext() {
   return {
     contextFiles: currentFileKey ? [currentFileKey] : [],
     contextNotes,
+    tenantId: effectiveTenantIdValue.value,
     identities: normalizeIdentityList(effectiveIdentitiesValue.value),
   }
 }
@@ -551,10 +563,41 @@ function withAssistantRuntimeMeta(payload = {}) {
   }
 }
 
+function isJsonParseLikeError(error) {
+  const message = typeof error?.message === 'string' ? error.message.toLowerCase() : ''
+  return !!(
+    error instanceof SyntaxError
+    || message.includes('json')
+    && (
+      message.includes('parse')
+      || message.includes('unexpected token')
+      || message.includes('unexpected end')
+      || message.includes('unterminated')
+    )
+  )
+}
+
+function applyUiError(error, fallbackMessage, scope = 'AiChatWorkspace') {
+  if (isJsonParseLikeError(error)) {
+    console.warn(`[${scope}] 捕获到 JSON 解析异常，已忽略界面提示:`, error)
+    return
+  }
+  errorMessage.value = error?.message || fallbackMessage
+}
+
 async function emitAssistantCallback(name, payload) {
   const handler = resolveAssistantFunctionProp(name)
-  if (handler) {
+  if (!handler) {
+    return
+  }
+  try {
     await handler(payload)
+  } catch (error) {
+    if (isJsonParseLikeError(error)) {
+      console.warn(`[AiChatWorkspace.${name}] 业务回调发生 JSON 解析异常，已忽略界面提示:`, error)
+      return
+    }
+    throw error
   }
 }
 
@@ -630,11 +673,13 @@ const {
   loadSessions,
   selectSession,
   sendPrompt,
+  ensureSessionReady,
   startNewSession,
   resetSessionScope,
   deleteSession,
   clearSessions,
   hydrateLatestHistory,
+  refreshWelcomeMessages,
 } = useAiChat({
   historyEnabled: () => effectiveHistoryEnabled.value,
   defaultWorkingDirectory: props.defaultWorkingDirectory,
@@ -658,12 +703,20 @@ const {
     if (!beforeSendHandler) {
       return prompt
     }
-    return await beforeSendHandler({
-      prompt,
-      workingDirectory: workingDirectory.value,
-      currentFileKey: effectiveCurrentFileKey.value,
-      syncPagePayloadToWorkspace: (payload) => syncPagePayloadToWorkspace(payload, 'before-send'),
-    })
+    try {
+      return await beforeSendHandler({
+        prompt,
+        workingDirectory: workingDirectory.value,
+        currentFileKey: effectiveCurrentFileKey.value,
+        syncPagePayloadToWorkspace: (payload) => syncPagePayloadToWorkspace(payload, 'before-send'),
+      })
+    } catch (error) {
+      if (isJsonParseLikeError(error)) {
+        console.warn('[AiChatWorkspace.onBeforeSend] 业务回调发生 JSON 解析异常，已继续使用原始 prompt:', error)
+        return prompt
+      }
+      throw error
+    }
   },
   onToolCall: async (event) => {
     await emitAssistantCallback('onToolCall', event)
@@ -791,7 +844,10 @@ async function handleSend(prompt = inputValue.value) {
     await sendPrompt(goal)
     emit('message-sent', goal)
   } catch (error) {
-    errorMessage.value = error?.message || '发送前同步上下文失败'
+    applyUiError(error, '发送前同步上下文失败', 'AiChatWorkspace.handleSend')
+    if (isJsonParseLikeError(error)) {
+      return
+    }
     throw error
   }
 }
@@ -1352,7 +1408,23 @@ watch(
                               <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
                             </svg>
                           </div>
-                          <template v-else-if="block.parsedUiView._view_type === 'form_data'" v-for="(module, mIdx) in block.parsedUiView.modules" :key="mIdx">
+                          <template v-else-if="block.parsedUiView._view_type === 'form_data'">
+                            <div
+                              v-if="typeof block.parsedUiView.summary === 'string' && block.parsedUiView.summary.trim()"
+                              class="ai-form-summary ai-card"
+                              style="margin-bottom: 8px;"
+                            >
+                              <div
+                                class="ai-card-header ai-form-module-header"
+                                style="background: #f8fafc; color: #334155; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);"
+                              >
+                                简要解析
+                              </div>
+                              <div class="ai-card-body ai-form-module-body" style="padding: 10px 12px; color: #475569; font-size: 13px; line-height: 1.75; white-space: pre-wrap;">
+                                {{ block.parsedUiView.summary }}
+                              </div>
+                            </div>
+                            <template v-for="(module, mIdx) in block.parsedUiView.modules" :key="mIdx">
                             <!-- Object View -->
                             <div v-if="module.type === 'object'" class="ai-form-module ai-card" style="margin-bottom: 8px;">
                               <div class="ai-card-header ai-form-module-header" v-if="module.title" style="background: #f0f4ff; color: #1d4ed8; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; align-items: center; gap: 6px;">
@@ -1399,6 +1471,7 @@ watch(
                                 </div>
                               </div>
                             </div>
+                            </template>
                           </template>
                           <div v-else-if="block.parsedUiView._view_type === 'diff_data'" class="ai-form-module ai-card" style="margin-bottom: 8px;">
                             <div class="ai-card-header ai-form-module-header" style="background: #f8fafc; color: #334155; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);">

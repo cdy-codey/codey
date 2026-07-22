@@ -17,6 +17,7 @@ final class LoopMemoryState {
     private final Map<String, List<LineRange>> readFileRangesByPath = new HashMap<String, List<LineRange>>();
     private final Map<String, List<SnippetRange>> readFileSnippetsByPath = new HashMap<String, List<SnippetRange>>();
     private int consecutiveToolFailureCount;
+    private int lastContextSummaryTriggerChars;
     private boolean replanMode;
     private String replanReason;
 
@@ -72,6 +73,14 @@ final class LoopMemoryState {
 
     void resetConsecutiveToolFailureCount() {
         consecutiveToolFailureCount = 0;
+    }
+
+    int getLastContextSummaryTriggerChars() {
+        return lastContextSummaryTriggerChars;
+    }
+
+    void setLastContextSummaryTriggerChars(int lastContextSummaryTriggerChars) {
+        this.lastContextSummaryTriggerChars = Math.max(0, lastContextSummaryTriggerChars);
     }
 
     boolean isReplanMode() {

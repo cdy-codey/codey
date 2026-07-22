@@ -21,6 +21,8 @@ final class SessionContextState {
     private final List<String> userContextFiles = new ArrayList<String>();
     private final List<String> userContextNotes = new ArrayList<String>();
     private final List<String> identities = new ArrayList<String>();
+    private String tenantId;
+    private String runtimeContextSummary;
 
     String getSkillName() {
         return skillName;
@@ -102,6 +104,22 @@ final class SessionContextState {
         for (String identity : newIdentities) {
             appendIdentity(identity);
         }
+    }
+
+    String getTenantId() {
+        return tenantId;
+    }
+
+    void setTenantId(String tenantId) {
+        this.tenantId = tenantId;
+    }
+
+    String getRuntimeContextSummary() {
+        return runtimeContextSummary;
+    }
+
+    void setRuntimeContextSummary(String runtimeContextSummary) {
+        this.runtimeContextSummary = normalizeText(runtimeContextSummary);
     }
 
     void appendContextFile(String path) {

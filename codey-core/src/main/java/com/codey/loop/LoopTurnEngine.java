@@ -13,22 +13,25 @@ final class LoopTurnEngine {
     private final ModelTurnExecutor modelTurnExecutor;
     private final ToolCallProcessor toolCallProcessor;
     private final CompletionResultHandler completionResultHandler;
+    private final ContextSummaryService contextSummaryService;
 
     LoopTurnEngine(LoopTurnPreparer loopTurnPreparer,
                    ModelTurnExecutor modelTurnExecutor,
                    ToolCallProcessor toolCallProcessor,
-                   CompletionResultHandler completionResultHandler) {
+                   CompletionResultHandler completionResultHandler,
+                   ContextSummaryService contextSummaryService) {
         this.loopTurnPreparer = loopTurnPreparer;
         this.modelTurnExecutor = modelTurnExecutor;
         this.toolCallProcessor = toolCallProcessor;
         this.completionResultHandler = completionResultHandler;
+        this.contextSummaryService = contextSummaryService;
     }
 
     TurnExecutionResult executeTurn(AgentSession session,
                                     SkillDefinition skill,
                                     int currentLoop,
                                     LoopProgressTracker progressTracker) {
-        LoopTurnPreparer.PreparedTurn preparedTurn = loopTurnPreparer.prepare(session, skill);
+        LoopTurnPreparer.PreparedTurn preparedTurn = loopTurnPreparer.prepare(session, skill, currentLoop);
         if (!preparedTurn.isReady()) {
             return TurnExecutionResult.finished(TaskResult.failed(session.getSessionId(), preparedTurn.getFailureMessage()));
         }
@@ -73,6 +76,14 @@ final class LoopTurnEngine {
                 finalResponseEvaluation.getFinalResult()
         );
         if (completionResult != null) {
+            if (contextSummaryService != null) {
+                contextSummaryService.summarizeOnLoopFinished(
+                        session,
+                        skill,
+                        preparedTurn.getVisibleTools(),
+                        currentLoop
+                );
+            }
             return TurnExecutionResult.finished(completionResult);
         }
         return TurnExecutionResult.continueLoop();

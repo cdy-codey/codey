@@ -88,8 +88,13 @@ final class PromptMessageTextSupport {
         if (transcriptMessage.hasToolCalls() || transcriptMessage.isToolResult()) {
             return transcriptMessage;
         }
-        if (transcriptMessage.isAssistant() && !isBlank(transcriptMessage.getReasoningContent())) {
-            return ModelMessage.assistant("", transcriptMessage.getReasoningContent());
+        if (transcriptMessage.isAssistant()
+                && (!isBlank(transcriptMessage.getContent())
+                || !isBlank(transcriptMessage.getReasoningContent()))) {
+            return ModelMessage.assistant(
+                    isBlank(transcriptMessage.getContent()) ? "" : transcriptMessage.getContent(),
+                    isBlank(transcriptMessage.getReasoningContent()) ? "" : transcriptMessage.getReasoningContent()
+            );
         }
         return null;
     }

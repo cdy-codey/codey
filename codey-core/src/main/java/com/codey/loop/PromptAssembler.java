@@ -47,8 +47,13 @@ public class PromptAssembler {
         }
         String runtimeSystemMessage = buildRuntimeSystemMessage(session, skill);
         if (!isBlank(runtimeSystemMessage)) {
-            // 频繁变动的运行时上下文单独挂到追加的 system 消息上，不写进基础 system prompt。
+            // 第二个 system 保持原有运行时上下文，不与摘要混合。
             messages.add(ModelMessage.system(runtimeSystemMessage));
+        }
+        String runtimeContextSummaryMessage = buildRuntimeSummarySystemMessage(session);
+        if (!isBlank(runtimeContextSummaryMessage)) {
+            // 第三个 system 专门承载摘要，并通过显式字段标记。
+            messages.add(ModelMessage.systemSummary(runtimeContextSummaryMessage));
         }
         messages.addAll(buildMessages(session, skill, safeVisibleTools));
         promptPackage.setMessages(messages);
@@ -119,6 +124,13 @@ public class PromptAssembler {
             appendStableRuntimeContext(builder, session);
         }
         return builder.toString().trim();
+    }
+
+    private String buildRuntimeSummarySystemMessage(AgentSession session) {
+        if (session == null || isBlank(session.getRuntimeContextSummary())) {
+            return "";
+        }
+        return session.getRuntimeContextSummary().trim();
     }
 
     /**

@@ -9,5 +9,5 @@ temperature: 0.2
 debugEnabled: false
 debugDir: sessions/model-debug
 connectTimeoutMillis: 10000
-readTimeoutMillis: 30000
+readTimeoutMillis: 90000  # 90s：并行工具调用时模型需处理多个结果，避免 Read timed out
 maxRetries: 2

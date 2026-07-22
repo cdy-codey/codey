@@ -119,7 +119,7 @@ final class ToolCallProcessor {
             }
 
             sessionStore.appendEvent(SessionEventFactory.toolExecutionStarted(session.getSessionId(), request));
-            ToolResult result = toolExecutor.execute(request, session.getWorkingDirectory());
+            ToolResult result = toolExecutor.execute(request, session.getWorkingDirectory(), session.getTenantId());
             sessionStore.appendEvent(SessionEventFactory.toolCall(session.getSessionId(), request, result));
             rememberExecutedToolCall(executedToolCalls, toolCall);
             if (!result.isSuccess()) {
@@ -346,7 +346,7 @@ final class ToolCallProcessor {
         }
 
         List<ToolExecutionRecord> records =
-                toolExecutor.executeBatch(new ArrayList<ToolInvocation>(parallelBatch), session.getWorkingDirectory());
+                toolExecutor.executeBatch(new ArrayList<ToolInvocation>(parallelBatch), session.getWorkingDirectory(), session.getTenantId());
         parallelBatch.clear();
         for (int index = 0; index < records.size(); index++) {
             ToolExecutionRecord record = records.get(index);

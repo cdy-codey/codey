@@ -59,6 +59,19 @@ public class HttpModelGateway implements ModelGateway {
                 lastException = exception;
                 LOGGER.warn("HTTP model call failed on attempt {}/{}: {}", Integer.valueOf(attempt),
                         Integer.valueOf(attempts), exception.getMessage());
+                // 指数退避：并行工具调用时模型处理压力大，立即重试会加重模型侧负担，
+                // 退避延迟给模型侧留出恢复时间，避免连续超时。
+                if (attempt < attempts) {
+                    long backoffMs = (long) Math.pow(2, attempt) * 1000L; // 2s, 4s, 8s...
+                    LOGGER.info("退避重试，等待 {}ms 后发起第 {} 次重试", Long.valueOf(backoffMs),
+                            Integer.valueOf(attempt + 1));
+                    try {
+                        Thread.sleep(backoffMs);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        LOGGER.warn("退避等待被中断，直接进行重试");
+                    }
+                }
             }
         }
         throw new IllegalStateException("Failed to call HTTP model gateway after retries", lastException);
@@ -205,9 +218,9 @@ public class HttpModelGateway implements ModelGateway {
             return;
         }
         try {
-            Path sessionDir = modelInputLogRoot.resolve(request.getSessionId());
+            Path sessionDir = resolveLogDirectory(request);
             Files.createDirectories(sessionDir);
-            int sequence = nextModelInputSequence(request.getSessionId());
+            int sequence = nextModelInputSequence(buildLogSequenceKey(request));
             String fileName = String.format("%04d-model_input.json", Integer.valueOf(sequence));
             Path file = sessionDir.resolve(fileName);
             Object jsonPayload = objectMapper.readValue(requestBody, Object.class);
@@ -220,11 +233,32 @@ public class HttpModelGateway implements ModelGateway {
         }
     }
 
-    private synchronized int nextModelInputSequence(String sessionId) {
-        Integer current = modelInputSequenceBySession.get(sessionId);
+    /**
+     * 不同用途的模型请求要各自独立编号，避免内部摘要请求污染业务主序列。
+     */
+    private synchronized int nextModelInputSequence(String sequenceKey) {
+        Integer current = modelInputSequenceBySession.get(sequenceKey);
         int next = current == null ? 1 : current.intValue() + 1;
-        modelInputSequenceBySession.put(sessionId, Integer.valueOf(next));
+        modelInputSequenceBySession.put(sequenceKey, Integer.valueOf(next));
         return next;
+    }
+
+    private Path resolveLogDirectory(ModelRequest request) {
+        Path sessionDir = modelInputLogRoot.resolve(request.getSessionId());
+        if (request == null || request.getRequestType() == ModelRequestType.BUSINESS) {
+            return sessionDir;
+        }
+        if (request.getRequestType() == ModelRequestType.CONTEXT_SUMMARY) {
+            return sessionDir.resolve("context-summary");
+        }
+        return sessionDir;
+    }
+
+    private String buildLogSequenceKey(ModelRequest request) {
+        if (request == null || isBlank(request.getSessionId())) {
+            return "";
+        }
+        return request.getSessionId() + "|" + request.getRequestType().name();
     }
 
     /**
@@ -383,6 +417,9 @@ public class HttpModelGateway implements ModelGateway {
         }
         Map<String, Object> message = new LinkedHashMap<String, Object>();
         message.put("role", modelMessage.getRole());
+        if (modelMessage.isSystem() && modelMessage.isSummaryMessage()) {
+            message.put("summary", Boolean.TRUE);
+        }
         if (modelMessage.hasToolCalls()) {
             message.put("content", isBlank(modelMessage.getContent()) ? "" : modelMessage.getContent());
             if (!isBlank(modelMessage.getReasoningContent())) {
@@ -526,6 +563,7 @@ public class HttpModelGateway implements ModelGateway {
         ModelMessage copy = new ModelMessage();
         copy.setRoleEnum(source.getRoleEnum());
         copy.setContent(source.getContent());
+        copy.setSummary(source.getSummary());
         copy.setReasoningContent(source.getReasoningContent());
         copy.setToolCallId(source.getToolCallId());
         copy.setToolName(source.getToolName());

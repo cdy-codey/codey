@@ -33,7 +33,16 @@ public class ToolExecutor {
     }
 
     public ToolResult execute(ToolInvocation invocation, String workingDirectory) {
-        WorkspaceToolContext effectiveContext = context == null ? null : context.withWorkingDirectory(workingDirectory);
+        return execute(invocation, workingDirectory, null);
+    }
+
+    /**
+     * 执行工具并注入租户 ID 到上下文，供调用层工具按租户维度做业务操作。
+     */
+    public ToolResult execute(ToolInvocation invocation, String workingDirectory, String tenantId) {
+        WorkspaceToolContext effectiveContext = context == null
+                ? null
+                : context.withWorkingDirectory(workingDirectory).withTenantId(tenantId);
         return registry.findByName(invocation.getToolName())
                 .map(tool -> ToolRegistry.adaptResult(tool.execute(invocation, effectiveContext)))
                 .orElseGet(() -> ToolResult.fail("Unknown tool: " + invocation.getToolName()));
@@ -60,22 +69,30 @@ public class ToolExecutor {
     }
 
     public List<ToolExecutionRecord> executeBatch(List<ToolInvocation> invocations, String workingDirectory) {
+        return executeBatch(invocations, workingDirectory, null);
+    }
+
+    /**
+     * 批量执行工具并注入租户 ID 到上下文。
+     */
+    public List<ToolExecutionRecord> executeBatch(List<ToolInvocation> invocations, String workingDirectory, String tenantId) {
         if (invocations == null || invocations.isEmpty()) {
             return Collections.emptyList();
         }
         if (invocations.size() == 1) {
             ToolInvocation invocation = invocations.get(0);
-            return Collections.singletonList(new ToolExecutionRecord(invocation, execute(invocation, workingDirectory)));
+            return Collections.singletonList(new ToolExecutionRecord(invocation, execute(invocation, workingDirectory, tenantId)));
         }
 
         ExecutorService executorService = Executors.newFixedThreadPool(invocations.size());
         try {
+            final String capturedTenantId = tenantId;
             List<Callable<ToolExecutionRecord>> tasks = new ArrayList<Callable<ToolExecutionRecord>>();
             for (final ToolInvocation invocation : invocations) {
                 tasks.add(new Callable<ToolExecutionRecord>() {
                     @Override
                     public ToolExecutionRecord call() {
-                        return new ToolExecutionRecord(invocation, execute(invocation, workingDirectory));
+                        return new ToolExecutionRecord(invocation, execute(invocation, workingDirectory, capturedTenantId));
                     }
                 });
             }

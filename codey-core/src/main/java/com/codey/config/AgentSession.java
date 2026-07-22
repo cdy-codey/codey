@@ -114,6 +114,10 @@ public class AgentSession {
         return conversationState.getChatHistory();
     }
 
+    public List<String> getChatHistoryBeforeRecentTail(int keepRecentCount) {
+        return conversationState.getChatHistoryBeforeRecentTail(keepRecentCount);
+    }
+
     public List<String> getToolResults() {
         return executionState.getToolResults();
     }
@@ -132,6 +136,10 @@ public class AgentSession {
 
     public List<ModelMessage> getModelTranscript() {
         return executionState.getModelTranscript();
+    }
+
+    public List<ModelMessage> getTranscriptBeforeLatestBundle() {
+        return executionState.getTranscriptBeforeLatestBundle();
     }
 
     public boolean hasExecutedToolRequest(String requestSignature) {
@@ -168,6 +176,14 @@ public class AgentSession {
 
     public void resetConsecutiveToolFailureCount() {
         loopMemoryState.resetConsecutiveToolFailureCount();
+    }
+
+    public int getLastContextSummaryTriggerChars() {
+        return loopMemoryState.getLastContextSummaryTriggerChars();
+    }
+
+    public void setLastContextSummaryTriggerChars(int lastContextSummaryTriggerChars) {
+        loopMemoryState.setLastContextSummaryTriggerChars(lastContextSummaryTriggerChars);
     }
 
     public boolean isReplanMode() {
@@ -249,8 +265,28 @@ public class AgentSession {
         sessionContext.appendIdentities(identities);
     }
 
+    public String getTenantId() {
+        return sessionContext.getTenantId();
+    }
+
+    public void setTenantId(String tenantId) {
+        sessionContext.setTenantId(tenantId);
+    }
+
+    public String getRuntimeContextSummary() {
+        return sessionContext.getRuntimeContextSummary();
+    }
+
+    public void setRuntimeContextSummary(String runtimeContextSummary) {
+        sessionContext.setRuntimeContextSummary(runtimeContextSummary);
+    }
+
     public void appendChatHistory(String content) {
         conversationState.appendChatHistory(content);
+    }
+
+    public void discardChatHistoryBeforeRecentTail(int keepRecentCount) {
+        conversationState.discardChatHistoryBeforeRecentTail(keepRecentCount);
     }
 
     public void recordChatTurn(String userMessage, String assistantMessage) {
@@ -291,6 +327,10 @@ public class AgentSession {
 
     public void appendToolResultMessage(String toolCallId, String toolName, String content) {
         executionState.appendToolResultMessage(toolCallId, toolName, content);
+    }
+
+    public void discardTranscriptBeforeLatestBundle() {
+        executionState.discardTranscriptBeforeLatestBundle();
     }
 
     /**

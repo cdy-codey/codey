@@ -63,6 +63,13 @@ public class ChatSessionLifecycleService {
      * 只在建会话时判定一次类型，后续轮次即使 workingDirectory 变成 sessionId 也不改类型。
      */
     public void registerSession(String sessionId, String requestedWorkingDirectory) {
+        registerSession(sessionId, requestedWorkingDirectory, null);
+    }
+
+    /**
+     * 注册会话并携带租户ID，便于调用层后续按租户维度做业务操作。
+     */
+    public void registerSession(String sessionId, String requestedWorkingDirectory, String tenantId) {
         if (isBlank(sessionId)) {
             return;
         }
@@ -78,6 +85,9 @@ public class ChatSessionLifecycleService {
         }
         if (isBlank(metadata.getWorkingDirectory())) {
             metadata.setWorkingDirectory(resolveStoredWorkingDirectory(sessionId, requestedWorkingDirectory, metadata.getSessionType()));
+        }
+        if (!isBlank(tenantId) && isBlank(metadata.getTenantId())) {
+            metadata.setTenantId(tenantId);
         }
         metadata.setLastActiveAt(now);
         writeSessionMetadata(metadata);
@@ -95,6 +105,17 @@ public class ChatSessionLifecycleService {
         }
         metadata.setLastActiveAt(now);
         writeSessionMetadata(metadata);
+    }
+
+    /**
+     * 按会话 ID 查询租户 ID，供调用层业务操作使用。
+     */
+    public String getTenantId(String sessionId) {
+        if (isBlank(sessionId)) {
+            return null;
+        }
+        SessionMetadata metadata = readSessionMetadata(sessionId);
+        return metadata == null ? null : metadata.getTenantId();
     }
 
     public void deleteSessionContent(String sessionId) {
@@ -503,6 +524,7 @@ public class ChatSessionLifecycleService {
         private String sessionId;
         private String sessionType;
         private String workingDirectory;
+        private String tenantId;
         private Long createdAt;
         private Long lastActiveAt;
 
@@ -528,6 +550,14 @@ public class ChatSessionLifecycleService {
 
         public void setWorkingDirectory(String workingDirectory) {
             this.workingDirectory = workingDirectory;
+        }
+
+        public String getTenantId() {
+            return tenantId;
+        }
+
+        public void setTenantId(String tenantId) {
+            this.tenantId = tenantId;
         }
 
         public Long getCreatedAt() {

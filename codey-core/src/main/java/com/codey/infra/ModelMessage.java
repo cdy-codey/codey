@@ -11,6 +11,7 @@ import java.util.List;
 public class ModelMessage {
     private ModelMessageRole role;
     private String content;
+    private Boolean summary;
     private String reasoningContent;
     private String toolCallId;
     private String toolName;
@@ -51,6 +52,19 @@ public class ModelMessage {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public Boolean getSummary() {
+        return summary;
+    }
+
+    public void setSummary(Boolean summary) {
+        this.summary = summary;
+    }
+
+    @JsonIgnore
+    public boolean isSummaryMessage() {
+        return Boolean.TRUE.equals(summary);
     }
 
     public String getReasoningContent() {
@@ -107,6 +121,12 @@ public class ModelMessage {
 
     public static ModelMessage system(String content) {
         return new ModelMessage(ModelMessageRole.SYSTEM, content);
+    }
+
+    public static ModelMessage systemSummary(String content) {
+        ModelMessage message = system(content);
+        message.setSummary(Boolean.TRUE);
+        return message;
     }
 
     public static ModelMessage user(String content) {

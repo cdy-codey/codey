@@ -2,6 +2,7 @@ package com.codey.loop;
 
 import com.codey.infra.ModelGateway;
 import com.codey.infra.ModelRequest;
+import com.codey.infra.ModelRequestType;
 import com.codey.infra.ModelResponse;
 import com.codey.infra.ModelStreamListener;
 import com.codey.infra.ModelToolCall;
@@ -92,6 +93,7 @@ final class ModelTurnExecutor {
         final String sessionId = session == null ? null : session.getSessionId();
         request.setSessionId(sessionId);
         request.setModelConfig(session == null ? null : session.getModelConfig());
+        request.setRequestType(ModelRequestType.BUSINESS);
         request.setMessages(promptPackage == null ? null : promptPackage.getMessages());
         request.setTools(toolRegistry.getToolDefinitions(visibleTools));
         request.setStreamListener(new ModelStreamListener() {

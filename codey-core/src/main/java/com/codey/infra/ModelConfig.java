@@ -13,7 +13,7 @@ public class ModelConfig {
     private boolean debugEnabled = false;
     private String debugDir = "sessions/model-debug";
     private int connectTimeoutMillis = 10000;
-    private int readTimeoutMillis = 30000;
+    private int readTimeoutMillis = 90000; // 90s：并行工具调用时模型需处理多个结果，避免 Read timed out
     private int maxRetries = 2;
 
     public String getProvider() {

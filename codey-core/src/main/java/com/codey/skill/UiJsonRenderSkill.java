@@ -34,6 +34,7 @@ public class UiJsonRenderSkill implements Skill {
                         + "form_data 协议：\n"
                         + "{\n"
                         + "  \"_view_type\": \"form_data\",\n"
+                        + "  \"summary\": \"对当前表单的简要解析，例如先给出总体判断、主要问题或填写建议\",\n"
                         + "  \"modules\": [\n"
                         + "    {\n"
                         + "      \"title\": \"基本信息\",\n"
@@ -72,11 +73,12 @@ public class UiJsonRenderSkill implements Skill {
                         + "\n"
                         + "输出规则：\n"
                         + "1. 最终完成时，必须把展示内容放进顶层 JSON 的 view 字段中，不要直接裸输出 _view_type JSON。\n"
-                        + "2. 合法示例：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"form_data\",\"modules\":[...]}}\n"
-                        + "3. form_data 中允许 object 与 list 混合分模块展示。\n"
-                        + "4. list 的 headers 必须与 data 中字段语义一致，避免表头和数据错位。\n"
-                        + "5. diff_data 只表达字段级差异，不要混入无关说明文字。\n"
-                        + "6. JSON 必须完整闭合，不能输出半截 JSON、注释或省略号。");
+                        + "2. 合法示例：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"form_data\",\"summary\":\"先给出简要判断\",\"modules\":[...]}}\n"
+                        + "3. form_data 中允许 object 与 list 混合分模块展示；如果用户需要先看结论，再看表单，可在 summary 中先给出 1-3 句简要解析。\n"
+                        + "4. summary 必须简洁，只做总体判断、风险提示或填写建议，不要重复整张表单的字段内容。\n"
+                        + "5. list 的 headers 必须与 data 中字段语义一致，避免表头和数据错位。\n"
+                        + "6. diff_data 只表达字段级差异，不要混入无关说明文字。\n"
+                        + "7. JSON 必须完整闭合，不能输出半截 JSON、注释或省略号。");
         definition.setSupportedIdentities(Arrays.asList("workspace-core"));
         definition.setIdentityMatchMode(IdentityMatchMode.ANY);
         definition.setOutputContract("Return the final answer through the top-level view field. Use text/form_data/diff_data views as appropriate.");

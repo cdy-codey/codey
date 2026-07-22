@@ -50,7 +50,8 @@ public class ChatController {
             ChatSession session = agentClient.openSession(normalized);
             chatSessionLifecycleService.registerSession(
                     session == null ? null : session.getSessionId(),
-                    normalized == null ? null : normalized.getWorkingDirectory()
+                    normalized == null ? null : normalized.getWorkingDirectory(),
+                    normalized == null ? null : normalized.getTenantId()
             );
             saveDisplayOptions(session == null ? null : session.getSessionId(), normalized);
             return ApiResponse.success("会话已创建", session);
@@ -72,7 +73,7 @@ public class ChatController {
             RunRequest normalized = normalize(request);
             normalized.setSessionId(sessionId);
             ChatSession session = agentClient.openSession(normalized);
-            chatSessionLifecycleService.registerSession(sessionId, normalized.getWorkingDirectory());
+            chatSessionLifecycleService.registerSession(sessionId, normalized.getWorkingDirectory(), normalized.getTenantId());
             saveDisplayOptions(sessionId, normalized);
             return ApiResponse.success("会话已恢复", session);
         } catch (IllegalArgumentException ex) {

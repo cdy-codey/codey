@@ -27,4 +27,13 @@ public interface ToolContext {
         }
         return attributes.get(key);
     }
+
+    /**
+     * 当前会话关联的租户 ID，供调用层工具按租户维度做业务操作。
+     * 默认从 attributes 中读取，子类可覆写以提供更高效实现。
+     */
+    default String getTenantId() {
+        Object value = getAttribute("tenantId");
+        return value == null ? null : String.valueOf(value);
+    }
 }
