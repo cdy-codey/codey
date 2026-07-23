@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.cdy-codey</groupId>
   <artifactId>codey-demo-api</artifactId>
-  <version>0.1.11</version>
+  <version>0.1.12</version>
   <name>codey-demo-api</name>
   <description>Spring Boot demo application for showcasing Codey business and workspace scenarios.</description>
   <url>https://github.com/cdy-codey/codey/codey-demo-api</url>
@@ -25,14 +25,14 @@
   <scm>
     <connection>scm:git:https://github.com/cdy-codey/codey.git/codey-demo-api</connection>
     <developerConnection>scm:git:https://github.com/cdy-codey/codey.git/codey-demo-api</developerConnection>
-    <tag>v0.1.11</tag>
+    <tag>v0.1.12</tag>
     <url>https://github.com/cdy-codey/codey/codey-demo-api</url>
   </scm>
   <dependencies>
     <dependency>
       <groupId>io.github.cdy-codey</groupId>
       <artifactId>codey-boot-starter</artifactId>
-      <version>0.1.11</version>
+      <version>0.1.12</version>
       <scope>compile</scope>
     </dependency>
     <dependency>

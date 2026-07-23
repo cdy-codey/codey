@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAiChat } from './useAiChat'
 import { formatTime, getMessageBlocks } from './chatPresentation'
 import { emitSystemAiAssistantEvent, registerAiAssistantController } from './assistantBridge'
+import UserChoiceCard from './UserChoiceCard.vue'
 
 const props = defineProps({
   title: {
@@ -255,6 +256,8 @@ const currentSessionScopeKey = ref('')
 const collapsed = ref(props.defaultCollapsed)
 const assistantVisible = ref(props.defaultVisible)
 const activeTableModal = ref(null)
+// 用户选择补充说明输入
+const choiceNote = ref('')
 
 function openTableModal(moduleData) {
   activeTableModal.value = moduleData
@@ -709,6 +712,7 @@ const {
   loadSessions,
   selectSession,
   sendPrompt,
+  submitChoice,
   ensureSessionReady,
   startNewSession,
   resetSessionScope,
@@ -987,6 +991,16 @@ async function handleClearSessions() {
 
 function clearErrorMessage() {
   errorMessage.value = ''
+}
+
+// 用户从选项列表中选择一项，直接将选项文本作为用户输入发送给 AI
+function handleUserChoice(optionLabel) {
+  if (isSending.value || !optionLabel) {
+    return
+  }
+  const note = choiceNote.value.trim()
+  choiceNote.value = ''
+  submitChoice(optionLabel, note || '')
 }
 
 function getRoleLabel(role) {
@@ -1518,6 +1532,17 @@ watch(
                             </table>
                           </div>
                         </div>
+
+                        <!-- 用户选择交互块 (user_choice) -->
+                        <UserChoiceCard
+                          v-else-if="block.type === 'user_choice'"
+                          v-model="choiceNote"
+                          :title="block.title"
+                          :description="block.description"
+                          :options="block.options"
+                          :disabled="isSending"
+                          @select="handleUserChoice"
+                        />
 
                         <div v-else-if="block.parsedUiView" class="ai-form-data-container">
                           <div v-if="block.parsedUiView.streaming" class="ai-form-streaming-placeholder" style="padding: 12px 0; color: #94a3b8; display: flex; align-items: center; gap: 8px;">
@@ -2643,4 +2668,6 @@ watch(
   opacity: 0;
   transform: translateY(calc(-50% + 10px));
 }
+
+/* ===== 用户选择按钮 ===== */
 </style>

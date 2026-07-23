@@ -18,7 +18,7 @@ const STREAM_EVENT_TYPES = [
   'tool_execution_started',
   'tool_call',
   'verification',
-  //'human_decision',
+  'human_decision',
   'task_status',
   'final_summary',
   'model_output',
@@ -562,7 +562,7 @@ function parseEventPayload(event) {
     tool_execution_started: () => {},
     debug_trace: () => {},
     verification: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
-   //human_decision: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
+    human_decision: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
   }
 
   function handleStreamEvent(eventType, event) {
@@ -665,6 +665,40 @@ function parseEventPayload(event) {
     } catch (error) {
       isSending.value = false
       applyUserFacingError(error, '发送消息失败', 'useAiChat.sendPrompt')
+    }
+  }
+
+  // 用户点击选项后，直接将选项文本作为用户输入发送给 AI
+  async function submitChoice(optionLabel, note = '') {
+    const label = normalizeContent(optionLabel).trim()
+    if (!label || isSending.value) {
+      return
+    }
+    const normalizedNote = normalizeContent(note).trim()
+
+    try {
+      errorMessage.value = ''
+      isSending.value = true
+      const liveSessionId = await ensureLiveSession(label)
+
+      // 聊天中显示选项文本，有备注时附加
+      const displayText = normalizedNote
+        ? `${label}（${normalizedNote}）`
+        : label
+      messages.value.push(createMessage('user', displayText))
+      syncLiveSessionSummary(displayText)
+      inputValue.value = ''
+      // 直接将选项内容和备注发送给 AI
+      const goal = normalizedNote ? `${label}\n备注: ${normalizedNote}` : label
+      await chatApi.sendMessage(
+        liveSessionId,
+        buildRequestPayload({
+          goal,
+        }),
+      )
+    } catch (error) {
+      isSending.value = false
+      applyUserFacingError(error, '发送选项失败', 'useAiChat.submitChoice')
     }
   }
 
@@ -783,6 +817,7 @@ function parseEventPayload(event) {
     loadSessions,
     selectSession,
     sendPrompt,
+    submitChoice,
     ensureSessionReady,
     startNewSession,
     resetSessionScope,

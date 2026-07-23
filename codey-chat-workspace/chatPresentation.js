@@ -55,12 +55,17 @@ export function getMessageBlocks(content, status) {
       }
     }
 
-    blocks.push({
-      type: 'code',
-      language,
-      content,
-      parsedUiView,
-    })
+    // user_choice 视图直接创建交互块，不显示为代码块
+    if (parsedUiView && parsedUiView._view_type === 'user_choice') {
+      blocks.push(...buildUiViewBlocks(parsedUiView, content))
+    } else {
+      blocks.push({
+        type: 'code',
+        language,
+        content,
+        parsedUiView,
+      })
+    }
     lastIndex = pattern.lastIndex
   }
 
@@ -111,6 +116,17 @@ function buildUiViewBlocks(view, rawContent) {
     return [{
       type: 'text',
       paragraphs: [typeof view.content === 'string' ? view.content : ''].filter(Boolean),
+    }]
+  }
+  // user_choice 渲染为用户选择交互块
+  if (view._view_type === 'user_choice') {
+    return [{
+      type: 'user_choice',
+      title: typeof view.title === 'string' ? view.title : '请选择',
+      description: typeof view.description === 'string' ? view.description : '',
+      options: Array.isArray(view.options) ? view.options.filter(
+        (opt) => opt && typeof opt.key === 'string' && typeof opt.label === 'string',
+      ) : [],
     }]
   }
   return [{

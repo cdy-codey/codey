@@ -61,6 +61,9 @@ public class PromptLayerComposer {
                 + "- 顶层 JSON 只允许使用这些字段：status、view、requiresHumanConfirmation、uncertaintyReason。\n"
                 + "- view 是最终展示内容的唯一入口。纯文本也必须放进 view 中，例如：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"text\",\"content\":\"...\"}}\n"
                 + "- 结构化内容也必须放进 view 中，例如：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"form_data\",\"modules\":[...]}}\n"
+                + "- 需要用户在多个选项中做出选择时，使用 user_choice 视图，例如：\n"
+                + "  {\"status\":\"FINISH\",\"view\":{\"_view_type\":\"user_choice\",\"title\":\"请选择处理方式\",\"description\":\"请选择一个选项以继续：\",\"options\":[{\"key\":\"A\",\"label\":\"选项一说明\",\"description\":\"更详细的描述信息\"},{\"key\":\"B\",\"label\":\"选项二说明\",\"description\":\"更详细的描述信息\"}]}}\n"
+                + "  user_choice 的 options 数组中每项必须包含 key(A-Z字母作为选项标识)和 label(简短选项文本)，description 为可选项。\n"
                 + "- 不要输出这种包装结构：{\"result\":{\"status\":\"FINISH\",\"view\":{...}}}\n"
                 + "- requiresHumanConfirmation 为 true 时，必须同时提供 uncertaintyReason。";
     }
