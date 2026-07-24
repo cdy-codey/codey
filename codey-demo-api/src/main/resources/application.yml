@@ -11,3 +11,16 @@ spring:
 # 附件上传目录（Demo 环境直接放在项目运行目录下）
 upload:
   directory: ./uploads
+
+codey:
+  model:
+    # Web Demo 当前直接走 HTTP 模型网关。
+    provider: http
+    endpoint: https://api.deepseek.com/chat/completions
+    model-name: deepseek-v4-pro
+    # 当前联调显式指定 key，避免受本机环境变量缺失影响。
+    api-key: ""
+    temperature: 0.2
+    connect-timeout-millis: 10000
+    read-timeout-millis: 30000
+    max-retries: 2

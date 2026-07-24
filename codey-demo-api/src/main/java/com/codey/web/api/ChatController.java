@@ -123,7 +123,9 @@ public class ChatController {
 
     private RunRequest normalize(RunRequest request) {
         // Web Demo 正式走会话级模型配置注入，配置来源可替换为数据库查询结果。
-        return demoSessionModelConfigService.applyDatabaseModelConfig(request);
+        //return demoSessionModelConfigService.applyDatabaseModelConfig(request);
+        //走默认配置入口
+        return  request;
     }
 
     private void saveDisplayOptions(String sessionId, RunRequest request) {
