@@ -3,7 +3,8 @@
 provider: http
 endpoint: "https://api.deepseek.com/chat/completions"
 modelName: "deepseek-v4-pro"
-apiKey: "sk-d24de3ac58ed46fe901e89caf5c92ec4"
+# 本地调试请通过环境变量注入，避免把真实密钥提交到仓库。
+apiKey: ""
 apiKeyEnv: _MODEL_API_KEY
 temperature: 0.2
 debugEnabled: false

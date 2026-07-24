@@ -2753,8 +2753,8 @@ mvn -Prelease clean deploy
 
 <server> 
  	 <id>${server}</id> 
- 	 <username>oV1FvU</username> 
- 	 <password>bh2V60ltcnZWPsczBXOxUoIRJHb0qmFhL</password> 
+    <username>YOUR_CENTRAL_TOKEN_USERNAME</username>
+    <password>YOUR_CENTRAL_TOKEN_PASSWORD</password>
  </server> 
  
  帮我设置maven仓库的setting
@@ -2794,8 +2794,8 @@ mvn -Prelease clean deploy
 ```xml
 <server>
   <id>central</id>
-  <username>oV1FvU</username>
-  <password>bh2V60ltcnZWPsczBXOxUoIRJHb0qmFhL</password>
+  <username>YOUR_CENTRAL_TOKEN_USERNAME</username>
+  <password>YOUR_CENTRAL_TOKEN_PASSWORD</password>
 </server>
 ```
 
@@ -2881,8 +2881,8 @@ mvn -s deploy-settings.xml -Prelease clean deploy
 
 <server> 
  	 <id>${server}</id> 
- 	 <username>oV1FvU</username> 
- 	 <password>bh2V60ltcnZWPsczBXOxUoIRJHb0qmFhL</password> 
+    <username>YOUR_CENTRAL_TOKEN_USERNAME</username>
+    <password>YOUR_CENTRAL_TOKEN_PASSWORD</password>
  </server> 
  
  
@@ -3191,9 +3191,9 @@ mvn install:install-file -Dfile=xxx.jar -DgroupId=io.github.cdy-codey -Dartifact
 
 **我已经做了什么**
 - 已生成 GPG 密钥，主 key id 是：
-  - `0B7AC66A1F50BBF3`
+  - `YOUR_GPG_KEY_ID`
 - 指纹是：
-  - `897CF07295467350C6663AEE0B7AC66A1F50BBF3`
+  - `YOUR_GPG_FINGERPRINT`
 - 已把公钥推送到：
   - `hkps://keyserver.ubuntu.com`
   - `hkps://keys.openpgp.org`
@@ -3207,7 +3207,7 @@ mvn install:install-file -Dfile=xxx.jar -DgroupId=io.github.cdy-codey -Dartifact
 - `keys.openpgp.org` 这类服务通常还需要你对邮箱做一次确认后，邮箱身份才会公开可查
 
 **你现在要做的**
-- 去看邮箱 `273797002@qq.com`
+- 去看邮箱 `your-email@example.com`
 - 找一封来自 `keys.openpgp.org` 的确认邮件
 - 点击里面的确认链接
 
@@ -3279,7 +3279,7 @@ mvn install:install-file -Dfile=xxx.jar -DgroupId=io.github.cdy-codey -Dartifact
 
 **到时候重试命令**
 ```bash
-mvn -s deploy-settings.xml -Prelease -pl codey-console,codey-boot-starter -am clean deploy "-Dgpg.executable=C:\Program Files\GnuPG\bin\gpg.exe" "-Dgpg.passphrase=273797002@qq.com"
+mvn -s deploy-settings.xml -Prelease -pl codey-console,codey-boot-starter -am clean deploy "-Dgpg.executable=C:\Program Files\GnuPG\bin\gpg.exe" "-Dgpg.passphrase=YOUR_GPG_PASSPHRASE"
 ```
 
 **补充说明**
@@ -3315,25 +3315,25 @@ mvn -s deploy-settings.xml -Prelease -pl codey-console,codey-boot-starter -am cl
 **你可以怎么查**
 - 先查公钥是否已经在公开 keyserver 上可见。
 - 你的 key id 是：
-  - `0B7AC66A1F50BBF3`
+  - `YOUR_GPG_KEY_ID`
 - 你的完整指纹是：
-  - `897CF07295467350C6663AEE0B7AC66A1F50BBF3`
+  - `YOUR_GPG_FINGERPRINT`
 
 **1. 在本机命令行查**
 - 查 `keys.openpgp.org`：
 
 ```bash
-"C:\Program Files\GnuPG\bin\gpg.exe" --keyserver hkps://keys.openpgp.org --recv-keys 0B7AC66A1F50BBF3
+"C:\Program Files\GnuPG\bin\gpg.exe" --keyserver hkps://keys.openpgp.org --recv-keys YOUR_GPG_KEY_ID
 ```
 
 - 查 `ubuntu keyserver`：
 
 ```bash
-"C:\Program Files\GnuPG\bin\gpg.exe" --keyserver hkps://keyserver.ubuntu.com --recv-keys 0B7AC66A1F50BBF3
+"C:\Program Files\GnuPG\bin\gpg.exe" --keyserver hkps://keyserver.ubuntu.com --recv-keys YOUR_GPG_KEY_ID
 ```
 
 - 如果能正常返回类似：
-  - `"cdy <273797002@qq.com>" not changed`
+  - `"Your Name <your-email@example.com>" not changed`
   - 或成功导入
 - 说明 **公开 keyserver 已经能看到你的公钥**。
 
@@ -3343,8 +3343,8 @@ mvn -s deploy-settings.xml -Prelease -pl codey-console,codey-boot-starter -am cl
 - [Ubuntu Keyserver](https://keyserver.ubuntu.com)
 
 可以直接搜：
-- `0B7AC66A1F50BBF3`
-- 或完整指纹 `897CF07295467350C6663AEE0B7AC66A1F50BBF3`
+- `YOUR_GPG_KEY_ID`
+- 或完整指纹 `YOUR_GPG_FINGERPRINT`
 
 **3. 最终判断标准**
 - 即使 keyserver 已经查得到，也不代表 Sonatype 当下立刻就能用到。
@@ -3409,8 +3409,8 @@ mvn -s deploy-settings.xml -Prelease -pl codey-console,codey-boot-starter -am cl
 - 不是“账号一样就行”
 - 而是 **签名必须还是用同一把私钥**，或者至少用一个 Sonatype 能识别的有效公钥体系
 - 你现在已经生成的 key 是：
-  - key id：`0B7AC66A1F50BBF3`
-  - 指纹：`897CF07295467350C6663AEE0B7AC66A1F50BBF3`
+  - key id：`YOUR_GPG_KEY_ID`
+  - 指纹：`YOUR_GPG_FINGERPRINT`
 
 **换机器后怎么继续**
 - 在新机器安装 `GPG`
@@ -3447,13 +3447,13 @@ mvn -s deploy-settings.xml -Prelease -pl codey-console,codey-boot-starter -am cl
 - 当前机器导出私钥：
 
 ```bash
-gpg --export-secret-keys --armor 0B7AC66A1F50BBF3 > private-key.asc
+gpg --export-secret-keys --armor YOUR_GPG_KEY_ID > private-key.asc
 ```
 
 - 导出公钥：
 
 ```bash
-gpg --export --armor 0B7AC66A1F50BBF3 > public-key.asc
+gpg --export --armor YOUR_GPG_KEY_ID > public-key.asc
 ```
 
 - 新机器导入：
@@ -3491,8 +3491,8 @@ gpg --import public-key.asc
 - 你的 **私钥现在已经在这台机器的 GPG 密钥环里**
 - 你的 **密码就是你刚才设置的那个密码**
 - 这次我帮你生成密钥时，用的是：
-  - 邮箱：`273797002@qq.com`
-  - 密码：`273797002@qq.com`
+  - 邮箱：`your-email@example.com`
+  - 密码：`YOUR_GPG_PASSPHRASE`
 
 **私钥现在存在哪里**
 - GnuPG 默认不会把私钥明文放成一个很好认的 `xxx.key` 文件给你看
@@ -3508,8 +3508,8 @@ gpg --import public-key.asc
 ```
 
 你现在这把 key 我们已经查到过，信息是：
-- key id：`0B7AC66A1F50BBF3`
-- 指纹：`897CF07295467350C6663AEE0B7AC66A1F50BBF3`
+- key id：`YOUR_GPG_KEY_ID`
+- 指纹：`YOUR_GPG_FINGERPRINT`
 
 **密码在哪里看**
 - 密码**不能被查看**
@@ -3518,19 +3518,19 @@ gpg --import public-key.asc
   - 自己记住
   - 或在使用时输入
 - 这次你设置的密码就是：
-  - `273797002@qq.com`
+  - `YOUR_GPG_PASSPHRASE`
 
 **如果你想换机器，真正要做的是导出私钥**
 因为私钥现在是在密钥环里，不是现成文件，所以要先导出：
 
 **导出私钥**
 ```bash
-"C:\Program Files\GnuPG\bin\gpg.exe" --export-secret-keys --armor 0B7AC66A1F50BBF3 > private-key.asc
+"C:\Program Files\GnuPG\bin\gpg.exe" --export-secret-keys --armor YOUR_GPG_KEY_ID > private-key.asc
 ```
 
 **导出公钥**
 ```bash
-"C:\Program Files\GnuPG\bin\gpg.exe" --export --armor 0B7AC66A1F50BBF3 > public-key.asc
+"C:\Program Files\GnuPG\bin\gpg.exe" --export --armor YOUR_GPG_KEY_ID > public-key.asc
 ```
 
 这样你就会得到两个文件：
@@ -3544,8 +3544,8 @@ gpg --import public-key.asc
 ```
 
 然后继续配置：
-- `GPG_KEY_ID=0B7AC66A1F50BBF3`
-- `GPG_PASSPHRASE=273797002@qq.com`
+- `GPG_KEY_ID=YOUR_GPG_KEY_ID`
+- `GPG_PASSPHRASE=YOUR_GPG_PASSPHRASE`
 
 **提醒**
 - `private-key.asc` 非常敏感
@@ -3558,7 +3558,7 @@ gpg --import public-key.asc
 
 **你现在最实用的理解**
 - 私钥：在 `C:\Users\Administrator\AppData\Roaming\gnupg` 这个密钥环里
-- 密码：就是你设置的 `273797002@qq.com`
+- 密码：就是你设置的 `YOUR_GPG_PASSPHRASE`
 - 如果想迁移：先导出成 `private-key.asc`
 
 如果你愿意，我下一步可以直接帮你：

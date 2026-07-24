@@ -4,9 +4,10 @@
     <servers>
         <server>
             <!-- 需要与 pom.xml 中的 publishingServerId=central 保持一致。 -->
+            <!-- 真实凭据请写到根目录 settings.xml（已被 .gitignore 忽略），不要再提交到仓库。 -->
             <id>central</id>
-            <username>oV1FvU</username>
-            <password>bh2V60ltcnZWPsczBXOxUoIRJHb0qmFhL</password>
+            <username>YOUR_CENTRAL_TOKEN_USERNAME</username>
+            <password>YOUR_CENTRAL_TOKEN_PASSWORD</password>
         </server>
     </servers>
 </settings>

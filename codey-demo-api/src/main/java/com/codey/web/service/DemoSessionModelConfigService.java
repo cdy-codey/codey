@@ -50,7 +50,9 @@ public class DemoSessionModelConfigService {
         databaseConfig.setProvider("http");
         databaseConfig.setEndpoint("https://api.deepseek.com/chat/completions");
         databaseConfig.setModelName("deepseek-v4-pro");
-        databaseConfig.setApiKey("sk-d24de3ac58ed46fe901e89caf5c92ec4");
+        // Demo 里只保留环境变量名，避免把真实密钥固化到仓库历史。
+        databaseConfig.setApiKey(null);
+        databaseConfig.setApiKeyEnv("_MODEL_API_KEY");
         databaseConfig.setTemperature(Double.valueOf(0.2d));
         databaseConfig.setConnectTimeoutMillis(Integer.valueOf(10000));
         databaseConfig.setReadTimeoutMillis(Integer.valueOf(30000));

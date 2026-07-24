@@ -24,3 +24,14 @@ codey-chat-workspace/dist/
 # Uploaded attachments (do not commit)
 uploads/
 **/uploads/
+
+# Local release credentials and secret material (do not commit)
+/deploy-settings.xml
+/settings.xml
+/.env
+/.env.*
+/private-key.asc
+/public-key.asc
+/*.pem
+/*.p12
+/*.pfx
