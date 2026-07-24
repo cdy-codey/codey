@@ -8,7 +8,7 @@ logs/
 **/logs/
 # Local runtime logs/artifacts (do not commit)
 **/sessions/
-**/workspace/
+workspace/
 **/node_modules/
 **/.vscode/
 .idea/
