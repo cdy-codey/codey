@@ -13,8 +13,8 @@
 
     <licenses>
         <license>
-            <name>Apache License 2.0</name>
-            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <name>Codey Non-Commercial Source Available License</name>
+            <url>https://github.com/cdy-codey/codey/blob/main/LICENSE</url>
             <distribution>repo</distribution>
         </license>
     </licenses>

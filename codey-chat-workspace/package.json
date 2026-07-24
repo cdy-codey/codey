@@ -28,7 +28,7 @@
     "assistant",
     "workspace"
   ],
-  "license": "MIT",
+  "license": "SEE LICENSE IN ../LICENSE",
   "peerDependencies": {
     "vue": "^3.4.0"
   },

@@ -1,5 +1,7 @@
 # Codey Maven Central Release Guide
 
+> 注意：本文包含部分历史发布记录。若文中出现与当前授权不一致的旧表述，请以仓库根目录 [LICENSE](../LICENSE) 为准；当前授权为非商用源码许可，禁止未经书面授权的商业使用。
+
 本文档用于把 `codey-common`、`codey-core`、`codey-console` 和 `codey-boot-starter` 作为正式产物发布到公共 Maven 仓库。
 
 ## 发布范围
