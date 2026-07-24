@@ -1,2 +1,12 @@
-# codey-console 默认应用配置。
-# 需要时可在这里补充默认工作目录等控制台专属配置。
+codey:
+  model:
+    # Web Demo 当前直接走 HTTP 模型网关。
+    provider: http
+    endpoint: https://api.deepseek.com/chat/completions
+    model-name: deepseek-v4-pro
+    # 当前联调显式指定 key，避免受本机环境变量缺失影响。
+    api-key: ""
+    temperature: 0.2
+    connect-timeout-millis: 10000
+    read-timeout-millis: 30000
+    max-retries: 2

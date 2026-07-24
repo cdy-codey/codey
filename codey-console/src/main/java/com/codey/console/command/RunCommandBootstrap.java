@@ -7,11 +7,10 @@ import com.codey.console.cli.CliToolRegistryFactory;
 import com.codey.console.common.ConsoleHumanConfirmationService;
 import com.codey.console.common.InteractiveChatConsole;
 import com.codey.console.common.WorkspaceRootResolver;
+import com.codey.config.ModelProperties;
 import com.codey.infra.AppConfig;
-import com.codey.infra.AppConfigLoader;
 import com.codey.infra.LocalWorkspaceGateway;
 import com.codey.infra.ModelConfig;
-import com.codey.infra.ModelConfigLoader;
 import com.codey.infra.ModelGateway;
 import com.codey.infra.ModelGatewayFactory;
 import com.codey.infra.ModelVerificationService;
@@ -26,8 +25,13 @@ import com.codey.task.TaskRunnerFactory;
 import com.codey.tools.ToolRegistry;
 import com.codey.verify.Verifier;
 import com.codey.verify.VerifierFactory;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -68,11 +72,12 @@ final class RunCommandBootstrap {
     }
 
     RunCommandRuntime bootstrap(RunCommandOptions options) {
-        AppConfig appConfig = new AppConfigLoader().load(resolveConfigPath(options.getAppConfigPath()));
+        AppConfig appConfig = loadConsoleAppConfig(resolveConfigPath(options.getAppConfigPath()));
         Path workspaceRoot = resolveWorkspaceRoot(options, appConfig);
         LocalWorkspaceGateway workspaceGateway = new LocalWorkspaceGateway(workspaceRoot);
         ObjectMapper objectMapper = new ObjectMapper();
-        ModelGateway modelGateway = createModelGateway(options, objectMapper);
+        ModelConfig modelConfig = resolveModelConfig(options);
+        ModelGateway modelGateway = new ModelGatewayFactory().create(modelConfig, objectMapper);
         CliModelVerificationRunner modelVerificationRunner = createModelVerificationRunner(modelGateway, objectMapper);
 
         if (options.isVerifyModelOnly()) {
@@ -103,7 +108,7 @@ final class RunCommandBootstrap {
                 taskRunner,
                 options.getSkillName(),
                 ".",
-                null,
+                toModelProperties(modelConfig),
                 null,
                 workspaceRoot,
                 sessionStore
@@ -138,10 +143,9 @@ final class RunCommandBootstrap {
         );
     }
 
-    private ModelGateway createModelGateway(RunCommandOptions options, ObjectMapper objectMapper) {
-        ModelConfigLoader modelConfigLoader = new ModelConfigLoader();
-        ModelConfig modelConfig = modelConfigLoader.load(resolveConfigPath(options.getModelConfigPath()));
-        modelConfig = modelConfigLoader.applyOverrides(
+    private ModelConfig resolveModelConfig(RunCommandOptions options) {
+        ModelConfig modelConfig = loadConsoleModelConfig(resolveModelConfigPath(options));
+        applyModelOverrides(
                 modelConfig,
                 options.getModelProvider(),
                 options.getModelEndpoint(),
@@ -155,7 +159,7 @@ final class RunCommandBootstrap {
             modelConfig.setDebugDir(options.getModelDebugDir());
         }
         modelConfig.setApiKey(resolveApiKey(modelConfig));
-        return new ModelGatewayFactory().create(modelConfig, objectMapper);
+        return modelConfig;
     }
 
     private TaskRunner createTaskRunner(RunCommandOptions options,
@@ -218,6 +222,177 @@ final class RunCommandBootstrap {
         return configuredPath;
     }
 
+    /**
+     * console 只在本模块内兼容聚合 YAML，避免把 CLI 兼容逻辑扩散到 core。
+     */
+    private AppConfig loadConsoleAppConfig(String configPath) {
+        AppConfig config = new AppConfig();
+        File file = toExistingFile(configPath);
+        if (file == null) {
+            return config;
+        }
+        try {
+            JsonNode rootNode = createYamlMapper().readTree(file);
+            JsonNode appNode = rootNode == null ? null : rootNode.path("codey");
+            if (appNode == null || appNode.isMissingNode() || appNode.isNull() || !appNode.isObject()) {
+                appNode = rootNode;
+            }
+            if (appNode == null || appNode.isMissingNode() || appNode.isNull()) {
+                return config;
+            }
+            AppConfig loaded = createYamlMapper().treeToValue(appNode, AppConfig.class);
+            return loaded == null ? config : loaded;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to load app config: " + configPath, exception);
+        }
+    }
+
+    /**
+     * 当独立 model.yaml 缺失时，回退到 app.yaml 里的 codey.model，
+     * 这样可以兼容“单文件聚合配置”的启动方式。
+     */
+    private String resolveModelConfigPath(RunCommandOptions options) {
+        String resolvedModelPath = resolveConfigPath(options.getModelConfigPath());
+        if (!isBlank(resolvedModelPath) && Paths.get(resolvedModelPath).toFile().exists()) {
+            return resolvedModelPath;
+        }
+        return resolveConfigPath(options.getAppConfigPath());
+    }
+
+    /**
+     * console 私有兼容层：同时支持独立 model.yaml 与 app.yaml 里的 codey.model。
+     */
+    private ModelConfig loadConsoleModelConfig(String configPath) {
+        ModelConfig config = new ModelConfig();
+        File file = toExistingFile(configPath);
+        if (file == null) {
+            return config;
+        }
+        try {
+            JsonNode rootNode = createYamlMapper().readTree(file);
+            JsonNode modelNode = rootNode == null ? null : rootNode.path("codey").path("model");
+            if (modelNode == null || modelNode.isMissingNode() || modelNode.isNull() || !modelNode.isObject()) {
+                modelNode = rootNode;
+            }
+            if (modelNode == null || modelNode.isMissingNode() || modelNode.isNull()) {
+                return config;
+            }
+            applyModelNode(config, modelNode);
+            return config;
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to load model config: " + configPath, exception);
+        }
+    }
+
+    private void applyModelOverrides(ModelConfig config,
+                                     String provider,
+                                     String endpoint,
+                                     String modelName,
+                                     String apiKey) {
+        if (!isBlank(provider)) {
+            config.setProvider(provider);
+        }
+        if (!isBlank(endpoint)) {
+            config.setEndpoint(endpoint);
+        }
+        if (!isBlank(modelName)) {
+            config.setModelName(modelName);
+        }
+        if (!isBlank(apiKey)) {
+            config.setApiKey(apiKey);
+        }
+    }
+
+    private void applyModelNode(ModelConfig config, JsonNode modelNode) {
+        if (config == null || modelNode == null || modelNode.isNull()) {
+            return;
+        }
+        setIfPresent(modelNode, "provider", config::setProvider);
+        setIfPresent(modelNode, "endpoint", config::setEndpoint);
+        setIfPresent(modelNode, "api-key", config::setApiKey);
+        setIfPresent(modelNode, "apiKey", config::setApiKey);
+        setIfPresent(modelNode, "api-key-env", config::setApiKeyEnv);
+        setIfPresent(modelNode, "apiKeyEnv", config::setApiKeyEnv);
+        setIfPresent(modelNode, "model-name", config::setModelName);
+        setIfPresent(modelNode, "modelName", config::setModelName);
+        if (modelNode.hasNonNull("temperature")) {
+            config.setTemperature(modelNode.path("temperature").asDouble());
+        }
+        if (modelNode.hasNonNull("debug-enabled")) {
+            config.setDebugEnabled(modelNode.path("debug-enabled").asBoolean());
+        }
+        if (modelNode.hasNonNull("debugEnabled")) {
+            config.setDebugEnabled(modelNode.path("debugEnabled").asBoolean());
+        }
+        setIfPresent(modelNode, "debug-dir", config::setDebugDir);
+        setIfPresent(modelNode, "debugDir", config::setDebugDir);
+        if (modelNode.hasNonNull("connect-timeout-millis")) {
+            config.setConnectTimeoutMillis(modelNode.path("connect-timeout-millis").asInt());
+        }
+        if (modelNode.hasNonNull("connectTimeoutMillis")) {
+            config.setConnectTimeoutMillis(modelNode.path("connectTimeoutMillis").asInt());
+        }
+        if (modelNode.hasNonNull("read-timeout-millis")) {
+            config.setReadTimeoutMillis(modelNode.path("read-timeout-millis").asInt());
+        }
+        if (modelNode.hasNonNull("readTimeoutMillis")) {
+            config.setReadTimeoutMillis(modelNode.path("readTimeoutMillis").asInt());
+        }
+        if (modelNode.hasNonNull("max-retries")) {
+            config.setMaxRetries(modelNode.path("max-retries").asInt());
+        }
+        if (modelNode.hasNonNull("maxRetries")) {
+            config.setMaxRetries(modelNode.path("maxRetries").asInt());
+        }
+    }
+
+    private void setIfPresent(JsonNode node, String fieldName, StringValueSetter setter) {
+        if (node == null || setter == null || isBlank(fieldName) || !node.hasNonNull(fieldName)) {
+            return;
+        }
+        String value = node.path(fieldName).asText();
+        if (!isBlank(value)) {
+            setter.set(value);
+        }
+    }
+
+    private ObjectMapper createYamlMapper() {
+        return new ObjectMapper(new YAMLFactory())
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    }
+
+    private File toExistingFile(String configPath) {
+        if (isBlank(configPath)) {
+            return null;
+        }
+        File file = new File(configPath);
+        if (!file.exists()) {
+            return null;
+        }
+        return file;
+    }
+
+    /**
+     * console 启动阶段读取到的默认模型配置，需要继续透传给 AgentClient，
+     * 这样非交互式 `--goal` 流程也能复用同一份配置。
+     */
+    private ModelProperties toModelProperties(ModelConfig modelConfig) {
+        if (modelConfig == null) {
+            return null;
+        }
+        ModelProperties properties = new ModelProperties();
+        properties.setProvider(modelConfig.getProvider());
+        properties.setEndpoint(modelConfig.getEndpoint());
+        properties.setModelName(modelConfig.getModelName());
+        properties.setApiKey(modelConfig.getApiKey());
+        properties.setApiKeyEnv(modelConfig.getApiKeyEnv());
+        properties.setTemperature(modelConfig.getTemperature());
+        properties.setConnectTimeoutMillis(Integer.valueOf(modelConfig.getConnectTimeoutMillis()));
+        properties.setReadTimeoutMillis(Integer.valueOf(modelConfig.getReadTimeoutMillis()));
+        properties.setMaxRetries(Integer.valueOf(modelConfig.getMaxRetries()));
+        return properties;
+    }
+
     private String resolveApiKey(ModelConfig modelConfig) {
         if (modelConfig != null && !isBlank(modelConfig.getApiKey())) {
             return modelConfig.getApiKey();
@@ -233,5 +408,9 @@ final class RunCommandBootstrap {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private interface StringValueSetter {
+        void set(String value);
     }
 }
