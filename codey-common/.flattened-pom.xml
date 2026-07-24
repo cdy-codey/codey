@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.cdy-codey</groupId>
   <artifactId>codey-common</artifactId>
-  <version>0.1.12</version>
+  <version>0.1.13</version>
   <name>codey-common</name>
   <description>Shared DTOs, tool contracts and metadata models for Codey integrations.</description>
   <url>https://github.com/cdy-codey/codey/codey-common</url>
@@ -25,7 +25,7 @@
   <scm>
     <connection>scm:git:https://github.com/cdy-codey/codey.git/codey-common</connection>
     <developerConnection>scm:git:https://github.com/cdy-codey/codey.git/codey-common</developerConnection>
-    <tag>v0.1.12</tag>
+    <tag>v0.1.13</tag>
     <url>https://github.com/cdy-codey/codey/codey-common</url>
   </scm>
 </project>
