@@ -181,13 +181,6 @@ public class AutoConfiguration {
     @Bean
     @Qualifier("BuiltinTool")
     @ConditionalOnMissingBean
-    public EditJsonTool editJsonTool() {
-        return new EditJsonTool();
-    }
-
-    @Bean
-    @Qualifier("BuiltinTool")
-    @ConditionalOnMissingBean
     public ApplyPatchTool applyPatchTool() {
         return new ApplyPatchTool();
     }

@@ -39,7 +39,7 @@ public class ReadJsonTool extends AbstractWorkspaceTool {
 
     @Override
     public String description() {
-        return "Primary reading tool for .json files. Prefer this over read_file for JSON. Read a JSON file or subtree by pointer and return formatted numbered lines.";
+        return "Read a JSON file or a JSON subtree by pointer and return formatted numbered lines.";
     }
 
     @Override

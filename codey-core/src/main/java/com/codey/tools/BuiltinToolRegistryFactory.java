@@ -17,12 +17,9 @@ public class BuiltinToolRegistryFactory {
         toolRegistry.registerBuiltin(new ListWorkspaceTool(workspaceGateway));
         toolRegistry.registerBuiltin(new ProjectMapTool(workspaceGateway));
         toolRegistry.registerBuiltin(new ReadFileTool(workspaceGateway));
-        toolRegistry.registerBuiltin(new ReadJsonTool());
         toolRegistry.registerBuiltin(new SearchContentTool(workspaceGateway));
-        toolRegistry.registerBuiltin(new SearchJsonTool());
         toolRegistry.registerBuiltin(new WriteFileTool());
         toolRegistry.registerBuiltin(new EditFileTool());
-        toolRegistry.registerBuiltin(new EditJsonTool());
         toolRegistry.registerBuiltin(new ApplyPatchTool());
         toolRegistry.registerBuiltin(new DeleteFileTool());
 

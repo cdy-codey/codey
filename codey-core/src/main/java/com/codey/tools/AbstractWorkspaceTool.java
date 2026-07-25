@@ -80,15 +80,11 @@ public abstract class AbstractWorkspaceTool implements ToolSpec {
         if ("list_workspace".equals(toolName) || "project_map".equals(toolName)) {
             return "workspace";
         }
-        if ("read_file".equals(toolName)
-                || "read_json".equals(toolName)
-                || "search_content".equals(toolName)
-                || "search_json".equals(toolName)) {
+        if ("read_file".equals(toolName) || "search_content".equals(toolName)) {
             return "inspection";
         } 
         if ("write_file".equals(toolName)
                 || "edit_file".equals(toolName)
-                || "edit_json".equals(toolName)
                 || "apply_structured_patch".equals(toolName)
                 || "delete_file".equals(toolName)
                 || "edit_code".equals(toolName)) {
