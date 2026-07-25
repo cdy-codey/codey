@@ -212,10 +212,10 @@ async function handleOpenAssistant() {
           '帮我从采购需求文件中提取信息填到表单',
         ],
         // 打开助手后自动发起首轮检查，减少手工点选建议语句的步骤。
-        autoSendOnOpen: {
-          prompt: '请先读取当前采购申请表单上下文，检查表单是否缺少关键信息、是否存在不合理设备配置，并给出一版可直接回填的优化建议。',
-          onlyWhenEmpty: true,
-        },
+        //autoSendOnOpen: {
+        //  prompt: '请先读取当前采购申请表单上下文，检查表单是否缺少关键信息、是否存在不合理设备配置，并给出一版可直接回填的优化建议。',
+        //  onlyWhenEmpty: true,
+        //},
         currentFileKey: aiContextFileKey,
         formDisplayName: '采购申请表单',
         pagePayloadFileKey: aiContextFileKey,

@@ -296,12 +296,21 @@ function applyAiAutofillPayload(payload = {}) {
   }
 }
 
+// 折叠态下从页面头部重新打开 AI 助手
+function handleToggleAiAssistant() {
+  if (aiCollapsed.value) {
+    assistantRef.value.expandAssistant?.()
+  }
+}
+
 async function triggerAiAutofill() {
   if (!assistantRef.value?.sendPrompt) {
     ElMessage.warning('AI 助手暂未初始化完成')
     return
   }
   try {
+    // 确保助手面板处于展开状态，避免折叠态下发消息用户看不到交互过程。
+    assistantRef.value.expandAssistant?.()
     // 自动填写按钮只是在右侧聊天里代替操作人发一句“请自动填写”，不再维护专用提示词。
     await assistantRef.value.sendPrompt(AUTO_FILL_CHAT_MESSAGE)
     ElMessage.success('已发起自动填写请求')
@@ -363,6 +372,9 @@ onMounted(async () => {
 
               <el-space wrap>
                 <el-button @click="loadScenarioContext(true)">重置演示数据</el-button>
+                <el-button v-if="aiCollapsed" type="primary" @click="handleToggleAiAssistant">
+                  打开 AI 助手
+                </el-button>
                 <el-button type="primary" @click="triggerAiAutofill">
                   AI 自动填写
                 </el-button>
@@ -683,8 +695,8 @@ onMounted(async () => {
 }
 
 .assistant-panel {
-  width: 35%;
-  flex: 0 0 35%;
+  width: clamp(320px, 35vw, 480px);
+  flex: 0 0 clamp(320px, 35vw, 480px);
   /* 右侧聊天区需要给页面顶栏和外层留白预留高度，避免底部发送框被挤出视口。 */
   position: sticky;
   top: 12px;
@@ -848,12 +860,13 @@ onMounted(async () => {
   word-break: break-word;
 }
 
-@media (max-width: 1440px) {
+@media (max-width: 1100px) {
   .page-shell {
     flex-direction: column;
   }
 
   .assistant-panel {
+    order: -1;
     width: 100%;
     flex-basis: auto;
     position: static;

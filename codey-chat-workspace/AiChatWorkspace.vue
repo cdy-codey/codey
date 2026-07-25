@@ -403,6 +403,14 @@ function toggleCollapsed() {
   emit('collapse-change', collapsed.value)
 }
 
+// 业务侧主动展开助手面板（如点击“AI 自动填写”按钮时确保聊天可见）
+function expandAssistant() {
+  if (collapsed.value) {
+    collapsed.value = false
+    emit('collapse-change', false)
+  }
+}
+
 function normalizeWorkspacePath(value) {
   return typeof value === 'string' ? value.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : ''
 }
@@ -1172,6 +1180,8 @@ defineExpose({
   openAssistant,
   closeAssistant,
   toggleAssistant,
+  toggleCollapsed,
+  expandAssistant,
   isSending,
   syncPagePayloadToWorkspace,
   notifyTaskEnded,

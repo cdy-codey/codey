@@ -35,3 +35,4 @@ uploads/
 /*.pem
 /*.p12
 /*.pfx
+**/application-dev.yml
