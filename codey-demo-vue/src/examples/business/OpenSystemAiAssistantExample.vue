@@ -207,9 +207,18 @@ async function handleOpenAssistant() {
         identitiesValue: ['programming','workspace-core'],
         welcomeMessage:'您好！我是您的codey助手，可以帮您填写和审查采购申请单。请问有什么可以帮助您的？',
         welcomeSuggestions: [
-          '帮我检查表单是否符合政府采购规定',
-          '帮我校验和补充表单内容',
-          '帮我从采购需求文件中提取信息填到表单',
+          {
+            label: '采购合规检查',
+            content: '帮我检查表单是否符合政府采购规定',
+          },
+          {
+            label: '校验补全表单',
+            content: '帮我校验和补充表单内容',
+          },
+          {
+            label: '提取附件信息填表',
+            content: '帮我从采购需求文件中提取信息填到表单',
+          },
         ],
         // 打开助手后自动发起首轮检查，减少手工点选建议语句的步骤。
         //autoSendOnOpen: {

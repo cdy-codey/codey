@@ -1,6 +1,5 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import {
-  buildToolResultPreview,
   extractAssistantContentFromFinalResult,
   extractFinalResultPayload,
   extractFinalSummaryText,
@@ -73,6 +72,7 @@ export function useAiChat(options = {}) {
   const archivedSessions = ref([])
   const messageSeed = ref(0)
   const messages = ref(createWelcomeMessages())
+  const pendingToolCalls = ref([])
   const eventSource = ref(null)
   const activeAssistantId = ref('')
   const resumeContext = ref(null)
@@ -222,7 +222,27 @@ export function useAiChat(options = {}) {
     if (!Array.isArray(rawValue)) {
       return []
     }
-    return rawValue.filter((item) => typeof item === 'string' && item.trim().length > 0)
+    return rawValue.map((item) => {
+      if (typeof item === 'string' && item.trim().length > 0) {
+        const content = item.trim()
+        return {
+          label: content,
+          content,
+        }
+      }
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return null
+      }
+      const label = typeof item.label === 'string' ? item.label.trim() : ''
+      const content = typeof item.content === 'string' ? item.content.trim() : ''
+      if (!label || !content) {
+        return null
+      }
+      return {
+        label,
+        content,
+      }
+    }).filter(Boolean)
   }
 
   function nextMessageId(prefix) {
@@ -244,6 +264,7 @@ export function useAiChat(options = {}) {
 
   function resetComposerState() {
     activeAssistantId.value = ''
+    pendingToolCalls.value = []
     isSending.value = false
   }
   function isEmptyAssistantMessage(message) {
@@ -312,9 +333,13 @@ export function useAiChat(options = {}) {
         return existing
       }
     }
-    const message = createMessage('assistant', '', { live: true })
+    const message = createMessage('assistant', '', {
+      live: true,
+      toolCalls: pendingToolCalls.value.slice(),
+    })
     messages.value.push(message)
     activeAssistantId.value = message.id
+    pendingToolCalls.value = []
     return message
   }
 
@@ -324,6 +349,25 @@ export function useAiChat(options = {}) {
     }
     const merged = new Set([...(message.toolCalls || []), ...toolCalls.filter(Boolean)])
     message.toolCalls = Array.from(merged)
+  }
+
+  function appendToolCalls(toolCalls = []) {
+    const normalized = Array.isArray(toolCalls)
+      ? toolCalls.map((item) => normalizeContent(item).trim()).filter(Boolean)
+      : []
+    if (!normalized.length) {
+      return
+    }
+    const currentId = activeAssistantId.value
+    if (currentId) {
+      const existing = messages.value.find((item) => item.id === currentId)
+      if (existing) {
+        mergeToolCalls(existing, normalized)
+        return
+      }
+    }
+    const merged = new Set([...(pendingToolCalls.value || []), ...normalized])
+    pendingToolCalls.value = Array.from(merged)
   }
 
   function syncLiveSessionSummary(firstPrompt) {
@@ -435,8 +479,7 @@ function parseEventPayload(event) {
   }
 
   function handleModelToolCallStarted(payload) {
-    const message = ensureActiveAssistantMessage()
-    mergeToolCalls(message, [normalizeContent(payload?.payload?.displayName || payload?.message)])
+    appendToolCalls([payload?.payload?.displayName || payload?.message])
   }
 
   function handleTaskStatus(payload) {
@@ -454,6 +497,7 @@ function parseEventPayload(event) {
     if (terminal) {
       const message = payload?.payload?.message || payload?.message || '任务执行失败'
       errorMessage.value = message
+      pendingToolCalls.value = []
       closeActiveAssistantMessage()
       isSending.value = false
       invokeHook('onTaskFailed', { sessionId: sessionId.value, message, payload })
@@ -491,24 +535,16 @@ function parseEventPayload(event) {
       payload?.payload?.request?.tool_name ||
       payload?.payload?.name ||
       ''
-    closeActiveAssistantMessage()
-    messages.value.push(
-      createMessage('tool', buildToolResultPreview(payload), {
-        name: normalizeContent(payload?.payload?.displayName || payload?.payload?.request?.displayName),
-        live: false,
-      }),
-    )
+    appendToolCalls([
+      payload?.payload?.displayName ||
+      payload?.payload?.request?.displayName ||
+      toolName,
+    ])
     invokeHook('onToolCall', { sessionId: sessionId.value, toolName, payload })
   }
 
   function handleVerificationOrHumanDecision(payload, eventType) {
-    closeActiveAssistantMessage()
-    messages.value.push(
-      createMessage('tool', payload?.message || payload?.stage || eventType, {
-        name: eventType,
-        live: false,
-      }),
-    )
+    appendToolCalls([payload?.payload?.displayName || payload?.stage || payload?.message || eventType])
   }
 
   function handleSecurityEvent(payload) {

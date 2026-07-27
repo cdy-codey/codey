@@ -389,7 +389,30 @@ const effectiveShowThinking = computed(() => resolveAssistantBooleanProp('showTh
 const effectiveWelcomeMessage = computed(() => resolveAssistantStringProp('welcomeMessage', '直接输入任务即可开始。'))
 const effectiveWelcomeSuggestions = computed(() => {
   const value = resolveAssistantProp('welcomeSuggestions')
-  return Array.isArray(value) ? value.filter((s) => typeof s === 'string' && s.trim()) : []
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.map((item) => {
+    if (typeof item === 'string' && item.trim()) {
+      const content = item.trim()
+      return {
+        label: content,
+        content,
+      }
+    }
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return null
+    }
+    const label = typeof item.label === 'string' ? item.label.trim() : ''
+    const content = typeof item.content === 'string' ? item.content.trim() : ''
+    if (!label || !content) {
+      return null
+    }
+    return {
+      label,
+      content,
+    }
+  }).filter(Boolean)
 })
 const effectiveAutoSendOnOpen = computed(() => normalizeAutoSendOnOpenConfig(resolveAssistantProp('autoSendOnOpen')))
 const effectiveTenantIdValue = computed(() => resolveAssistantStringProp('tenantIdValue', ''))
@@ -932,12 +955,48 @@ async function tryAutoSendOnOpen(shouldSend = shouldAutoSendOnOpen()) {
   await handleSend(effectiveAutoSendOnOpen.value.prompt)
 }
 
-// 点击建议语句自动发送
-function sendSuggestion(suggestionText) {
+// 点击快捷标签时展示 label，但实际发送 content。
+function sendSuggestion(suggestion) {
   if (isSending.value) {
     return
   }
-  handleSend(suggestionText)
+  const content = typeof suggestion === 'string'
+    ? suggestion.trim()
+    : (typeof suggestion?.content === 'string' ? suggestion.content.trim() : '')
+  if (!content) {
+    return
+  }
+  handleSend(content)
+}
+
+function getSuggestionIconType(suggestion) {
+  const explicitIcon = typeof suggestion?.icon === 'string' ? suggestion.icon.trim().toLowerCase() : ''
+  if (explicitIcon) {
+    return explicitIcon
+  }
+  const label = typeof suggestion?.label === 'string' ? suggestion.label.trim() : ''
+  const content = typeof suggestion?.content === 'string' ? suggestion.content.trim() : ''
+  const text = `${label} ${content}`.toLowerCase()
+
+  if (/挂号|预约|排班|schedule/.test(text)) {
+    return 'calendar'
+  }
+  if (/处方|药|开方|prescription/.test(text)) {
+    return 'pill'
+  }
+  if (/缴费|支付|费用|付款|pay/.test(text)) {
+    return 'card'
+  }
+  if (/报告|结果|发报告|report/.test(text)) {
+    return 'document'
+  }
+  if (/校验|检查|合规|verify|check/.test(text)) {
+    return 'shield'
+  }
+  if (/提取|填写|填表|表单|extract|form/.test(text)) {
+    return 'edit'
+  }
+  return 'spark'
 }
 
 async function handleStartNewSession() {
@@ -1488,6 +1547,23 @@ watch(
               <template v-if="isAssistantMessage(message.role)">
                 <div class="assistant-bubble-shell" :style="getAssistantBubbleStyle()">
                   <div class="assistant-bubble-card">
+                    <div
+                      v-if="message.toolCalls?.length"
+                      class="assistant-tool-call-bar"
+                    >
+                      <div
+                        v-for="(toolCall, toolIndex) in message.toolCalls"
+                        :key="`${message.id}-tool-${toolIndex}-${toolCall}`"
+                        class="assistant-tool-call-pill"
+                      >
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-5.8 5.8a1 1 0 0 0 0 1.4l1.2 1.2a1 1 0 0 0 1.4 0l5.8-5.8a4 4 0 0 0 5.4-5.4l-2.2 2.2-2-2 2.6-2.8z" />
+                        </svg>
+                        <span class="assistant-tool-call-name">{{ toolCall }}</span>
+                        <span class="assistant-tool-call-status">完成</span>
+                      </div>
+                    </div>
+
                     <transition name="reasoning-fade">
                       <div
                         v-if="shouldShowReasoning(message)"
@@ -1749,24 +1825,6 @@ watch(
                       </template>
                     </div>
 
-                    <!-- 欢迎消息建议语句，点击自动发送 -->
-                    <div v-if="message.suggestions?.length" style="display: flex; flex-direction: column; gap: 2px; margin-top: 10px;">
-                      <template v-for="(suggestion, sIdx) in message.suggestions" :key="`sug-${sIdx}`">
-                        <button
-                          class="welcome-suggestion-btn"
-                          :disabled="isSending"
-                          @click="sendSuggestion(suggestion)"
-                        >
-                          <span class="suggestion-index">{{ sIdx + 1 }}.</span>
-                          <span class="suggestion-text">{{ suggestion }}</span>
-                          <!-- 箭头图标 -->
-                          <svg class="suggestion-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                          </svg>
-                        </button>
-                      </template>
-                    </div>
                     </template>
 
                     <div v-else-if="shouldShowAssistantThinkingPlaceholder(message)" class="assistant-thinking-placeholder">
@@ -1912,6 +1970,122 @@ watch(
               class="ai-input"
               placeholder="请输入工作目录"
             />
+          </div>
+
+          <div v-if="effectiveWelcomeSuggestions.length" class="welcome-suggestion-list composer-suggestion-list">
+            <template v-for="(suggestion, sIdx) in effectiveWelcomeSuggestions" :key="`composer-sug-${sIdx}-${suggestion.label || suggestion}`">
+              <button
+                class="welcome-suggestion-btn"
+                :disabled="isSending"
+                @click="sendSuggestion(suggestion)"
+              >
+                <span class="suggestion-icon" :class="`suggestion-icon--${getSuggestionIconType(suggestion)}`">
+                  <svg
+                    v-if="getSuggestionIconType(suggestion) === 'calendar'"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="5" width="18" height="16" rx="3" />
+                    <line x1="16" y1="3" x2="16" y2="7" />
+                    <line x1="8" y1="3" x2="8" y2="7" />
+                    <line x1="3" y1="11" x2="21" y2="11" />
+                  </svg>
+                  <svg
+                    v-else-if="getSuggestionIconType(suggestion) === 'pill'"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M10.5 13.5 20 4a4.243 4.243 0 0 0-6-6l-9.5 9.5a4.243 4.243 0 1 0 6 6Z" transform="translate(0 4)" />
+                    <line x1="9" y1="15" x2="15" y2="9" />
+                  </svg>
+                  <svg
+                    v-else-if="getSuggestionIconType(suggestion) === 'card'"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="5" width="18" height="14" rx="3" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                    <line x1="7" y1="15" x2="11" y2="15" />
+                  </svg>
+                  <svg
+                    v-else-if="getSuggestionIconType(suggestion) === 'document'"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 3 14 8 19 8" />
+                    <line x1="9" y1="13" x2="15" y2="13" />
+                    <line x1="9" y1="17" x2="13" y2="17" />
+                  </svg>
+                  <svg
+                    v-else-if="getSuggestionIconType(suggestion) === 'shield'"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-3z" />
+                    <path d="m9.5 12 1.7 1.7L14.8 10" />
+                  </svg>
+                  <svg
+                    v-else-if="getSuggestionIconType(suggestion) === 'edit'"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+                  </svg>
+                  <svg
+                    v-else
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" />
+                  </svg>
+                </span>
+                <span class="suggestion-text">{{ suggestion.label || suggestion }}</span>
+              </button>
+            </template>
           </div>
 
           <!-- 主输入框 -->
@@ -2591,6 +2765,40 @@ watch(
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
+.assistant-tool-call-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+
+.assistant-tool-call-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 10px;
+  color: #2563eb;
+  background: linear-gradient(180deg, #eef5ff 0%, #e7f0ff 100%);
+  border: 1px solid #c6d8ff;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.assistant-tool-call-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-tool-call-status {
+  color: #64748b;
+  font-weight: 500;
+}
+
 .assistant-text-block {
   color: #1f2937;
   line-height: 1.8;
@@ -2921,54 +3129,89 @@ watch(
   color: #ffffff;
 }
 
-/* 欢迎消息建议链接 */
+.welcome-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.composer-suggestion-list {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+/* 欢迎消息快捷标签 */
 .welcome-suggestion-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 0;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #6366f1;
-  background: none;
-  border: none;
-  border-bottom: 1px dashed transparent;
+  padding: 6px 12px;
+  font-size: 13px;
+  line-height: 1.2;
+  color: #4b5563;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #d9e0ea;
+  border-radius: 999px;
   cursor: pointer;
-  text-align: left;
-  transition: all 0.15s ease;
+  text-align: center;
+  transition: all 0.15s ease, box-shadow 0.15s ease;
   font-family: inherit;
-  width: fit-content;
+  width: auto;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
 }
 .welcome-suggestion-btn:hover {
-  color: #4f46e5;
-  border-bottom-color: #4f46e5;
+  color: #334155;
+  border-color: #c8d3e1;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f6fa 100%);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
 }
 .welcome-suggestion-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
+.suggestion-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+
+.suggestion-icon--calendar {
+  color: #64748b;
+}
+
+.suggestion-icon--pill {
+  color: #f59e0b;
+}
+
+.suggestion-icon--card {
+  color: #eab308;
+}
+
+.suggestion-icon--document {
+  color: #94a3b8;
+}
+
+.suggestion-icon--shield {
+  color: #2563eb;
+}
+
+.suggestion-icon--edit {
+  color: #3b82f6;
+}
+
+.suggestion-icon--spark {
+  color: #8b5cf6;
+}
+
 .suggestion-text {
   min-width: 0;
-}
-
-.suggestion-index {
-  flex-shrink: 0;
-  font-weight: 600;
-  color: #a5b4fc;
-}
-.welcome-suggestion-btn:hover .suggestion-index {
-  color: #6366f1;
-}
-
-.suggestion-arrow {
-  flex-shrink: 0;
-  color: #a5b4fc;
-  transition: all 0.15s ease;
-}
-.welcome-suggestion-btn:hover .suggestion-arrow {
-  color: #4f46e5;
-  transform: translateX(3px);
+  font-weight: 500;
 }
 
 .ai-chat-collapsed {
