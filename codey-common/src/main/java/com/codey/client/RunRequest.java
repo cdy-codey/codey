@@ -23,6 +23,7 @@ public class RunRequest {
     private String tenantId;
     private ModelProperties modelConfig;
     private boolean includeThinking = true;
+    private String coreRules;
 
     public static RunRequest ofGoal(String goal) {
         RunRequest request = new RunRequest();
@@ -140,6 +141,14 @@ public class RunRequest {
 
     public void setIncludeThinking(boolean includeThinking) {
         this.includeThinking = includeThinking;
+    }
+
+    public String getCoreRules() {
+        return coreRules;
+    }
+
+    public void setCoreRules(String coreRules) {
+        this.coreRules = coreRules;
     }
 
     private List<String> copyList(List<String> source) {

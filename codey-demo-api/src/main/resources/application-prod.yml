@@ -1,0 +1,23 @@
+server:
+  port: 18080
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+upload:
+  directory: ./uploads
+
+codey:
+  model:
+    provider: http
+    endpoint: https://api.deepseek.com/chat/completions
+    model-name: deepseek-v4-pro
+    # 默认空值，dev 环境在 application-dev.yml 中覆盖（不纳入版本控制）
+    api-key: ""
+    temperature: 0.2
+    connect-timeout-millis: 10000
+    read-timeout-millis: 30000
+    max-retries: 2

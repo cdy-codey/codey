@@ -5,6 +5,7 @@ import com.codey.client.ChatSession;
 import com.codey.client.RunRequest;
 import com.codey.client.SessionEventHub;
 import com.codey.web.common.ApiResponse;
+import com.codey.web.common.CoreRulesProvider;
 import com.codey.web.service.DemoSessionModelConfigService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -28,15 +29,18 @@ public class ChatController {
     private final SessionEventHub sessionEventHub;
     private final ChatSessionDisplayOptionsStore displayOptionsStore;
     private final DemoSessionModelConfigService demoSessionModelConfigService;
+    private final CoreRulesProvider coreRulesProvider;
 
     public ChatController(AgentClient agentClient,
                           SessionEventHub sessionEventHub,
                           ChatSessionDisplayOptionsStore displayOptionsStore,
-                          DemoSessionModelConfigService demoSessionModelConfigService) {
+                          DemoSessionModelConfigService demoSessionModelConfigService,
+                          CoreRulesProvider coreRulesProvider) {
         this.agentClient = agentClient;
         this.sessionEventHub = sessionEventHub;
         this.displayOptionsStore = displayOptionsStore;
         this.demoSessionModelConfigService = demoSessionModelConfigService;
+        this.coreRulesProvider = coreRulesProvider;
     }
 
     @PostMapping("/sessions")
@@ -122,10 +126,15 @@ public class ChatController {
     }
 
     private RunRequest normalize(RunRequest request) {
+        RunRequest normalized = request == null ? new RunRequest() : request;
+        // 自动注入全局铁律，前端可显式传 coreRules 覆盖
+        if (normalized.getCoreRules() == null || normalized.getCoreRules().trim().isEmpty()) {
+            normalized.setCoreRules(coreRulesProvider.getCoreRules());
+        }
         // Web Demo 正式走会话级模型配置注入，配置来源可替换为数据库查询结果。
         //return demoSessionModelConfigService.applyDatabaseModelConfig(request);
         //走默认配置入口
-        return  request;
+        return normalized;
     }
 
     private void saveDisplayOptions(String sessionId, RunRequest request) {

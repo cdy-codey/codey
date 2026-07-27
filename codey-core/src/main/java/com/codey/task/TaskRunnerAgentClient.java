@@ -216,6 +216,7 @@ public class TaskRunnerAgentClient implements AgentClient {
         task.setContextNotes(sanitizeContextNotes(source.getContextNotes()));
         task.setChatHistory(source.getChatHistory());
         task.setIdentities(source.getIdentities());
+        task.setCoreRules(source.getCoreRules());
         if (resolveModelConfig) {
             task.setModelConfig(resolveInitialModelConfig(source));
         }

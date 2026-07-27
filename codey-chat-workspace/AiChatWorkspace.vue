@@ -941,6 +941,18 @@ function sendSuggestion(suggestionText) {
 }
 
 async function handleStartNewSession() {
+  // 如果当前有活跃会话，先弹出确认对话框提示用户关闭旧会话
+  if (sessionId.value && isLiveSession.value) {
+    try {
+      await showConfirm('当前会话正在进行中，开启新会话将关闭当前会话，是否继续？', '新会话', {
+        type: 'warning',
+        confirmButtonText: '关闭并新建',
+        cancelButtonText: '取消',
+      })
+    } catch {
+      return
+    }
+  }
   if (props.popupMode && !assistantVisible.value) {
     openAssistant()
   }
@@ -1036,10 +1048,10 @@ function getMessageContainerStyle(role) {
     display: 'flex',
     justifyContent: role === 'user' ? 'flex-end' : 'flex-start',
     alignItems: 'flex-start',
-    gap: '6px',
+    gap: '8px',
     width: '100%',
     boxSizing: 'border-box',
-    paddingRight: role === 'user' ? '8px' : '0',
+    paddingRight: role === 'user' ? '2px' : '0',
     padding: '0',
     background: 'transparent',
     borderLeft: 'none',
@@ -1050,11 +1062,12 @@ function getMessageCardStyle(role) {
   if (role === 'user') {
     return {
       width: 'fit-content',
-      maxWidth: '56%',
+      maxWidth: '62%',
       border: 'none',
-      background: '#eef1f5',
-      color: '#303133',
-      borderRadius: '8px',
+      background: 'linear-gradient(135deg, #2f6df6 0%, #2b5de7 100%)',
+      color: '#ffffff',
+      borderRadius: '18px',
+      boxShadow: '0 10px 24px rgba(47, 109, 246, 0.18)',
     }
   }
   return {
@@ -1077,8 +1090,8 @@ function getMessageShadow(role) {
 function getMessageBodyStyle(role) {
   if (role === 'user') {
     return {
-      padding: '4px 10px',
-      borderRadius: '6px',
+      padding: '10px 14px',
+      borderRadius: '18px',
     }
   }
   return {
@@ -1088,8 +1101,9 @@ function getMessageBodyStyle(role) {
 
 function getAssistantBubbleStyle() {
   return {
-    flex: '1 1 auto',
+    flex: '0 1 auto',
     minWidth: '0',
+    maxWidth: '92%',
   }
 }
 
@@ -1106,31 +1120,48 @@ function getBubbleHeaderStyle(role) {
 
 function getAvatarLabel(role) {
   if (role === 'user') {
-    return '你'
+    return '我'
   }
   if (role === 'assistant') {
+    return 'AI'
+  }
+  if (role === 'tool') {
     return 'AI'
   }
   return ''
 }
 
 function getAvatarStyle(role) {
+  if (role === 'user') {
+    return {
+      order: 2,
+      flex: '0 0 auto',
+      background: 'linear-gradient(180deg, #81889a 0%, #667085 100%)',
+      color: '#ffffff',
+      borderRadius: '999px',
+      boxShadow: '0 6px 14px rgba(15, 23, 42, 0.14)',
+    }
+  }
   if (role === 'tool') {
     return {
       flex: '0 0 auto',
-      opacity: 0,
-      pointerEvents: 'none',
+      background: 'linear-gradient(180deg, #86d7ff 0%, #4faeff 100%)',
+      color: '#ffffff',
+      borderRadius: '999px',
+      boxShadow: '0 6px 14px rgba(79, 174, 255, 0.24)',
     }
   }
   return {
     flex: '0 0 auto',
-    background: 'var(--el-color-primary-light-8)',
-    color: 'var(--el-color-primary)',
+    background: 'linear-gradient(180deg, #86d7ff 0%, #4faeff 100%)',
+    color: '#ffffff',
+    borderRadius: '999px',
+    boxShadow: '0 6px 14px rgba(79, 174, 255, 0.24)',
   }
 }
 
 function showMessageAvatar(role) {
-  return role !== 'user'
+  return role === 'assistant' || role === 'tool' || role === 'user'
 }
 
 function showBubbleHeader(role) {
@@ -1173,6 +1204,38 @@ function getToolSummary(message) {
     return content.slice(toolName.length + 1).trim()
   }
   return content
+}
+
+function getToolStatus(message) {
+  const content = typeof message?.content === 'string' ? message.content.trim() : ''
+  if (!content) {
+    return '进行中'
+  }
+  if (/失败|错误|异常|error/i.test(content)) {
+    return '失败'
+  }
+  return '完成'
+}
+
+function isConfirmStyledFormModule(module) {
+  if (!module || module.type !== 'object') {
+    return false
+  }
+  const variant = typeof module?.variant === 'string' ? module.variant.trim().toLowerCase() : ''
+  const theme = typeof module?.theme === 'string' ? module.theme.trim().toLowerCase() : ''
+  if (['confirm', 'confirmation', 'warning', 'highlight'].includes(variant)) {
+    return true
+  }
+  if (['confirm', 'confirmation', 'warning', 'highlight'].includes(theme)) {
+    return true
+  }
+  const title = typeof module?.title === 'string' ? module.title.trim() : ''
+  return /确认|预览|待执行|待提交|回执|订单|单据|清单/.test(title)
+}
+
+function isConfirmAccentField(fieldLabel) {
+  const label = typeof fieldLabel === 'string' ? fieldLabel.trim() : ''
+  return /金额|费用|合计|总计|应付|支付|实付/.test(label)
 }
 
 // 对外暴露 API
@@ -1376,7 +1439,7 @@ watch(
               }"
               :style="getMessageContainerStyle(message.role)"
             >
-              <!-- 头像：AI助手显示机器人图标 -->
+              <!-- 头像：用户与助手都使用更贴近聊天产品的圆形头像 -->
               <div
                 v-if="showMessageAvatar(message.role)"
                 class="ai-avatar"
@@ -1388,14 +1451,14 @@ watch(
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderRadius: '6px',
+                  borderRadius: '999px',
                   fontWeight: 600,
                   userSelect: 'none',
                 }"
               >
                 <!-- AI机器人头像 SVG -->
                 <svg
-                  v-if="isAssistantMessage(message.role)"
+                  v-if="isAssistantMessage(message.role) || isToolMessage(message.role)"
                   viewBox="0 0 24 24"
                   width="18"
                   height="18"
@@ -1423,8 +1486,8 @@ watch(
 
               <!-- 助手消息 -->
               <template v-if="isAssistantMessage(message.role)">
-                <div :style="getAssistantBubbleStyle()">
-                  <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                <div class="assistant-bubble-shell" :style="getAssistantBubbleStyle()">
+                  <div class="assistant-bubble-card">
                     <transition name="reasoning-fade">
                       <div
                         v-if="shouldShowReasoning(message)"
@@ -1483,7 +1546,7 @@ watch(
                       >
                         <div
                           v-if="block.type === 'text'"
-                          style="color: #4b5563; line-height: 1.65; font-size: 14px;"
+                          class="assistant-text-block"
                         >
                           <div
                             v-for="(paragraph, paragraphIndex) in block.paragraphs"
@@ -1564,37 +1627,72 @@ watch(
                             <div
                               v-if="typeof block.parsedUiView.summary === 'string' && block.parsedUiView.summary.trim()"
                               class="ai-form-summary ai-card"
-                              style="margin-bottom: 8px;"
                             >
-                              <div
-                                class="ai-card-header ai-form-module-header"
-                                style="background: #f8fafc; color: #334155; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);"
-                              >
+                              <div class="ai-card-header ai-form-module-header ai-form-summary-header">
                                 简要解析
                               </div>
-                              <div class="ai-card-body ai-form-module-body" style="padding: 10px 12px; color: #475569; font-size: 13px; line-height: 1.75; white-space: pre-wrap;">
+                              <div class="ai-card-body ai-form-module-body ai-form-summary-body">
                                 {{ block.parsedUiView.summary }}
                               </div>
                             </div>
                             <template v-for="(module, mIdx) in block.parsedUiView.modules" :key="mIdx">
                             <!-- Object View -->
-                            <div v-if="module.type === 'object'" class="ai-form-module ai-card" style="margin-bottom: 8px;">
-                              <div class="ai-card-header ai-form-module-header" v-if="module.title" style="background: #f0f4ff; color: #1d4ed8; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; align-items: center; gap: 6px;">
-                                <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
+                            <div
+                              v-if="module.type === 'object'"
+                              :class="[
+                                'ai-form-module',
+                                'ai-card',
+                                'ai-form-object-module',
+                                { 'ai-form-object-module--confirm': isConfirmStyledFormModule(module) },
+                              ]"
+                            >
+                              <div
+                                v-if="module.title"
+                                :class="[
+                                  'ai-card-header',
+                                  'ai-form-module-header',
+                                  'ai-form-object-header',
+                                  { 'ai-form-object-header--confirm': isConfirmStyledFormModule(module) },
+                                ]"
+                              >
+                                <svg
+                                  v-if="isConfirmStyledFormModule(module)"
+                                  viewBox="0 0 24 24"
+                                  width="1em"
+                                  height="1em"
+                                  fill="currentColor"
+                                >
+                                  <path d="M12 2l7 3v6c0 5.25-3.438 9.375-7 10.8C8.438 20.375 5 16.25 5 11V5l7-3zm-1 11.586l5.293-5.293 1.414 1.414L11 16.414l-3.707-3.707 1.414-1.414L11 13.586z" />
+                                </svg>
+                                <svg v-else viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
                                   <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
                                 </svg>
                                 <span class="ai-form-module-title">{{ module.title }}</span>
                               </div>
-                              <div class="ai-card-body ai-form-module-body" style="padding: 10px 12px;">
-                                <div v-for="(val, key) in module.data" :key="key" class="ai-form-field" style="display: flex; padding: 8px 0; border-bottom: 1px solid #f1f5f9;">
-                                  <div class="ai-form-field-label" style="width: 140px; color: #64748b; font-size: 13px; flex-shrink: 0;">{{ key }}</div>
-                                  <div class="ai-form-field-value" style="flex: 1; color: #334155; font-size: 13px; font-weight: 500;">{{ val }}</div>
+                              <div
+                                :class="[
+                                  'ai-card-body',
+                                  'ai-form-module-body',
+                                  'ai-form-object-body',
+                                  { 'ai-form-object-body--confirm': isConfirmStyledFormModule(module) },
+                                ]"
+                              >
+                                <div
+                                  v-for="(val, key) in module.data"
+                                  :key="key"
+                                  :class="[
+                                    'ai-form-field',
+                                    { 'ai-form-field--accent': isConfirmAccentField(key) },
+                                  ]"
+                                >
+                                  <div class="ai-form-field-label">{{ key }}</div>
+                                  <div class="ai-form-field-value">{{ val }}</div>
                                 </div>
                               </div>
                             </div>
                             <!-- List View -->
-                            <div v-else-if="module.type === 'list'" class="ai-form-module ai-card" style="margin-bottom: 8px;">
-                              <div class="ai-card-header ai-form-module-header" v-if="module.title" style="background: #f0f4ff; color: #1d4ed8; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter); display: flex; justify-content: space-between; align-items: center;">
+                            <div v-else-if="module.type === 'list'" class="ai-form-module ai-card ai-form-list-module">
+                              <div class="ai-card-header ai-form-module-header ai-form-list-header" v-if="module.title">
                                 <div style="display: flex; align-items: center; gap: 6px;">
                                   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
                                     <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
@@ -1603,38 +1701,38 @@ watch(
                                 </div>
                                 <button class="ai-btn-link ai-btn-link--primary" style="font-size: 12px;" @click="openTableModal(module)">查看更多</button>
                               </div>
-                              <div class="ai-card-body ai-form-module-body" style="padding: 0; overflow-x: auto;">
-                                <table class="ai-form-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                              <div class="ai-card-body ai-form-module-body ai-form-list-body">
+                                <table class="ai-form-table ai-form-table--compact">
                                   <thead>
                                     <tr>
-                                      <th v-for="h in (module.headers || []).slice(0, 6)" :key="h" class="ai-table-th" style="padding: 8px 12px; text-align: left; background: #f8fafc; color: #64748b; font-weight: 500; border-bottom: 1px solid #e2e8f0; white-space: nowrap;">{{ h }}</th>
-                                      <th v-if="(module.headers || []).length > 6" class="ai-table-th" style="padding: 8px 12px; text-align: center; background: #f8fafc; color: #94a3b8; border-bottom: 1px solid #e2e8f0;">...</th>
+                                      <th v-for="h in (module.headers || []).slice(0, 6)" :key="h" class="ai-table-th">{{ h }}</th>
+                                      <th v-if="(module.headers || []).length > 6" class="ai-table-th ai-table-th--ellipsis">...</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     <tr v-for="(row, rIdx) in (module.data || [])" :key="rIdx" class="ai-table-row">
-                                      <td v-for="h in (module.headers || []).slice(0, 6)" :key="h" class="ai-table-td" style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; color: #334155; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis;">{{ row[h] }}</td>
-                                      <td v-if="(module.headers || []).length > 6" class="ai-table-td" style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #94a3b8;">...</td>
+                                      <td v-for="h in (module.headers || []).slice(0, 6)" :key="h" class="ai-table-td ai-table-td--truncate">{{ row[h] }}</td>
+                                      <td v-if="(module.headers || []).length > 6" class="ai-table-td ai-table-td--ellipsis">...</td>
                                     </tr>
                                   </tbody>
                                 </table>
-                                <div v-if="(module.headers || []).length > 6" class="ai-form-table-more" @click="openTableModal(module)" style="padding: 10px; text-align: center; color: #3b82f6; font-size: 12px; cursor: pointer; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                                <div v-if="(module.headers || []).length > 6" class="ai-form-table-more" @click="openTableModal(module)">
                                   共 {{ module.headers.length }} 个字段，点击查看完整表格
                                 </div>
                               </div>
                             </div>
                             </template>
                           </template>
-                          <div v-else-if="block.parsedUiView._view_type === 'diff_data'" class="ai-form-module ai-card" style="margin-bottom: 8px;">
-                            <div class="ai-card-header ai-form-module-header" style="background: #f8fafc; color: #334155; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--el-border-color-lighter);">
+                          <div v-else-if="block.parsedUiView._view_type === 'diff_data'" class="ai-form-module ai-card ai-form-diff-module">
+                            <div class="ai-card-header ai-form-module-header ai-form-diff-header">
                               {{ block.parsedUiView.title || '变更对比' }}
                             </div>
-                            <div class="ai-card-body ai-form-module-body" style="padding: 10px 12px;">
-                              <div v-for="(change, cIdx) in (block.parsedUiView.changes || [])" :key="cIdx" style="display: grid; grid-template-columns: 120px 1fr 20px 1fr; gap: 8px; align-items: start; padding: 10px 0; border-bottom: 1px solid #f1f5f9;">
-                                <div style="color: #64748b; font-size: 13px;">{{ change.field }}</div>
-                                <div style="color: #94a3b8; font-size: 13px; text-decoration: line-through; word-break: break-word;">{{ change.old_value }}</div>
-                                <div style="color: #cbd5e1; text-align: center;">→</div>
-                                <div style="color: #334155; font-size: 13px; font-weight: 600; word-break: break-word;">{{ change.new_value }}</div>
+                            <div class="ai-card-body ai-form-module-body ai-form-diff-body">
+                              <div v-for="(change, cIdx) in (block.parsedUiView.changes || [])" :key="cIdx" class="ai-form-diff-row">
+                                <div class="ai-form-diff-field">{{ change.field }}</div>
+                                <div class="ai-form-diff-old">{{ change.old_value }}</div>
+                                <div class="ai-form-diff-arrow">→</div>
+                                <div class="ai-form-diff-new">{{ change.new_value }}</div>
                               </div>
                             </div>
                           </div>
@@ -1684,12 +1782,15 @@ watch(
 
               <!-- 工具消息 -->
               <template v-else-if="isToolMessage(message.role)">
-                <div
-                  style="display: flex; align-items: center; gap: 6px; max-width: 88%; padding: 2px 0; color: var(--el-text-color-regular); font-size: 12px; line-height: 1.45; font-weight: 600;"
-                >
-                  <span style="flex: 0 0 auto; color: var(--el-color-primary); font-size: 13px;">⚙</span>
-                  <strong style="flex: 0 0 auto; font-size: 13px; font-weight: 600; color: var(--el-text-color-primary);">{{ message.name || '工具调用' }}</strong>
-                  <span style="min-width: 0; color: var(--el-text-color-secondary); font-size: 13px; font-weight: 500;">{{ getToolSummary(message) }}</span>
+                <div class="tool-message-card">
+                  <div class="tool-message-badge">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-5.8 5.8a1 1 0 0 0 0 1.4l1.2 1.2a1 1 0 0 0 1.4 0l5.8-5.8a4 4 0 0 0 5.4-5.4l-2.2 2.2-2-2 2.6-2.8z" />
+                    </svg>
+                    <span class="tool-message-name">{{ message.name || '工具调用' }}</span>
+                    <span class="tool-message-status">{{ getToolStatus(message) }}</span>
+                  </div>
+                  <div class="tool-message-text">{{ getToolSummary(message) }}</div>
                 </div>
               </template>
 
@@ -1697,7 +1798,7 @@ watch(
               <div
                 v-else
                 class="ai-card message-bubble-card"
-                :style="{ ...getMessageCardStyle(message.role), borderRadius: '6px' }"
+                :style="getMessageCardStyle(message.role)"
               >
                 <div :style="getMessageBodyStyle(message.role)">
                   <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
@@ -2474,8 +2575,252 @@ watch(
   color: #ffffff;
 }
 
+.assistant-bubble-shell {
+  width: 100%;
+}
+
+.assistant-bubble-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e7ebf3;
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.assistant-text-block {
+  color: #1f2937;
+  line-height: 1.8;
+  font-size: 15px;
+}
+
 .message-bubble-card {
-  border-radius: 6px;
+  border-radius: 18px;
+  overflow: visible;
+}
+
+.tool-message-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 92%;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #e7ebf3;
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+}
+
+.tool-message-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  color: #2563eb;
+  background: linear-gradient(180deg, #eef5ff 0%, #e3eeff 100%);
+  border: 1px solid #c9dafd;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tool-message-name {
+  color: #2563eb;
+}
+
+.tool-message-status {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.tool-message-text {
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.ai-form-data-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-form-summary {
+  margin-bottom: 0;
+  border-radius: 14px;
+}
+
+.ai-form-summary-header {
+  padding: 10px 12px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f8fafc;
+}
+
+.ai-form-summary-body {
+  padding: 10px 12px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.ai-form-module {
+  margin-bottom: 0;
+  border-radius: 16px;
+}
+
+.ai-form-object-header,
+.ai-form-list-header,
+.ai-form-diff-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f0f4ff;
+}
+
+.ai-form-list-header {
+  justify-content: space-between;
+}
+
+.ai-form-object-header--confirm {
+  color: #ffffff;
+  background: linear-gradient(180deg, #ff9f18 0%, #f08300 100%);
+  border-bottom-color: rgba(255, 255, 255, 0.18);
+}
+
+.ai-form-object-body,
+.ai-form-diff-body {
+  padding: 10px 12px;
+}
+
+.ai-form-object-body--confirm {
+  padding: 0 12px 10px;
+  background: linear-gradient(180deg, #fff7e7 0%, #fffdf7 100%);
+}
+
+.ai-form-field {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px dashed #e6edf6;
+}
+
+.ai-form-field:last-child {
+  border-bottom: none;
+}
+
+.ai-form-object-body--confirm .ai-form-field {
+  border-bottom-color: #f2d486;
+}
+
+.ai-form-field-label {
+  width: 140px;
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.ai-form-object-body--confirm .ai-form-field-label {
+  color: #9a5b00;
+}
+
+.ai-form-field-value {
+  flex: 1;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+.ai-form-field--accent .ai-form-field-label,
+.ai-form-field--accent .ai-form-field-value {
+  color: #d97706;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ai-form-list-body {
+  padding: 0;
+  overflow-x: auto;
+}
+
+.ai-form-table--compact {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ai-table-th--ellipsis,
+.ai-table-td--ellipsis {
+  text-align: center;
+  color: #94a3b8;
+}
+
+.ai-table-td--truncate {
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-form-table-more {
+  padding: 10px;
+  text-align: center;
+  color: #3b82f6;
+  font-size: 12px;
+  cursor: pointer;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.ai-form-diff-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 20px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.ai-form-diff-row:last-child {
+  border-bottom: none;
+}
+
+.ai-form-diff-field {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.ai-form-diff-old {
+  color: #94a3b8;
+  font-size: 13px;
+  text-decoration: line-through;
+  word-break: break-word;
+}
+
+.ai-form-diff-arrow {
+  color: #cbd5e1;
+  text-align: center;
+}
+
+.ai-form-diff-new {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-word;
 }
 
 .reasoning-panel {
@@ -2553,12 +2898,12 @@ watch(
 }
 
 .assistant-message-row {
-  margin-top: 16px;
+  margin-top: 14px;
 }
 
 .tool-message-row {
-  margin-top: 1px;
-  margin-bottom: 1px;
+  margin-top: 10px;
+  margin-bottom: 2px;
 }
 
 .send-button {

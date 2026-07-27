@@ -8,12 +8,13 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * 统一收口动态消息构建逻辑，按管道阶段依次追加历史摘要、本轮用户输入和当前轮 transcript。
- * 这样模型看到的始终是“历史 -> 当前用户诉求 -> 当前轮执行轨迹”的自然时间线。
+ * 统一收口动态消息构建逻辑，按管道阶段依次追加历史摘要、铁律、本轮用户输入和当前轮 transcript。
+ * 这样模型看到的始终是“历史 -> 铁律提醒 -> 当前用户诉求 -> 当前轮执行轨迹”的自然时间线。
  */
 final class PromptMessagePipeline {
     private final List<PromptMessageStage> stages = Arrays.<PromptMessageStage>asList(
             new ChatHistoryMessageStage(20, 500),
+            new CoreRulesMessageStage(),
             new CurrentUserInputMessageStage(),
             new TranscriptMessageStage()
     );

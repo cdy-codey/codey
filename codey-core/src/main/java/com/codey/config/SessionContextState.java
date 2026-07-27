@@ -23,6 +23,7 @@ final class SessionContextState {
     private final List<String> identities = new ArrayList<String>();
     private String tenantId;
     private String runtimeContextSummary;
+    private String coreRules;
 
     String getSkillName() {
         return skillName;
@@ -120,6 +121,14 @@ final class SessionContextState {
 
     void setRuntimeContextSummary(String runtimeContextSummary) {
         this.runtimeContextSummary = normalizeText(runtimeContextSummary);
+    }
+
+    String getCoreRules() {
+        return coreRules;
+    }
+
+    void setCoreRules(String coreRules) {
+        this.coreRules = normalizeText(coreRules);
     }
 
     void appendContextFile(String path) {

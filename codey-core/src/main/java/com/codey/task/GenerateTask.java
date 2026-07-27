@@ -23,6 +23,7 @@ public class GenerateTask {
     private List<String> identities = new ArrayList<String>();
     private String tenantId;
     private ModelProperties modelConfig;
+    private String coreRules;
 
     public String getSessionId() {
         return sessionId;
@@ -126,6 +127,14 @@ public class GenerateTask {
 
     public void setModelConfig(ModelProperties modelConfig) {
         this.modelConfig = copyModelConfig(modelConfig);
+    }
+
+    public String getCoreRules() {
+        return coreRules;
+    }
+
+    public void setCoreRules(String coreRules) {
+        this.coreRules = coreRules;
     }
 
     private ModelProperties copyModelConfig(ModelProperties source) {

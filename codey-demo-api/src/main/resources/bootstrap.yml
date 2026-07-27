@@ -1,0 +1,4 @@
+# 引导配置：选择激活的 profile（本地默认 dev，生产部署时通过 --spring.profiles.active=prod 覆盖）
+spring:
+  profiles:
+    active: dev

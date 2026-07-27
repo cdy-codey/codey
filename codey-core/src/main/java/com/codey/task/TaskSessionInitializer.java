@@ -40,6 +40,7 @@ public class TaskSessionInitializer {
         for (String chatHistoryEntry : task.getChatHistory()) {
             session.appendChatHistory(chatHistoryEntry);
         }
+        session.setCoreRules(task.getCoreRules());
         return session;
     }
 }

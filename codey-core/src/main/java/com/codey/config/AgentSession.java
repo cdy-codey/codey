@@ -281,6 +281,14 @@ public class AgentSession {
         sessionContext.setRuntimeContextSummary(runtimeContextSummary);
     }
 
+    public String getCoreRules() {
+        return sessionContext.getCoreRules();
+    }
+
+    public void setCoreRules(String coreRules) {
+        sessionContext.setCoreRules(coreRules);
+    }
+
     public void appendChatHistory(String content) {
         conversationState.appendChatHistory(content);
     }

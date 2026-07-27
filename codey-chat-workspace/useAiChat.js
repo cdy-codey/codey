@@ -18,7 +18,6 @@ const STREAM_EVENT_TYPES = [
   'tool_execution_started',
   'tool_call',
   'verification',
-  'human_decision',
   'task_status',
   'final_summary',
   'model_output',
@@ -562,7 +561,6 @@ function parseEventPayload(event) {
     tool_execution_started: () => {},
     debug_trace: () => {},
     verification: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
-    human_decision: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
   }
 
   function handleStreamEvent(eventType, event) {
