@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.cdy-codey</groupId>
   <artifactId>codey-boot-starter</artifactId>
-  <version>0.1.14</version>
+  <version>0.1.15</version>
   <name>codey-boot-starter</name>
   <description>Spring Boot starter for integrating Codey runtime, session and tool capabilities into applications.</description>
   <url>https://github.com/cdy-codey/codey/codey-boot-starter</url>
@@ -25,20 +25,20 @@
   <scm>
     <connection>scm:git:https://github.com/cdy-codey/codey.git/codey-boot-starter</connection>
     <developerConnection>scm:git:https://github.com/cdy-codey/codey.git/codey-boot-starter</developerConnection>
-    <tag>v0.1.14</tag>
+    <tag>v0.1.15</tag>
     <url>https://github.com/cdy-codey/codey/codey-boot-starter</url>
   </scm>
   <dependencies>
     <dependency>
       <groupId>io.github.cdy-codey</groupId>
       <artifactId>codey-core</artifactId>
-      <version>0.1.14</version>
+      <version>0.1.15</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>io.github.cdy-codey</groupId>
       <artifactId>codey-common</artifactId>
-      <version>0.1.14</version>
+      <version>0.1.15</version>
       <scope>compile</scope>
     </dependency>
     <dependency>

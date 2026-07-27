@@ -36,7 +36,7 @@
 
     <properties>
         <!-- 多模块统一版本号，后续发版只需要修改这一处。 -->
-        <revision>0.1.14</revision>
+        <revision>0.1.15</revision>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -55,7 +55,8 @@
         <maven.javadoc.plugin.version>3.6.3</maven.javadoc.plugin.version>
         <maven.gpg.plugin.version>1.6</maven.gpg.plugin.version>
         <maven.deploy.plugin.version>3.1.2</maven.deploy.plugin.version>
-        <central.publishing.plugin.version>0.7.0</central.publishing.plugin.version>
+        <!-- 兼容 Central Portal 新增的 warnings 字段，避免上传成功后误报发布失败。 -->
+        <central.publishing.plugin.version>0.11.0</central.publishing.plugin.version>
         <gpg.keyname>${env.GPG_KEY_ID}</gpg.keyname>
     </properties>
 

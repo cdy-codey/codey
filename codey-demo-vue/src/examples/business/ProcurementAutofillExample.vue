@@ -646,7 +646,19 @@ onMounted(async () => {
           placeholder="例如：帮我完善采购申请理由，并给出更合理的设备配置建议"
           v-bind="aiAssistantHandlers"
           welcome-message="您好！我是您的AI助手，可以帮您填写和审查采购申请单。请问有什么可以帮助您的？"
-          :welcome-suggestions="['帮我检查表单是否符合政府采购规定','帮我校验和补充表单内容','帮我从采购需求文件中提取信息填到表单']"
+          :welcome-suggestions="[{
+            label: '采购合规检查',
+            content: '帮我检查表单是否符合政府采购规定',
+          },
+          {
+            label: '校验补全表单',
+            content: '帮我校验和补充表单内容',
+          },
+          {
+            label: '提取附件信息填表',
+            content: '帮我从采购需求文件中提取信息填到表单',
+          },
+        ]"
           :skill-name-value="PROCUREMENT_FORM_SKILL"
           :system-prompt-value="BUSINESS_AI_SYSTEM_PROMPT"
           :compact-header="true"
@@ -695,8 +707,10 @@ onMounted(async () => {
 }
 
 .assistant-panel {
-  width: clamp(320px, 35vw, 480px);
-  flex: 0 0 clamp(320px, 35vw, 480px);
+  /* 右侧助手面板按容器宽度占比 35%，而不是按视口宽度计算。 */
+  width: 35%;
+  flex: 0 0 35%;
+  min-width: 320px;
   /* 右侧聊天区需要给页面顶栏和外层留白预留高度，避免底部发送框被挤出视口。 */
   position: sticky;
   top: 12px;
