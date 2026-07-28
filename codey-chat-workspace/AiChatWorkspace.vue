@@ -2191,7 +2191,6 @@ watch(
   <!-- 确认对话框（替代 ElMessageBox.confirm） -->
   <Teleport to="body">
     <template v-if="confirmDialog.visible">
-      <div class="ai-confirm-backdrop" style="z-index: 9998;" />
       <div class="ai-confirm-dialog" style="z-index: 9999;">
         <div class="ai-confirm-header">
           <h4 class="ai-confirm-title">{{ confirmDialog.title }}</h4>
