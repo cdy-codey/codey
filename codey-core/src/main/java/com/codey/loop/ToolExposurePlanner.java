@@ -18,8 +18,7 @@ import java.util.List;
 public class ToolExposurePlanner {
     /** 单表模式下需要排除的工具名 */
     private static final List<String> SINGLE_FILE_EXCLUDED_TOOLS = Arrays.asList(
-            "read_file", "search_content",
-            "read_json", "search_json"    // 业务层的 JSON 读取/搜索工具
+            "read_file", "search_content"
     );
 
     private final ToolRegistry toolRegistry;

@@ -63,7 +63,13 @@ final class ContextSummaryService {
             return false;
         }
         PromptBudgetReport budgetReport = promptBudgetEstimator.estimate(promptPackage, promptContractDefinition);
-        return summarize(session, promptPackage, currentLoop, budgetReport, true);
+        // 单表模式：即使 loop 结束也不强制压缩，必须经过阈值检查
+        boolean singleFileMode = session != null && session.isSingleFileMode();
+        if (singleFileMode && !shouldSummarize(session, budgetReport)) {
+            return false;
+        }
+        // 非单表模式或已达阈值：强制压缩
+        return summarize(session, promptPackage, currentLoop, budgetReport, !singleFileMode);
     }
 
     private boolean shouldSummarize(AgentSession session, PromptBudgetReport budgetReport) {

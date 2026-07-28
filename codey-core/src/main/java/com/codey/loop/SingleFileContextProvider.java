@@ -102,12 +102,9 @@ final class SingleFileContextProvider {
             if (isBlank(relativePath)) {
                 continue;
             }
-            // listWorkspace 返回的路径是相对于 pathHint 的，
-            // 需要拼上 workingDir 前缀才能从 workspaceRoot 正确解析
-            String fullPath = resolveFullPath(workingDir, relativePath);
             String content;
             try {
-                content = workspaceGateway.readFile(fullPath);
+                content = workspaceGateway.readFile(relativePath);
             } catch (RuntimeException exception) {
                 builder.append("### ").append(relativePath).append("\n\n")
                         .append("```\n<!-- 读取失败: ").append(escapeXml(exception.getMessage())).append(" -->\n```\n\n");
@@ -169,28 +166,6 @@ final class SingleFileContextProvider {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
-    }
-
-    /**
-     * 拼接 workingDir 和 entry 相对路径，得到从 workspaceRoot 可解析的完整路径。
-     * <p>
-     * listWorkspace 以 pathHint 为根列出文件，返回的 entry.path 是相对于 pathHint 的。
-     * 但 WorkspaceGateway.readFile() 从 workspaceRoot 解析路径，
-     * 所以需要把 workingDir 和 entry.path 拼接起来。
-     * </p>
-     */
-    private String resolveFullPath(String workingDir, String entryPath) {
-        String dir = workingDir;
-        if (dir.startsWith("./")) {
-            dir = dir.substring(2);
-        }
-        if (dir.endsWith("/")) {
-            dir = dir.substring(0, dir.length() - 1);
-        }
-        if (dir.isEmpty()) {
-            return entryPath;
-        }
-        return dir + "/" + entryPath;
     }
 
     private String escapeXml(String value) {
