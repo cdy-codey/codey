@@ -289,6 +289,22 @@ public class AgentSession {
         sessionContext.setCoreRules(coreRules);
     }
 
+    public boolean isSingleFileMode() {
+        return sessionContext.isSingleFileMode();
+    }
+
+    public void setSingleFileMode(boolean singleFileMode) {
+        sessionContext.setSingleFileMode(singleFileMode);
+    }
+
+    public String getSingleFileContentSnapshot() {
+        return sessionContext.getSingleFileContentSnapshot();
+    }
+
+    public void setSingleFileContentSnapshot(String singleFileContentSnapshot) {
+        sessionContext.setSingleFileContentSnapshot(singleFileContentSnapshot);
+    }
+
     public void appendChatHistory(String content) {
         conversationState.appendChatHistory(content);
     }

@@ -24,6 +24,10 @@ final class SessionContextState {
     private String tenantId;
     private String runtimeContextSummary;
     private String coreRules;
+    /** 单表模式：工作目录仅包含单个或少量文件，默认开启 */
+    private boolean singleFileMode = true;
+    /** 单表模式下的工作目录文件内容快照（每轮刷新） */
+    private String singleFileContentSnapshot;
 
     String getSkillName() {
         return skillName;
@@ -129,6 +133,22 @@ final class SessionContextState {
 
     void setCoreRules(String coreRules) {
         this.coreRules = normalizeText(coreRules);
+    }
+
+    boolean isSingleFileMode() {
+        return singleFileMode;
+    }
+
+    void setSingleFileMode(boolean singleFileMode) {
+        this.singleFileMode = singleFileMode;
+    }
+
+    String getSingleFileContentSnapshot() {
+        return singleFileContentSnapshot;
+    }
+
+    void setSingleFileContentSnapshot(String singleFileContentSnapshot) {
+        this.singleFileContentSnapshot = normalizeText(singleFileContentSnapshot);
     }
 
     void appendContextFile(String path) {

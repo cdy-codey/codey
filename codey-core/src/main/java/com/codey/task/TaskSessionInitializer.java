@@ -41,6 +41,7 @@ public class TaskSessionInitializer {
             session.appendChatHistory(chatHistoryEntry);
         }
         session.setCoreRules(task.getCoreRules());
+        session.setSingleFileMode(task.isSingleFileMode());
         return session;
     }
 }

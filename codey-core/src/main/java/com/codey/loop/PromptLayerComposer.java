@@ -21,6 +21,7 @@ public class PromptLayerComposer {
     private static final String BASE_LAYER = normalizeBaseLayer(readResource("prompts/base.md"));
     private static final String CALM_PERSONALITY_LAYER = readResource("prompts/personalities/calm.md");
     private static final String AGENT_MODE_LAYER = readResource("prompts/modes/agent.md");
+    private static final String SINGLE_FILE_MODE_LAYER = readResource("prompts/modes/single_file.md");
     private static final String SUGGEST_APPROVAL_LAYER = readResource("prompts/approvals/suggest.md");
 
     public String compose(SkillDefinition skill) {
@@ -29,13 +30,84 @@ public class PromptLayerComposer {
 
     public String compose(SkillDefinition skill, AgentSession session) {
         List<String> parts = new ArrayList<String>();
-        append(parts, BASE_LAYER);
+        // 单表模式：剔除 base 层中与单表模式矛盾的 Toolbox / FastPath / ContextControl 节
+        boolean singleFileMode = session != null && session.isSingleFileMode();
+        append(parts, singleFileMode ? stripForSingleFile(BASE_LAYER) : BASE_LAYER);
         append(parts, CALM_PERSONALITY_LAYER);
         append(parts, AGENT_MODE_LAYER);
+        // 单表模式：加载单表模式专属行为层
+        if (singleFileMode) {
+            append(parts, SINGLE_FILE_MODE_LAYER);
+        }
         append(parts, SUGGEST_APPROVAL_LAYER);
         append(parts, buildEnvironmentLayer(session));
         append(parts, buildSkillLayer(skill));
         return join(parts);
+    }
+
+    /**
+     * 单表模式：从 base 层中剔除与单表模式矛盾的节，
+     * 替换为单表模式兼容版本。
+     */
+    private String stripForSingleFile(String baseLayer) {
+        if (isBlank(baseLayer)) {
+            return baseLayer;
+        }
+        // 替换 ## Toolbox 为单表版本（保留节标题以满足契约校验）
+        String result = replaceSection(baseLayer, "## Toolbox",
+                "## Toolbox\n\n"
+                        + "单表模式：所有文件内容已在系统提示词中，无需读取工具。\n\n"
+                        + "- 你的上下文中已包含工作目录内所有文件的最新内容，直接使用即可。\n"
+                        + "- 不要使用 read_file 或 search_content 工具——它们已被禁用。\n"
+                        + "- 写入与编辑工具可以正常使用。\n"
+                        + "- 在写入文件后，不要再调用读工具验证——下一轮对话会自动刷新。");
+        // 剔除 ## Fast Path 节
+        result = removeSection(result, "## Fast Path");
+        // 剔除 ## Evidence First 节
+        result = removeSection(result, "## Evidence First");
+        // 剔除 ## When NOT to use certain tools 节（动态追加的，与单表模式矛盾）
+        result = removeSection(result, "## When NOT to use certain tools");
+        // 替换 ## Context Control 为单表版本
+        result = replaceSection(result, "## Context Control",
+                "## Context Control\n\n"
+                        + "单表模式：所有文件内容已在系统提示词中。\n\n"
+                        + "- 直接基于已有文件内容推理和回答，不要试图调用读文件工具。\n"
+                        + "- 修改文件后直接基于写入结果继续，不要试图重新读取验证——下一轮会自动刷新。\n"
+                        + "- 用户只问原因、现状或位置时，优先直接总结。\n"
+                        + "- 同一问题已经定位时，不要继续抽象争论，直接给判断。");
+        return result;
+    }
+
+    /**
+     * 从文本中移除从 sectionMarker 开始到下一个 ## 标题之前的所有内容。
+     */
+    private String removeSection(String text, String sectionMarker) {
+        int start = text.indexOf(sectionMarker);
+        if (start < 0) {
+            return text;
+        }
+        // 找到下一个 ## 标题的位置
+        int end = text.indexOf("\n## ", start + sectionMarker.length());
+        if (end < 0) {
+            // 没有后续节，删除到末尾
+            return text.substring(0, start).trim();
+        }
+        return (text.substring(0, start) + text.substring(end)).trim();
+    }
+
+    /**
+     * 替换从 sectionMarker 开始到下一个 ## 标题之前的内容为 replacement。
+     */
+    private String replaceSection(String text, String sectionMarker, String replacement) {
+        int start = text.indexOf(sectionMarker);
+        if (start < 0) {
+            return text;
+        }
+        int end = text.indexOf("\n## ", start + sectionMarker.length());
+        if (end < 0) {
+            return text.substring(0, start).trim() + "\n\n" + replacement;
+        }
+        return (text.substring(0, start) + replacement + text.substring(end)).trim();
     }
 
     private String buildSkillLayer(SkillDefinition skill) {

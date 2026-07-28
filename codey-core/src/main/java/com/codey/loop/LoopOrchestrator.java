@@ -1,6 +1,7 @@
 package com.codey.loop;
 
 import com.codey.infra.ModelGateway;
+import com.codey.infra.WorkspaceGateway;
 import com.codey.tools.ToolExecutor;
 import com.codey.tools.ToolRegistry;
 import com.codey.config.AgentSession;
@@ -57,6 +58,34 @@ public class LoopOrchestrator {
                             Verifier verifier,
                             HumanConfirmationService humanConfirmationService,
                             SessionStore sessionStore,
+                            WorkspaceGateway workspaceGateway) {
+        this(promptAssembler,
+                promptContractValidator,
+                responseContractValidator,
+                finalResultInterpreter,
+                toolAccessController,
+                modelGateway,
+                toolRegistry,
+                toolExecutor,
+                verifier,
+                humanConfirmationService,
+                sessionStore,
+                new LoopGuard(),
+                new ToolExposurePlanner(toolRegistry),
+                workspaceGateway);
+    }
+
+    public LoopOrchestrator(PromptAssembler promptAssembler,
+                            PromptContractValidator promptContractValidator,
+                            ResponseContractValidator responseContractValidator,
+                            FinalResultInterpreter finalResultInterpreter,
+                            ToolAccessController toolAccessController,
+                            ModelGateway modelGateway,
+                            ToolRegistry toolRegistry,
+                            ToolExecutor toolExecutor,
+                            Verifier verifier,
+                            HumanConfirmationService humanConfirmationService,
+                            SessionStore sessionStore,
                             LoopGuard loopGuard) {
         this(promptAssembler,
                 promptContractValidator,
@@ -86,6 +115,36 @@ public class LoopOrchestrator {
                             SessionStore sessionStore,
                             LoopGuard loopGuard,
                             ToolExposurePlanner toolExposurePlanner) {
+        this(promptAssembler,
+                promptContractValidator,
+                responseContractValidator,
+                finalResultInterpreter,
+                toolAccessController,
+                modelGateway,
+                toolRegistry,
+                toolExecutor,
+                verifier,
+                humanConfirmationService,
+                sessionStore,
+                loopGuard,
+                toolExposurePlanner,
+                null);
+    }
+
+    public LoopOrchestrator(PromptAssembler promptAssembler,
+                            PromptContractValidator promptContractValidator,
+                            ResponseContractValidator responseContractValidator,
+                            FinalResultInterpreter finalResultInterpreter,
+                            ToolAccessController toolAccessController,
+                            ModelGateway modelGateway,
+                            ToolRegistry toolRegistry,
+                            ToolExecutor toolExecutor,
+                            Verifier verifier,
+                            HumanConfirmationService humanConfirmationService,
+                            SessionStore sessionStore,
+                            LoopGuard loopGuard,
+                            ToolExposurePlanner toolExposurePlanner,
+                            WorkspaceGateway workspaceGateway) {
         this(new LoopRuntimeFactory().createRunner(
                 promptAssembler,
                 promptContractValidator,
@@ -100,7 +159,8 @@ public class LoopOrchestrator {
                 sessionStore,
                 loopGuard,
                 toolExposurePlanner,
-                STAGNATION_ROUNDS_THRESHOLD
+                STAGNATION_ROUNDS_THRESHOLD,
+                workspaceGateway
         ));
     }
 

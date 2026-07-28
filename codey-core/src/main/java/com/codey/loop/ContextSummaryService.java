@@ -18,7 +18,12 @@ import java.util.List;
  * 用模型生成一条回灌摘要来折叠旧上下文，同时保留最新一轮输出不被替换。
  */
 final class ContextSummaryService {
+    /** 默认模式：上下文超过 50000 字符时触发摘要 */
     private static final int SUMMARY_TRIGGER_CHARS = 50000;
+    /** 单表模式：上下文超过 30M 字符时触发摘要 */
+    private static final int SINGLE_FILE_TRIGGER_CHARS = 30_000_000;
+    /** 单表模式：每次触发后阈值增量 10M */
+    private static final int SINGLE_FILE_TRIGGER_INCREMENT = 10_000_000;
 
     private final PromptAssembler promptAssembler;
     private final PromptBudgetEstimator promptBudgetEstimator = new PromptBudgetEstimator();
@@ -67,10 +72,14 @@ final class ContextSummaryService {
         }
         int estimatedTotalChars = budgetReport.getEstimatedTotalChars();
         int lastTriggeredChars = session == null ? 0 : session.getLastContextSummaryTriggerChars();
+        // 单表模式：上下文可达100M，30M开始压缩，每次增量10M
+        boolean singleFileMode = session != null && session.isSingleFileMode();
+        int triggerChars = singleFileMode ? SINGLE_FILE_TRIGGER_CHARS : SUMMARY_TRIGGER_CHARS;
+        int increment = singleFileMode ? SINGLE_FILE_TRIGGER_INCREMENT : SUMMARY_TRIGGER_CHARS;
         int nextThreshold = lastTriggeredChars <= 0
-                ? SUMMARY_TRIGGER_CHARS
-                : lastTriggeredChars + SUMMARY_TRIGGER_CHARS;
-        return estimatedTotalChars >= SUMMARY_TRIGGER_CHARS
+                ? triggerChars
+                : lastTriggeredChars + increment;
+        return estimatedTotalChars >= triggerChars
                 && estimatedTotalChars >= nextThreshold;
     }
 

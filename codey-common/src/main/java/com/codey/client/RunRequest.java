@@ -24,6 +24,8 @@ public class RunRequest {
     private ModelProperties modelConfig;
     private boolean includeThinking = true;
     private String coreRules;
+    /** 单表模式：工作目录仅包含单个或少量文件，默认开启 */
+    private boolean singleFileMode = true;
 
     public static RunRequest ofGoal(String goal) {
         RunRequest request = new RunRequest();
@@ -149,6 +151,14 @@ public class RunRequest {
 
     public void setCoreRules(String coreRules) {
         this.coreRules = coreRules;
+    }
+
+    public boolean isSingleFileMode() {
+        return singleFileMode;
+    }
+
+    public void setSingleFileMode(boolean singleFileMode) {
+        this.singleFileMode = singleFileMode;
     }
 
     private List<String> copyList(List<String> source) {

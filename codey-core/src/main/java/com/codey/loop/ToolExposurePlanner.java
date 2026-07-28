@@ -8,6 +8,7 @@ import com.codey.tools.ToolRegistry;
 import com.codey.tool.ToolMetadata;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -15,6 +16,12 @@ import java.util.List;
  * 先暴露读取/搜索工具，拿到上下文后再放开 edit_code。
  */
 public class ToolExposurePlanner {
+    /** 单表模式下需要排除的工具名 */
+    private static final List<String> SINGLE_FILE_EXCLUDED_TOOLS = Arrays.asList(
+            "read_file", "search_content",
+            "read_json", "search_json"    // 业务层的 JSON 读取/搜索工具
+    );
+
     private final ToolRegistry toolRegistry;
 
     public ToolExposurePlanner() {
@@ -29,8 +36,13 @@ public class ToolExposurePlanner {
         if (toolRegistry == null) {
             return new ArrayList<String>();
         }
+        // 单表模式：文件内容已在系统提示词中，不需要 read_file 和 search_content
+        boolean singleFileMode = session != null && session.isSingleFileMode();
         List<String> visibleTools = new ArrayList<String>();
         for (ToolSpec tool : candidateTools(skill)) {
+            if (singleFileMode && isSingleFileExcludedTool(tool)) {
+                continue;
+            }
             if (supportsSessionIdentities(tool, session) && matchesSkillMetadata(tool, skill)) {
                 visibleTools.add(tool.descriptor().getName());
             }
@@ -114,5 +126,16 @@ public class ToolExposurePlanner {
             }
         }
         return false;
+    }
+
+    /**
+     * 判断工具是否在单表模式下需要排除。
+     */
+    private boolean isSingleFileExcludedTool(ToolSpec tool) {
+        if (tool == null || tool.descriptor() == null) {
+            return false;
+        }
+        String name = tool.descriptor().getName();
+        return name != null && SINGLE_FILE_EXCLUDED_TOOLS.contains(name);
     }
 }

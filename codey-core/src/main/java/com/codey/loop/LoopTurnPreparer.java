@@ -11,7 +11,10 @@ import java.util.List;
  * 负责单轮 loop 的前置准备，包括可见工具选择、prompt 构建、预检与调试输出。
  */
 final class LoopTurnPreparer {
-    private static final int CONTEXT_SESSION_HARD_LIMIT_CHARS = 800000;
+    /** 默认模式：上下文硬上限 800K 字符 */
+    private static final int CONTEXT_SESSION_HARD_LIMIT_CHARS = 800_000;
+    /** 单表模式：上下文硬上限 100M 字符 */
+    private static final int SINGLE_FILE_HARD_LIMIT_CHARS = 100_000_000;
 
     private final ToolExposurePlanner toolExposurePlanner;
     private final PromptAssembler promptAssembler;
@@ -20,25 +23,36 @@ final class LoopTurnPreparer {
     private final PromptContractValidator promptContractValidator;
     private final SessionStore sessionStore;
     private final ContextSummaryService contextSummaryService;
+    /** 单表模式文件上下文提供者（可为 null） */
+    private final SingleFileContextProvider singleFileContextProvider;
 
     LoopTurnPreparer(ToolExposurePlanner toolExposurePlanner,
                      PromptAssembler promptAssembler,
                      PromptContractValidator promptContractValidator,
                      SessionStore sessionStore,
-                     ContextSummaryService contextSummaryService) {
+                     ContextSummaryService contextSummaryService,
+                     SingleFileContextProvider singleFileContextProvider) {
         this.toolExposurePlanner = toolExposurePlanner;
         this.promptAssembler = promptAssembler;
         this.promptContractValidator = promptContractValidator;
         this.sessionStore = sessionStore;
         this.contextSummaryService = contextSummaryService;
+        this.singleFileContextProvider = singleFileContextProvider;
     }
 
     PreparedTurn prepare(AgentSession session, SkillDefinition skill, int currentLoop) {
+        // 单表模式：每轮刷新工作目录文件快照
+        refreshSingleFileSnapshotIfNeeded(session);
+
         List<String> visibleTools = toolExposurePlanner.selectVisibleTools(session, skill);
         PromptPackage initialPromptPackage = promptAssembler.buildPackage(session, skill, visibleTools);
         PromptBudgetReport initialBudgetReport = promptBudgetEstimator.estimate(initialPromptPackage, promptContractDefinition);
-        if (initialBudgetReport.getEstimatedTotalChars() >= CONTEXT_SESSION_HARD_LIMIT_CHARS) {
-            String message = "当前会话上下文已达到 " + CONTEXT_SESSION_HARD_LIMIT_CHARS
+        // 单表模式使用更高的上下文上限
+        int hardLimit = (session != null && session.isSingleFileMode())
+                ? SINGLE_FILE_HARD_LIMIT_CHARS
+                : CONTEXT_SESSION_HARD_LIMIT_CHARS;
+        if (initialBudgetReport.getEstimatedTotalChars() >= hardLimit) {
+            String message = "当前会话上下文已达到 " + hardLimit
                     + " 字符上限，请重新开启一个新会话后继续。";
             sessionStore.appendEvent(SessionEventFactory.securityEvent(session.getSessionId(), message));
             return PreparedTurn.rejected(message);
@@ -62,6 +76,15 @@ final class LoopTurnPreparer {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    /**
+     * 单表模式下，每轮对话前刷新工作目录文件快照。
+     */
+    private void refreshSingleFileSnapshotIfNeeded(AgentSession session) {
+        if (singleFileContextProvider != null) {
+            singleFileContextProvider.refreshFileSnapshot(session);
+        }
     }
 
     static final class PreparedTurn {
