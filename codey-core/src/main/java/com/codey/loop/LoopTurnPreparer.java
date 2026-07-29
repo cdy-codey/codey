@@ -23,27 +23,20 @@ final class LoopTurnPreparer {
     private final PromptContractValidator promptContractValidator;
     private final SessionStore sessionStore;
     private final ContextSummaryService contextSummaryService;
-    /** 单表模式文件上下文提供者（可为 null） */
-    private final SingleFileContextProvider singleFileContextProvider;
 
     LoopTurnPreparer(ToolExposurePlanner toolExposurePlanner,
                      PromptAssembler promptAssembler,
                      PromptContractValidator promptContractValidator,
                      SessionStore sessionStore,
-                     ContextSummaryService contextSummaryService,
-                     SingleFileContextProvider singleFileContextProvider) {
+                     ContextSummaryService contextSummaryService) {
         this.toolExposurePlanner = toolExposurePlanner;
         this.promptAssembler = promptAssembler;
         this.promptContractValidator = promptContractValidator;
         this.sessionStore = sessionStore;
         this.contextSummaryService = contextSummaryService;
-        this.singleFileContextProvider = singleFileContextProvider;
     }
 
     PreparedTurn prepare(AgentSession session, SkillDefinition skill, int currentLoop) {
-        // 单表模式：每轮刷新工作目录文件快照
-        refreshSingleFileSnapshotIfNeeded(session);
-
         List<String> visibleTools = toolExposurePlanner.selectVisibleTools(session, skill);
         PromptPackage initialPromptPackage = promptAssembler.buildPackage(session, skill, visibleTools);
         PromptBudgetReport initialBudgetReport = promptBudgetEstimator.estimate(initialPromptPackage, promptContractDefinition);
@@ -76,15 +69,6 @@ final class LoopTurnPreparer {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
-    }
-
-    /**
-     * 单表模式下，每轮对话前刷新工作目录文件快照。
-     */
-    private void refreshSingleFileSnapshotIfNeeded(AgentSession session) {
-        if (singleFileContextProvider != null) {
-            singleFileContextProvider.refreshFileSnapshot(session);
-        }
     }
 
     static final class PreparedTurn {

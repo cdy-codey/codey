@@ -113,7 +113,7 @@ final class ContextSummaryService {
                 return false;
             }
         }
-        String updatedSummary = generateSummary(session, promptPackage);
+        String updatedSummary = generateSummary(session, promptPackage, currentLoop);
         if (isBlank(updatedSummary)) {
             return false;
         }
@@ -134,14 +134,26 @@ final class ContextSummaryService {
         return true;
     }
 
-    private String generateSummary(AgentSession session, PromptPackage promptPackage) {
+    private String generateSummary(AgentSession session, PromptPackage promptPackage, int currentLoop) {
         ModelRequest request = new ModelRequest();
         request.setSessionId(session == null ? null : session.getSessionId());
         request.setModelConfig(session == null ? null : session.getModelConfig());
         request.setRequestType(ModelRequestType.CONTEXT_SUMMARY);
+        // 计时元数据：上下文摘要也标记为当前 loop，seq 用 0 表示辅助调用
+        request.setTimingLoopNumber(currentLoop);
+        request.setTimingCallSequence(0);
         request.setMessages(buildSummaryMessages(promptPackage));
+
+        // 构建请求体用于输入字符数统计
+        int inputChars = estimateInputChars(session, promptPackage);
+
+        long startNanos = System.nanoTime();
         try {
             ModelResponse response = modelGateway.chat(request);
+            long durationMs = (System.nanoTime() - startNanos) / 1_000_000;
+            int outputChars = response == null ? 0 : safe(response.getContent()).length();
+            System.out.printf("[MODEL_TIMING] session=%s loop=%d seq=0 type=CONTEXT_SUMMARY ms=%d in=%d out=%d%n",
+                    session == null ? "" : session.getSessionId(), currentLoop, durationMs, inputChars, outputChars);
             String content = response == null ? "" : safe(response.getContent());
             if (!content.isEmpty()) {
                 return content;
@@ -199,6 +211,22 @@ final class ContextSummaryService {
 
     private String safe(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    /**
+     * 估算上下文摘要请求的输入字符数。
+     */
+    private int estimateInputChars(AgentSession session, PromptPackage promptPackage) {
+        int chars = 0;
+        if (promptPackage != null && promptPackage.getMessages() != null) {
+            for (ModelMessage msg : promptPackage.getMessages()) {
+                if (msg != null) {
+                    chars += msg.getContent() == null ? 0 : msg.getContent().length();
+                    chars += msg.getReasoningContent() == null ? 0 : msg.getReasoningContent().length();
+                }
+            }
+        }
+        return chars;
     }
 
     private ModelMessage copyMessage(ModelMessage source) {

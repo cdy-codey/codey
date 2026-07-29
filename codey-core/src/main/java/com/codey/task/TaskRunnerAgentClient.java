@@ -218,6 +218,7 @@ public class TaskRunnerAgentClient implements AgentClient {
         task.setIdentities(source.getIdentities());
         task.setCoreRules(source.getCoreRules());
         task.setSingleFileMode(source.isSingleFileMode());
+        task.setIncludeThinking(source.isIncludeThinking());
         if (resolveModelConfig) {
             task.setModelConfig(resolveInitialModelConfig(source));
         }

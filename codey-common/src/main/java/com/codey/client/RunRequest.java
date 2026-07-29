@@ -22,7 +22,7 @@ public class RunRequest {
     private List<String> identities = new ArrayList<String>();
     private String tenantId;
     private ModelProperties modelConfig;
-    private boolean includeThinking = true;
+    private boolean includeThinking = false;
     private String coreRules;
     /** 单表模式：工作目录仅包含单个或少量文件，默认开启 */
     private boolean singleFileMode = true;

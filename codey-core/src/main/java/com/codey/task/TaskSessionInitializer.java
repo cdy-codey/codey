@@ -42,6 +42,7 @@ public class TaskSessionInitializer {
         }
         session.setCoreRules(task.getCoreRules());
         session.setSingleFileMode(task.isSingleFileMode());
+        session.setIncludeThinking(task.isIncludeThinking());
         return session;
     }
 }

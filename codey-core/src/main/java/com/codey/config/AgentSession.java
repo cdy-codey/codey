@@ -297,12 +297,12 @@ public class AgentSession {
         sessionContext.setSingleFileMode(singleFileMode);
     }
 
-    public String getSingleFileContentSnapshot() {
-        return sessionContext.getSingleFileContentSnapshot();
+    public boolean isIncludeThinking() {
+        return sessionContext.isIncludeThinking();
     }
 
-    public void setSingleFileContentSnapshot(String singleFileContentSnapshot) {
-        sessionContext.setSingleFileContentSnapshot(singleFileContentSnapshot);
+    public void setIncludeThinking(boolean includeThinking) {
+        sessionContext.setIncludeThinking(includeThinking);
     }
 
     public void appendChatHistory(String content) {

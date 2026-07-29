@@ -665,7 +665,6 @@ onMounted(async () => {
           :current-file-key="aiContextFileKey"    
           :identities-value="['programming','workspace-core']"
           :load-history-on-mounted="true"
-          :show-thinking="false"
           :show-working-directory="false"
           :collapsible="true"
           :on-before-send="handleBeforeAiSend"      

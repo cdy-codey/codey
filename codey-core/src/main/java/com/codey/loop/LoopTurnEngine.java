@@ -30,22 +30,30 @@ final class LoopTurnEngine {
     TurnExecutionResult executeTurn(AgentSession session,
                                     SkillDefinition skill,
                                     int currentLoop,
+                                    int currentCallSequence,
                                     LoopProgressTracker progressTracker) {
         LoopTurnPreparer.PreparedTurn preparedTurn = loopTurnPreparer.prepare(session, skill, currentLoop);
         if (!preparedTurn.isReady()) {
             return TurnExecutionResult.finished(TaskResult.failed(session.getSessionId(), preparedTurn.getFailureMessage()));
         }
 
+        // 首次模型调用使用当前轮次序号
+        int callSeq = currentCallSequence;
         ModelTurnExecutor.ModelTurnExecution modelTurn = modelTurnExecutor.executeTurn(
                 session,
                 preparedTurn.getPromptPackage(),
-                preparedTurn.getVisibleTools()
+                preparedTurn.getVisibleTools(),
+                currentLoop,
+                callSeq
         );
+
+        callSeq++; // 为可能的连续调用递增序号
+
         if (modelTurn.isTerminalFailure()) {
             return TurnExecutionResult.finished(TaskResult.failed(session.getSessionId(), modelTurn.getErrorMessage()));
         }
         if (!modelTurn.isValid()) {
-            return TurnExecutionResult.continueLoop();
+            return TurnExecutionResult.continueLoop(callSeq);
         }
 
         ModelResponse modelResponse = modelTurn.getModelResponse();
@@ -60,13 +68,13 @@ final class LoopTurnEngine {
             );
             LoopProgressTracker.SessionProgressSnapshot afterProgress = progressTracker.snapshot(session);
             progressTracker.markProgress(currentLoop, beforeProgress, afterProgress);
-            return TurnExecutionResult.continueLoop();
+            return TurnExecutionResult.continueLoop(callSeq);
         }
 
         ModelTurnExecutor.FinalResponseEvaluation finalResponseEvaluation =
                 modelTurnExecutor.evaluateFinalResponse(session, modelResponse);
         if (!finalResponseEvaluation.isValid()) {
-            return TurnExecutionResult.continueLoop();
+            return TurnExecutionResult.continueLoop(callSeq);
         }
 
         TaskResult completionResult = completionResultHandler.handleCompletion(
@@ -86,24 +94,27 @@ final class LoopTurnEngine {
             }
             return TurnExecutionResult.finished(completionResult);
         }
-        return TurnExecutionResult.continueLoop();
+        return TurnExecutionResult.continueLoop(callSeq);
     }
 
     static final class TurnExecutionResult {
         private final boolean finished;
         private final TaskResult taskResult;
+        /** 下一轮模型调用的起始序号 */
+        private final int nextCallSequence;
 
-        private TurnExecutionResult(boolean finished, TaskResult taskResult) {
+        private TurnExecutionResult(boolean finished, TaskResult taskResult, int nextCallSequence) {
             this.finished = finished;
             this.taskResult = taskResult;
+            this.nextCallSequence = nextCallSequence;
         }
 
-        static TurnExecutionResult continueLoop() {
-            return new TurnExecutionResult(false, null);
+        static TurnExecutionResult continueLoop(int nextCallSequence) {
+            return new TurnExecutionResult(false, null, nextCallSequence);
         }
 
         static TurnExecutionResult finished(TaskResult taskResult) {
-            return new TurnExecutionResult(true, taskResult);
+            return new TurnExecutionResult(true, taskResult, 0);
         }
 
         boolean isFinished() {
@@ -112,6 +123,10 @@ final class LoopTurnEngine {
 
         TaskResult getTaskResult() {
             return taskResult;
+        }
+
+        int getNextCallSequence() {
+            return nextCallSequence;
         }
     }
 }

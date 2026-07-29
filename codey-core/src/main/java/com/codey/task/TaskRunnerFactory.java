@@ -48,10 +48,9 @@ public class TaskRunnerFactory {
                         toolRegistry,
                         new ToolExecutor(toolRegistry, new WorkspaceToolContext(workspaceRoot, workspaceGateway)),
                         verifier,
-                        humanConfirmationService,
-                        sessionStore,
-                        workspaceGateway
-                )
+                humanConfirmationService,
+                sessionStore
+        )
         );
     }
 }

@@ -26,8 +26,8 @@ final class SessionContextState {
     private String coreRules;
     /** 单表模式：工作目录仅包含单个或少量文件，默认开启 */
     private boolean singleFileMode = true;
-    /** 单表模式下的工作目录文件内容快照（每轮刷新） */
-    private String singleFileContentSnapshot;
+    /** 是否启用推理模型思考过程，默认关闭 */
+    private boolean includeThinking = false;
 
     String getSkillName() {
         return skillName;
@@ -143,12 +143,12 @@ final class SessionContextState {
         this.singleFileMode = singleFileMode;
     }
 
-    String getSingleFileContentSnapshot() {
-        return singleFileContentSnapshot;
+    boolean isIncludeThinking() {
+        return includeThinking;
     }
 
-    void setSingleFileContentSnapshot(String singleFileContentSnapshot) {
-        this.singleFileContentSnapshot = normalizeText(singleFileContentSnapshot);
+    void setIncludeThinking(boolean includeThinking) {
+        this.includeThinking = includeThinking;
     }
 
     void appendContextFile(String path) {

@@ -1,7 +1,6 @@
 package com.codey.loop;
 
 import com.codey.infra.ModelGateway;
-import com.codey.infra.WorkspaceGateway;
 import com.codey.session.SessionStore;
 import com.codey.tools.ToolExecutor;
 import com.codey.tools.ToolRegistry;
@@ -24,25 +23,19 @@ final class LoopRuntimeFactory {
                                 SessionStore sessionStore,
                                 LoopGuard loopGuard,
                                 ToolExposurePlanner toolExposurePlanner,
-                                int stagnationRoundsThreshold,
-                                WorkspaceGateway workspaceGateway) {
+                                int stagnationRoundsThreshold) {
         ReplanService replanService = new ReplanService();
         ContextSummaryService contextSummaryService = new ContextSummaryService(
                 promptAssembler,
                 modelGateway,
                 sessionStore
         );
-        // 单表模式文件上下文提供者（workspaceGateway 为 null 时单表模式不可用）
-        SingleFileContextProvider singleFileContextProvider = workspaceGateway != null
-                ? new SingleFileContextProvider(workspaceGateway)
-                : null;
         LoopTurnPreparer loopTurnPreparer = new LoopTurnPreparer(
                 toolExposurePlanner,
                 promptAssembler,
                 promptContractValidator,
                 sessionStore,
-                contextSummaryService,
-                singleFileContextProvider
+                contextSummaryService
         );
         ToolCallProcessor toolCallProcessor = new ToolCallProcessor(
                 toolExecutor,

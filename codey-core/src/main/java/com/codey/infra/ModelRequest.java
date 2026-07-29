@@ -1,6 +1,7 @@
 package com.codey.infra;
 
 import com.codey.config.ModelProperties;
+import com.codey.config.Thinking;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.ArrayList;
@@ -16,6 +17,14 @@ public class ModelRequest {
     private ModelProperties modelConfig;
     private ModelRequestType requestType = ModelRequestType.BUSINESS;
     private ModelStreamListener streamListener;
+    /** 计时用：当前 loop 轮次（由 ModelTurnExecutor 注入） */
+    @JsonIgnore
+    private int timingLoopNumber;
+    /** 计时用：本轮内调用序号（由 ModelTurnExecutor 注入） */
+    @JsonIgnore
+    private int timingCallSequence;
+    /** 是否启用推理模型思考过程，默认关闭 */
+    private boolean includeThinking = false;
 
     public String getSessionId() {
         return sessionId;
@@ -68,6 +77,32 @@ public class ModelRequest {
 
     public void setStreamListener(ModelStreamListener streamListener) {
         this.streamListener = streamListener;
+    }
+
+    @JsonIgnore
+    public int getTimingLoopNumber() {
+        return timingLoopNumber;
+    }
+
+    public void setTimingLoopNumber(int timingLoopNumber) {
+        this.timingLoopNumber = timingLoopNumber;
+    }
+
+    @JsonIgnore
+    public int getTimingCallSequence() {
+        return timingCallSequence;
+    }
+
+    public void setTimingCallSequence(int timingCallSequence) {
+        this.timingCallSequence = timingCallSequence;
+    }
+
+    public boolean isIncludeThinking() {
+        return includeThinking;
+    }
+
+    public void setIncludeThinking(boolean includeThinking) {
+        this.includeThinking = includeThinking;
     }
 
     private ModelProperties copyModelConfig(ModelProperties source) {

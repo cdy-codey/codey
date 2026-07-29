@@ -100,6 +100,9 @@ public class HttpModelGateway implements ModelGateway {
             outputStream.flush();
             outputStream.close();
 
+            // ---- 计时开始：纯模型网络 I/O ----
+            long networkIoStartNanos = System.nanoTime();
+
             int statusCode = connection.getResponseCode();
             InputStream inputStream = statusCode >= 400 ? connection.getErrorStream() : connection.getInputStream();
             if (statusCode >= 400) {
@@ -111,13 +114,20 @@ public class HttpModelGateway implements ModelGateway {
             String contentType = connection.getHeaderField("Content-Type");
             if (contentType != null && contentType.toLowerCase().contains("text/event-stream")) {
                 ModelResponse streamedResponse = readStreamingResponse(inputStream, request.getStreamListener(), effectiveConfig);
+                // ---- 计时结束：纯模型网络 I/O ----
+                long networkIoEndNanos = System.nanoTime();
+                long networkIoMs = (networkIoEndNanos - networkIoStartNanos) / 1_000_000;
                 writeDebugLog("success", requestBody, streamedResponse.getRawResponse(), effectiveConfig);
                 return streamedResponse;
             }
 
             String response = readAll(inputStream);
+            // ---- 计时结束：纯模型网络 I/O ----
+            long networkIoEndNanos = System.nanoTime();
+            long networkIoMs = (networkIoEndNanos - networkIoStartNanos) / 1_000_000;
+            ModelResponse parsedResponse = parseModelResponse(response);
             writeDebugLog("success", requestBody, response, effectiveConfig);
-            return parseModelResponse(response);
+            return parsedResponse;
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -198,11 +208,15 @@ public class HttpModelGateway implements ModelGateway {
     private String buildRequestBody(ModelRequest request, ModelConfig effectiveConfig) throws Exception {
         Map<String, Object> body = new LinkedHashMap<String, Object>();
         body.put("model", effectiveConfig.getModelName());
-        List<Map<String, Object>> messages = buildWireMessages(request);
+        List<Map<String, Object>> messages = buildWireMessages(request, request.isIncludeThinking());
         body.put("messages", messages);
         body.put("temperature",
                 effectiveConfig.getTemperature() == null ? Double.valueOf(0.2d) : effectiveConfig.getTemperature());
         body.put("stream", Boolean.TRUE);
+        // 前端控制是否启用推理模型思考过程
+        if (!request.isIncludeThinking()) {
+            body.put("thinking", new com.codey.config.Thinking());
+        }
         if (request.getTools() != null && !request.getTools().isEmpty()) {
             body.put("tools", buildOpenAiTools(request.getTools()));
             body.put("tool_choice", "auto");
@@ -264,7 +278,7 @@ public class HttpModelGateway implements ModelGateway {
     /**
      * 发送前做一次协议级清洗，避免裁剪后的历史把 tool_calls/tool 配对打坏。
      */
-    private List<Map<String, Object>> buildWireMessages(ModelRequest request) throws Exception {
+    private List<Map<String, Object>> buildWireMessages(ModelRequest request, boolean includeThinking) throws Exception {
         List<Map<String, Object>> messages = new ArrayList<Map<String, Object>>();
         List<ModelMessage> sanitizedMessages = sanitizeMessages(request.getMessages());
         validateSystemMessageUsage(sanitizedMessages);
@@ -272,7 +286,7 @@ public class HttpModelGateway implements ModelGateway {
         validateAssistantMessageUsage(sanitizedMessages);
         validateToolMessageUsage(sanitizedMessages);
         for (ModelMessage message : sanitizedMessages) {
-            appendMessage(messages, message);
+            appendMessage(messages, message, includeThinking);
         }
         return messages;
     }
@@ -405,7 +419,7 @@ public class HttpModelGateway implements ModelGateway {
         return false;
     }
 
-    private void appendMessage(List<Map<String, Object>> messages, ModelMessage modelMessage) throws Exception {
+    private void appendMessage(List<Map<String, Object>> messages, ModelMessage modelMessage, boolean includeThinking) throws Exception {
         if (modelMessage == null || isBlank(modelMessage.getRole())) {
             return;
         }
@@ -422,7 +436,7 @@ public class HttpModelGateway implements ModelGateway {
         }
         if (modelMessage.hasToolCalls()) {
             message.put("content", isBlank(modelMessage.getContent()) ? "" : modelMessage.getContent());
-            if (!isBlank(modelMessage.getReasoningContent())) {
+            if (includeThinking && !isBlank(modelMessage.getReasoningContent())) {
                 message.put("reasoning_content", modelMessage.getReasoningContent());
             }
             message.put("tool_calls", buildWireToolCalls(modelMessage.getToolCalls()));
@@ -439,7 +453,7 @@ public class HttpModelGateway implements ModelGateway {
             return;
         }
         if (isBlank(modelMessage.getContent())) {
-            if (modelMessage.isAssistant() && !isBlank(modelMessage.getReasoningContent())) {
+            if (modelMessage.isAssistant() && includeThinking && !isBlank(modelMessage.getReasoningContent())) {
                 message.put("content", "");
                 message.put("reasoning_content", modelMessage.getReasoningContent());
                 messages.add(message);
@@ -447,7 +461,7 @@ public class HttpModelGateway implements ModelGateway {
             return;
         }
         message.put("content", modelMessage.getContent());
-        if (modelMessage.isAssistant() && !isBlank(modelMessage.getReasoningContent())) {
+        if (modelMessage.isAssistant() && includeThinking && !isBlank(modelMessage.getReasoningContent())) {
             message.put("reasoning_content", modelMessage.getReasoningContent());
         }
         messages.add(message);

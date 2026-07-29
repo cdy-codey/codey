@@ -26,6 +26,8 @@ public class GenerateTask {
     private String coreRules;
     /** 单表模式：工作目录仅包含单个或少量文件，默认开启 */
     private boolean singleFileMode = true;
+    /** 是否启用推理模型思考过程，默认关闭（DeepSeek thinking.type） */
+    private boolean includeThinking = false;
 
     public String getSessionId() {
         return sessionId;
@@ -145,6 +147,14 @@ public class GenerateTask {
 
     public void setSingleFileMode(boolean singleFileMode) {
         this.singleFileMode = singleFileMode;
+    }
+
+    public boolean isIncludeThinking() {
+        return includeThinking;
+    }
+
+    public void setIncludeThinking(boolean includeThinking) {
+        this.includeThinking = includeThinking;
     }
 
     private ModelProperties copyModelConfig(ModelProperties source) {

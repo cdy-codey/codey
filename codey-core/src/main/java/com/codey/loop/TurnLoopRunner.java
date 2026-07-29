@@ -20,16 +20,18 @@ final class TurnLoopRunner {
         int configuredMaxLoopCount = skill == null ? 8 : skill.getMaxLoopCount();
         int maxLoopCount = Math.max(1, configuredMaxLoopCount);
         LoopProgressTracker progressTracker = new LoopProgressTracker(session, maxLoopCount, stagnationRoundsThreshold);
+        int callSequence = 1; // 跨 loop 的模型调用全局序号
         while (!progressTracker.hasReachedMaxLoopCount()) {
             int currentLoop = progressTracker.nextLoop();
             if (progressTracker.isStagnated()) {
                 break;
             }
             LoopTurnEngine.TurnExecutionResult turnResult =
-                    loopTurnEngine.executeTurn(session, skill, currentLoop, progressTracker);
+                    loopTurnEngine.executeTurn(session, skill, currentLoop, callSequence, progressTracker);
             if (turnResult.isFinished()) {
                 return turnResult.getTaskResult();
             }
+            callSequence = turnResult.getNextCallSequence();
         }
         return TaskResult.failed(session.getSessionId(), progressTracker.buildHaltMessage(session));
     }

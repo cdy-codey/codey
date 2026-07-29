@@ -40,8 +40,12 @@ final class ModelTurnExecutor {
 
     ModelTurnExecution executeTurn(AgentSession session,
                                    PromptPackage promptPackage,
-                                   List<String> visibleTools) {
+                                   List<String> visibleTools,
+                                   int currentLoop,
+                                   int callSequence) {
         ModelRequest modelRequest = buildModelRequest(session, promptPackage, visibleTools);
+        modelRequest.setTimingLoopNumber(currentLoop);
+        modelRequest.setTimingCallSequence(callSequence);
         ModelResponse modelResponse;
         try {
             modelResponse = modelGateway.chat(modelRequest);
@@ -93,6 +97,7 @@ final class ModelTurnExecutor {
         final String sessionId = session == null ? null : session.getSessionId();
         request.setSessionId(sessionId);
         request.setModelConfig(session == null ? null : session.getModelConfig());
+        request.setIncludeThinking(session == null || session.isIncludeThinking());
         request.setRequestType(ModelRequestType.BUSINESS);
         request.setMessages(promptPackage == null ? null : promptPackage.getMessages());
         request.setTools(toolRegistry.getToolDefinitions(visibleTools));

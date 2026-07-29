@@ -123,28 +123,7 @@ public class PromptAssembler {
         if (session != null) {
             appendStableRuntimeContext(builder, session);
         }
-        // 单表模式：注入工作目录文件内容快照
-        appendSingleFileContext(builder, session);
         return builder.toString().trim();
-    }
-
-    /**
-     * 单表模式：将工作目录文件内容注入运行时 system 消息。
-     */
-    private void appendSingleFileContext(StringBuilder builder, AgentSession session) {
-        if (session == null || !session.isSingleFileMode()) {
-            return;
-        }
-        String snapshot = session.getSingleFileContentSnapshot();
-        if (isBlank(snapshot)) {
-            return;
-        }
-        builder.append("\n## 单表模式：工作目录文件内容（每轮自动刷新）\n\n")
-                .append("以下为当前工作目录内所有文件的最新内容，")
-                .append("你不需要调用 read_file 或 search_content 工具来获取文件内容，")
-                .append("直接引用即可。如果文件内容发生变化（如你写入了新内容），")
-                .append("下一轮对话会自动刷新为最新内容。\n\n")
-                .append(snapshot);
     }
 
     private String buildRuntimeSummarySystemMessage(AgentSession session) {
