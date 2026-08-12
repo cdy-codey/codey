@@ -29,7 +29,13 @@ const formModel = reactive({
   budgetAmount: 0,
   requestReason: '',
   exceedReason: '',
+  // 需求附件列表，每个附件包含 originalName, storedName, size, uploadTime 等字段
+  attachments: [],
 })
+
+// 附件上传相关状态
+const uploading = ref(false)
+const uploadInputRef = ref(null)
 
 const optionMaps = reactive({
   urgencyOptions: [],
@@ -50,6 +56,14 @@ const aiContextFileKey = "采购文件申请"
 function toNumber(value) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+// 格式化文件大小显示
+function formatFileSize(bytes) {
+  if (bytes == null || !Number.isFinite(bytes)) return '未知'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function mapOptions(list = []) {
@@ -108,6 +122,8 @@ function buildContextSnapshot() {
     purchaseTypeOptions: scenario.value?.purchaseTypeOptions || [],
     catalogScopeOptions: scenario.value?.catalogScopeOptions || [],
     aiInstruction: scenario.value?.aiInstruction || '',
+    // 附件信息同步到工作区，供 AI 读取分析
+    attachments: formModel.attachments || [],
   }
 }
 
@@ -139,6 +155,8 @@ function applyScenarioContext(context) {
   optionMaps.categoryOptions = mapOptions(context?.categoryOptions)
   optionMaps.purchaseTypeOptions = mapOptions(context?.purchaseTypeOptions)
   optionMaps.catalogScopeOptions = mapOptions(context?.catalogScopeOptions)
+  // 还原附件列表
+  formModel.attachments = Array.isArray(context?.attachments) ? [...context.attachments] : []
   recalculateBudgetAmount()
 }
 
@@ -168,6 +186,36 @@ function removeLineItem(index) {
   recalculateBudgetAmount()
 }
 
+// 打开文件选择器并上传附件
+function handleUploadAttachment() {
+  uploadInputRef.value?.click()
+}
+
+// 文件选择变化时触发上传
+async function handleFileChange(event) {
+  const file = event.target?.files?.[0]
+  if (!file) return
+  uploading.value = true
+  try {
+    const result = await businessScenarioApi.uploadAttachment(file)
+    formModel.attachments.push(result)
+    ElMessage.success(`附件 "${file.name}" 上传成功`)
+  } catch (error) {
+    ElMessage.error(error.message || '附件上传失败')
+  } finally {
+    uploading.value = false
+    // 清空 input，以便重复上传同名文件
+    if (uploadInputRef.value) {
+      uploadInputRef.value.value = ''
+    }
+  }
+}
+
+// 移除已上传附件
+function removeAttachment(index) {
+  formModel.attachments.splice(index, 1)
+}
+
 function applyAiAutofillPayload(payload = {}) {
   const header = payload.header || {}
   const detail = payload.detail || {}
@@ -187,6 +235,10 @@ function applyAiAutofillPayload(payload = {}) {
   const budgetAmount = toNumber(detail.budgetAmount)
   formModel.budgetAmount = budgetAmount > 0 ? budgetAmount : totalAmount.value
   if (!budgetAmount) recalculateBudgetAmount()
+  // AI 返回的附件列表直接替换当前附件
+  if (Array.isArray(payload.attachments)) {
+    formModel.attachments = [...payload.attachments]
+  }
 }
 
 // 打开 AI 助手并注入本页面的 assistantProps（回调 + 上下文）。
@@ -359,6 +411,41 @@ onMounted(async () => { await loadScenarioContext() })
             title="演示说明：点击“打开助手”后，通过 openSystemAiAssistant 调用布局层（ExampleDetailPage）中的 AiChatWorkspace 实例。页面本向只注入 assistantProps，不自己挂载 AiChatWorkspace。"
             type="warning" :closable="false" show-icon class="tips-alert"
           />
+          <!-- 需求附件上传区域 -->
+          <div class="attachment-section">
+            <div class="attachment-header">
+              <span class="attachment-label">需求附件</span>
+              <el-button
+                size="small"
+                type="primary"
+                :loading="uploading"
+                @click="handleUploadAttachment"
+              >
+                上传附件
+              </el-button>
+              <!-- 隐藏的原生文件选择器 -->
+              <input
+                ref="uploadInputRef"
+                type="file"
+                style="display: none"
+                @change="handleFileChange"
+              />
+            </div>
+            <div v-if="formModel.attachments.length === 0" class="attachment-empty">
+              暂无附件，点击"上传附件"添加需求相关文件
+            </div>
+            <div v-else class="attachment-list">
+              <div
+                v-for="(attachment, index) in formModel.attachments"
+                :key="attachment.storedName || index"
+                class="attachment-item"
+              >
+                <span class="attachment-name">{{ attachment.originalName }}</span>
+                <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
+                <el-button link type="danger" size="small" @click="removeAttachment(index)">删除</el-button>
+              </div>
+            </div>
+          </div>
           <div class="detail-toolbar">
             <el-form label-width="110px" class="detail-form">
               <div class="detail-grid">
@@ -437,6 +524,15 @@ onMounted(async () => { await loadScenarioContext() })
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
 .tips-alert { margin-bottom: 12px; }
+/* 附件上传区域 */
+.attachment-section { margin-bottom: 16px; }
+.attachment-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.attachment-label { font-size: 13px; font-weight: 600; color: #374151; }
+.attachment-empty { padding: 16px; text-align: center; color: #9ca3af; font-size: 13px; border: 1px dashed #d1d5db; border-radius: 8px; }
+.attachment-list { display: flex; flex-direction: column; gap: 6px; }
+.attachment-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; background: #f9fafb; border: 1px solid #e5e7eb; }
+.attachment-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1f2937; font-size: 13px; }
+.attachment-size { color: #9ca3af; font-size: 12px; white-space: nowrap; }
 .line-item-table { margin-top: 8px; }
 .footer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; }
 .amount-summary { color: #475569; font-size: 14px; }

@@ -19,7 +19,7 @@ export const exampleRegistry = [
     id: 'business-open-system-assistant',
     routePath: '/examples/business-open-system-assistant',
     title: '全局挂载助手',
-    summary: '采购申请单页面，演示通过 openSystemAiAssistant 编程式打开 AI 助手完成自动填写与回填。业务逻辑与“业务示例”一致，仅 AI 交互方式不同。',
+    summary: '采购申请单页面，演示通过 openSystemAiAssistant 编程式打开 AI 助手完成自动填写与回填。业务逻辑与"业务示例"一致，仅 AI 交互方式不同。',
     category: '业务示例',
     tags: ['采购申请', '自动填写', 'openSystemAiAssistant'],
     component: markRaw(OpenSystemAiAssistantExample),

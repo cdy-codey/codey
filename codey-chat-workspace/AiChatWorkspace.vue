@@ -225,7 +225,7 @@ const props = defineProps({
   },
   showThinking: {
     type: Boolean,
-    default: true,
+    default: false,
   },
   welcomeMessage: {
     type: String,
@@ -258,6 +258,8 @@ const assistantVisible = ref(props.defaultVisible)
 const activeTableModal = ref(null)
 // 用户选择补充说明输入
 const choiceNote = ref('')
+// 深度思考开关，本地状态，默认不启用
+const thinkingEnabled = ref(false)
 
 function openTableModal(moduleData) {
   activeTableModal.value = moduleData
@@ -385,7 +387,15 @@ const effectiveIdentitiesValue = computed(() => {
   const value = resolveAssistantProp('identitiesValue')
   return Array.isArray(value) ? value : []
 })
-const effectiveShowThinking = computed(() => resolveAssistantBooleanProp('showThinking', true))
+// 深度思考由本地开关控制，prop 提供初始值
+const effectiveShowThinking = computed(() => {
+  // 如果通过 openAssistant 传入了 assistantProps.showThinking，则采用传入值
+  const runtimeValue = runtimeAssistantProps.value?.showThinking
+  if (typeof runtimeValue === 'boolean') {
+    return runtimeValue
+  }
+  return thinkingEnabled.value
+})
 const effectiveWelcomeMessage = computed(() => resolveAssistantStringProp('welcomeMessage', '直接输入任务即可开始。'))
 const effectiveWelcomeSuggestions = computed(() => {
   const value = resolveAssistantProp('welcomeSuggestions')
@@ -1454,6 +1464,18 @@ watch(
 
           <div class="ai-toolbar" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
             <slot name="toolbar" />
+            <!-- 深度思考开关 -->
+            <button
+              class="ai-btn toolbar-secondary-button thinking-toggle-btn"
+              :class="{ 'thinking-toggle-btn--active': effectiveShowThinking }"
+              :title="effectiveShowThinking ? '关闭深度思考' : '开启深度思考'"
+              @click.stop="thinkingEnabled = !thinkingEnabled"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 0 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span class="thinking-toggle-label">深度思考</span>
+            </button>
             <button v-if="effectiveCollapsible" class="ai-btn toolbar-secondary-button" @click.stop="toggleCollapsed">
               <!-- 左箭头 SVG 图标 -->
               <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
@@ -2746,6 +2768,25 @@ watch(
   background: #409eff;
   border-color: #409eff;
   color: #ffffff;
+}
+
+/* 深度思考开关按钮 */
+.thinking-toggle-btn {
+  transition: all 0.2s ease;
+}
+.thinking-toggle-btn--active {
+  color: #e6a23c;
+  border-color: #f5dab1;
+  background: #fdf6ec;
+}
+.thinking-toggle-btn--active:hover {
+  color: #e6a23c;
+  border-color: #e6a23c;
+  background: #fdf6ec;
+}
+.thinking-toggle-label {
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .assistant-bubble-shell {
