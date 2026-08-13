@@ -1,4 +1,4 @@
-﻿package com.codey.web.entity;
+package com.codey.web.entity;
 import com.codey.web.common.Dict;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;

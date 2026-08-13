@@ -4,7 +4,6 @@ import com.codey.workspace.WorkspaceDirectoryException;
 import com.codey.workspace.WorkspaceFile;
 import com.codey.workspace.WorkspaceSnapshot;
 import com.codey.workspace.WorkspaceDirectoryService;
-import com.codey.web.config.WebDemoProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
@@ -12,11 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Web Demo 工作区服务适配层。
@@ -24,19 +18,12 @@ import java.util.Set;
  */
 @Service
 public class WorkspaceService {
-    private static final Set<String> STANDARD_IGNORED_ENTRY_NAMES = new HashSet<String>(Arrays.asList(
-            ".git", ".idea", "node_modules", "target", "dist"
-    ));
 
     private final WorkspaceDirectoryService delegate;
     private final ObjectMapper objectMapper;
 
-    public WorkspaceService(WebDemoProperties properties, ObjectMapper objectMapper) {
-        this.delegate = new WorkspaceDirectoryService(
-                properties.resolveWorkingDirectoryRoot(),
-                buildIgnoredEntryNames(properties.getSessionDirectory()),
-                properties::toVisiblePath
-        );
+    public WorkspaceService(WorkspaceDirectoryService delegate, ObjectMapper objectMapper) {
+        this.delegate = delegate;
         this.objectMapper = objectMapper;
     }
 
@@ -90,16 +77,6 @@ public class WorkspaceService {
 
     public String getVisibleWorkspaceRoot() {
         return delegate.getVisibleWorkspaceRoot();
-    }
-
-    private Set<String> buildIgnoredEntryNames(String sessionDirectory) {
-        Set<String> ignoredNames = new HashSet<String>(STANDARD_IGNORED_ENTRY_NAMES);
-        Path normalizedSessionDirectory = Paths.get(sessionDirectory).normalize();
-        Path fileName = normalizedSessionDirectory.getFileName();
-        if (fileName != null) {
-            ignoredNames.add(fileName.toString());
-        }
-        return ignoredNames;
     }
 
     private ResponseStatusException toResponseStatusException(WorkspaceDirectoryException exception) {
