@@ -207,6 +207,17 @@ public class ProcurementReferenceDataService {
                 "11000"
         ));
         fields.add(fieldGuide(
+                "detail.actualAmount",
+                "实际金额（元）",
+                "number",
+                false,
+                "表示按实际单价（附件单价优先，附件未写单价则按 0）计算的总金额，由 AI 计算后回填。",
+                "等于各明细行「数量 × 实际单价」之和，只读展示，不参与手工填写。",
+                null,
+                Arrays.asList("只读展示", "必须大于 0"),
+                "10998"
+        ));
+        fields.add(fieldGuide(
                 "detail.requestReason",
                 "需求原因说明",
                 "string",

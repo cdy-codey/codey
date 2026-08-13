@@ -20,6 +20,8 @@ public class AgentSession {
     private final ConversationState conversationState = new ConversationState(MAX_CHAT_HISTORY);
     private final ExecutionState executionState = new ExecutionState(MAX_MODEL_TRANSCRIPT);
     private final LoopMemoryState loopMemoryState = new LoopMemoryState();
+    /** 本轮写工具已成功执行并通过校验，可在本轮结束后直接完成循环，无需再让模型输出 FINISH。 */
+    private boolean verifiedWriteAutoComplete;
 
     public AgentSession() {
         this(null);
@@ -325,8 +327,28 @@ public class AgentSession {
         return conversationState.hasPendingChoice();
     }
 
+    public boolean matchesPendingChoice(String input) {
+        return conversationState.matchesPendingChoice(input);
+    }
+
     public String resolvePendingChoice(String rawUserInput) {
         return conversationState.resolvePendingChoice(rawUserInput);
+    }
+
+    public boolean isFormFillAuthorized() {
+        return conversationState.isFormFillAuthorized();
+    }
+
+    public boolean isVerifiedWriteAutoComplete() {
+        return verifiedWriteAutoComplete;
+    }
+
+    public void markVerifiedWriteAutoComplete() {
+        this.verifiedWriteAutoComplete = true;
+    }
+
+    public void resetVerifiedWriteAutoComplete() {
+        this.verifiedWriteAutoComplete = false;
     }
 
     public void clearPendingChoice() {

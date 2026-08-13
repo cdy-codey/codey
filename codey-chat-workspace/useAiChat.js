@@ -16,6 +16,7 @@ const STREAM_EVENT_TYPES = [
   'model_tool_call_started',
   'tool_execution_started',
   'tool_call',
+  'human_confirmation_required',
   'verification',
   'task_status',
   'final_summary',
@@ -547,6 +548,19 @@ function parseEventPayload(event) {
     appendToolCalls([payload?.payload?.displayName || payload?.stage || payload?.message || eventType])
   }
 
+  function handleHumanConfirmation(payload) {
+    const inner = payload?.payload || {}
+    return invokeAsyncHook('onHumanConfirmation', {
+      sessionId: payload?.sessionId || sessionId.value,
+      confirmationId: inner.confirmationId,
+      toolName: inner.toolName,
+      arguments: inner.arguments,
+      summary: inner.summary,
+      uncertaintyReason: inner.uncertaintyReason,
+      payload,
+    })
+  }
+
   function handleSecurityEvent(payload) {
     errorMessage.value = payload?.message || '检测到安全事件'
   }
@@ -591,6 +605,7 @@ function parseEventPayload(event) {
     task_status: handleTaskStatus,
     final_summary: handleFinalSummary,
     tool_call: handleToolCall,
+    human_confirmation_required: handleHumanConfirmation,
     security_event: handleSecurityEvent,
     model_output: handleModelOutput,
     // 以下事件类型只需记录或无需处理

@@ -39,6 +39,7 @@ public class CompositeSkill implements Skill {
         merged.setIdentityMatchMode(IdentityMatchMode.ANY);
         merged.setOutputContract(joinOutputContracts(skills));
         merged.setMaxLoopCount(resolveMaxLoopCount(skills));
+        merged.setAutoCompleteOnVerifiedWrite(hasAutoCompleteOnVerifiedWrite(skills));
         return merged;
     }
 
@@ -135,6 +136,15 @@ public class CompositeSkill implements Skill {
             maxLoopCount = Math.max(maxLoopCount, skill.definition().getMaxLoopCount());
         }
         return maxLoopCount;
+    }
+
+    private boolean hasAutoCompleteOnVerifiedWrite(List<Skill> skills) {
+        for (Skill skill : skills) {
+            if (skill != null && skill.definition() != null && skill.definition().isAutoCompleteOnVerifiedWrite()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isBlank(String value) {

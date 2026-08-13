@@ -223,6 +223,10 @@ const props = defineProps({
     type: Function,
     default: null,
   },
+  confirmDecision: {
+    type: Function,
+    default: null,
+  },
   showThinking: {
     type: Boolean,
     default: false,
@@ -310,6 +314,49 @@ function handleConfirmOk() {
 function handleConfirmCancel() {
   confirmDialog.value.reject?.()
   confirmDialog.value.visible = false
+}
+
+async function handleHumanConfirmation(event) {
+  const sessionId = event?.sessionId || ''
+  const confirmationId = event?.confirmationId || ''
+  const toolName = event?.toolName || ''
+  const summary = event?.summary || ''
+  const uncertaintyReason = event?.uncertaintyReason || ''
+
+  const lines = [`AI 准备执行「${toolName || '文件修改'}」操作`]
+  if (summary) {
+    lines.push(`摘要：${summary}`)
+  }
+  if (uncertaintyReason) {
+    lines.push(`说明：${uncertaintyReason}`)
+  }
+  lines.push('是否确认执行？')
+
+  let approved = false
+  try {
+    await showConfirm(lines.join('\n'), '操作确认', {
+      confirmButtonText: '确认执行',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    approved = true
+  } catch (error) {
+    approved = false
+  }
+
+  const confirmDecisionHandler = resolveAssistantFunctionProp('confirmDecision')
+  if (!confirmDecisionHandler || !confirmationId) {
+    return
+  }
+  try {
+    await confirmDecisionHandler(sessionId, confirmationId, { approved, feedback: '' })
+  } catch (error) {
+    if (isJsonParseLikeError(error)) {
+      console.warn('[AiChatWorkspace] 提交人工确认决策时出现 JSON 解析异常，已忽略:', error)
+      return
+    }
+    console.warn('[AiChatWorkspace] 提交人工确认决策失败:', error)
+  }
 }
 
 function resolveAssistantProp(name) {
@@ -798,6 +845,9 @@ const {
       }
       throw error
     }
+  },
+  onHumanConfirmation: async (event) => {
+    await handleHumanConfirmation(event)
   },
   onToolCall: async (event) => {
     await emitAssistantCallback('onToolCall', event)

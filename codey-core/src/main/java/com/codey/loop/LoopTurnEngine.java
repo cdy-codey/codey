@@ -5,6 +5,9 @@ import com.codey.config.AgentSession;
 import com.codey.skill.SkillDefinition;
 import com.codey.task.TaskResult;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 驱动单轮 loop，从准备 prompt 到处理 tool/result，返回本轮结果。
  */
@@ -68,6 +71,13 @@ final class LoopTurnEngine {
             );
             LoopProgressTracker.SessionProgressSnapshot afterProgress = progressTracker.snapshot(session);
             progressTracker.markProgress(currentLoop, beforeProgress, afterProgress);
+            // 写工具成功且通过校验后，无需再让模型多跑一轮输出 FINISH，直接在本轮完成。
+            if (session != null && session.isVerifiedWriteAutoComplete()) {
+                TaskResult completionResult = completeAutoCompletedTurn(session, skill, modelResponse);
+                if (completionResult != null) {
+                    return TurnExecutionResult.finished(completionResult);
+                }
+            }
             return TurnExecutionResult.continueLoop(callSeq);
         }
 
@@ -95,6 +105,35 @@ final class LoopTurnEngine {
             return TurnExecutionResult.finished(completionResult);
         }
         return TurnExecutionResult.continueLoop(callSeq);
+    }
+
+    /**
+     * 写工具成功并通过校验后的自动完成：构造一个最小的 FINISH 结果，复用正常完成链路，
+     * 保证 final_summary / task_status 等事件与普通完成态完全一致，仅省去一次模型往返。
+     * 表单填写属于短任务，跳过上下文摘要调度，避免在任务结束时再触发一次模型调用。
+     */
+    private TaskResult completeAutoCompletedTurn(AgentSession session,
+                                                SkillDefinition skill,
+                                                ModelResponse modelResponse) {
+        String summary = "已根据附件内容完成表单填写，并写入 context.json。";
+        FinalResult finalResult = new FinalResult();
+        finalResult.setStatus("FINISH");
+        finalResult.setSummary(summary);
+        Map<String, Object> view = new LinkedHashMap<String, Object>();
+        view.put("_view_type", "text");
+        view.put("content", summary);
+        finalResult.setView(view);
+
+        ModelResponse syntheticResponse = new ModelResponse();
+        syntheticResponse.setContent(summary);
+        syntheticResponse.setReasoningContent(modelResponse == null ? "" : modelResponse.getReasoningContent());
+
+        return completionResultHandler.handleCompletion(
+                session,
+                skill,
+                syntheticResponse,
+                finalResult
+        );
     }
 
     static final class TurnExecutionResult {
