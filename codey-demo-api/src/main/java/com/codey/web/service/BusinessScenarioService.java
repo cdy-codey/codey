@@ -28,6 +28,7 @@ public class BusinessScenarioService {
         );
         DetailForm detailForm = new DetailForm(
                 4800,
+                4800,
                 "现有办公电脑启动缓慢，影响采购部日常制单与数据整理效率。",
                 "优先选择品牌机，要求 16G 内存、512G SSD，满足日常办公和报表处理。"
         );
@@ -316,17 +317,23 @@ public class BusinessScenarioService {
 
     public static class DetailForm {
         private final Integer budgetAmount;
+        private final Integer actualAmount;
         private final String requestReason;
         private final String exceedReason;
 
-        public DetailForm(Integer budgetAmount, String requestReason, String exceedReason) {
+        public DetailForm(Integer budgetAmount, Integer actualAmount, String requestReason, String exceedReason) {
             this.budgetAmount = budgetAmount;
+            this.actualAmount = actualAmount;
             this.requestReason = requestReason;
             this.exceedReason = exceedReason;
         }
 
         public Integer getBudgetAmount() {
             return budgetAmount;
+        }
+
+        public Integer getActualAmount() {
+            return actualAmount;
         }
 
         public String getRequestReason() {

@@ -11,6 +11,7 @@ public enum SessionEventType {
     MODEL_TOOL_CALL_STARTED("model_tool_call_started"),
     TOOL_EXECUTION_STARTED("tool_execution_started"),
     TOOL_CALL("tool_call"),
+    HUMAN_CONFIRMATION_REQUIRED("human_confirmation_required"),
     HUMAN_DECISION("human_decision"),
     VERIFICATION("verification"),
     TASK_STATUS("task_status"),

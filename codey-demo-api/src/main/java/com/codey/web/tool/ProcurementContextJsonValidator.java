@@ -241,8 +241,11 @@ public class ProcurementContextJsonValidator {
             BigDecimal unitPrice = readDecimal(item.get("unitPrice"));
             if (unitPrice == null) {
                 report.addError(path + ".unitPrice", "unitPrice 必须是数字。");
-            } else if (unitPrice.compareTo(BigDecimal.ZERO) <= 0) {
-                report.addError(path + ".unitPrice", "unitPrice 必须大于 0，不能继续保留占位值 0。");
+            } else if (unitPrice.compareTo(BigDecimal.ZERO) < 0) {
+                report.addError(path + ".unitPrice", "unitPrice 不能为负数。");
+            } else if (unitPrice.compareTo(BigDecimal.ZERO) == 0) {
+                // 附件未提供单价时，模型按规则填 0 占位，这是合法状态，只做提醒，不阻塞流程。
+                report.addWarning(path + ".unitPrice", "unitPrice 为 0，附件未提供单价，需人工补充后确认预算。");
             }
             requireNonBlankText(item, "specification", path + ".specification", report);
             requireNonBlankText(item, "referenceBrand", path + ".referenceBrand", report);
@@ -271,7 +274,8 @@ public class ProcurementContextJsonValidator {
             }
             totalAmount = totalAmount.add(unitPrice.multiply(new BigDecimal(quantity.intValue())));
         }
-        if (budgetAmount.compareTo(totalAmount) != 0) {
+        // 明细单价全部缺失（合计为 0）时无法进行一致性校验，避免因“占位价 0”误判为金额不一致。
+        if (totalAmount.compareTo(BigDecimal.ZERO) > 0 && budgetAmount.compareTo(totalAmount) != 0) {
             report.addError(
                     "$.detail.budgetAmount",
                     "budgetAmount 必须等于明细行数量乘单价之和。当前预算 "

@@ -2,8 +2,9 @@
 // 本页面与 ProcurementAutofillExample 业务逻辑完全一致，唯一区别在于 AI 交互方式：
 // 本页面不自己挂载 AiChatWorkspace，而是通过 openSystemAiAssistant 调用布局层的全局实例。
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import { openSystemAiAssistant, closeSystemAiAssistant } from 'codey-chat-workspace'
 import { createBusinessScenarioApi } from '../../api/businessScenario'
 
@@ -27,6 +28,7 @@ const formModel = reactive({
   purchaseType: '',
   requestDescription: '',
   budgetAmount: 0,
+  actualAmount: 0,
   requestReason: '',
   exceedReason: '',
   // 需求附件列表，每个附件包含 originalName, storedName, size, uploadTime 等字段
@@ -51,7 +53,7 @@ const totalAmount = computed(() =>
 )
 
 const aiWorkingDirectory = "business-procurement"
-const aiContextFileKey = "采购文件申请"
+const aiContextFileKey = "context.json"
 
 function toNumber(value) {
   const parsed = Number(value)
@@ -104,6 +106,7 @@ function buildContextSnapshot() {
     },
     detail: {
       budgetAmount: formModel.budgetAmount,
+      actualAmount: formModel.actualAmount,
       requestReason: formModel.requestReason,
       exceedReason: formModel.exceedReason,
     },
@@ -146,6 +149,7 @@ function applyScenarioContext(context) {
   formModel.purchaseType = context?.header?.purchaseType || ''
   formModel.requestDescription = context?.header?.requestDescription || ''
   formModel.budgetAmount = toNumber(context?.detail?.budgetAmount)
+  formModel.actualAmount = toNumber(context?.detail?.actualAmount)
   formModel.requestReason = context?.detail?.requestReason || ''
   formModel.exceedReason = context?.detail?.exceedReason || ''
   lineItems.value = Array.isArray(context?.items) ? context.items.map((item, index) => normalizeLineItem(item, index)) : []
@@ -234,6 +238,7 @@ function applyAiAutofillPayload(payload = {}) {
   }
   const budgetAmount = toNumber(detail.budgetAmount)
   formModel.budgetAmount = budgetAmount > 0 ? budgetAmount : totalAmount.value
+  formModel.actualAmount = toNumber(detail.actualAmount)
   if (!budgetAmount) recalculateBudgetAmount()
   // AI 返回的附件列表直接替换当前附件
   if (Array.isArray(payload.attachments)) {
@@ -291,12 +296,22 @@ async function handleOpenAssistant() {
           lastSubmittedContextSignature.value = buildContextSignature(snapshot)
           return prompt
         },
-        onTaskEnded: ({ data }) => {
+        onTaskEnded: async ({ data }) => {
           if (!data) return
           const workspaceContext = normalizeWorkspaceContextContent(data)
           if (!workspaceContext) return
           const latestSignature = buildContextSignature(workspaceContext)
           if (!latestSignature || latestSignature === lastSubmittedContextSignature.value) return
+          try {
+            await ElMessageBox.confirm(
+              'AI 已完成表单填写，是否将结果应用到当前表单？',
+              '应用确认',
+              { confirmButtonText: '应用', cancelButtonText: '暂不应用', type: 'warning' },
+            )
+          } catch (e) {
+            ElMessage.info('已取消应用，AI 结果未写入表单')
+            return
+          }
           applyAiAutofillPayload(workspaceContext)
           lastSubmittedContextSignature.value = latestSignature
           ElMessage.success('已读取 AI 写入的 context.json 并刷新表单')
@@ -452,6 +467,9 @@ onMounted(async () => { await loadScenarioContext() })
                 <el-form-item label="申请金额（元）">
                   <el-input-number v-model="formModel.budgetAmount" :min="0" :step="100" controls-position="right" />
                 </el-form-item>
+                <el-form-item label="实际金额（元）">
+                  <el-input-number v-model="formModel.actualAmount" :min="0" :step="100" controls-position="right" disabled />
+                </el-form-item>
                 <el-form-item label="需求原因说明">
                   <el-input v-model="formModel.requestReason" placeholder="存在超预算或临时申请时请填写原因" />
                 </el-form-item>
@@ -522,7 +540,7 @@ onMounted(async () => { await loadScenarioContext() })
 .section-title-between { display: flex; align-items: center; justify-content: space-between; }
 .header-form, .detail-form, .bottom-form { margin-top: 4px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
-.detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.detail-grid { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px 12px; }
 .tips-alert { margin-bottom: 12px; }
 /* 附件上传区域 */
 .attachment-section { margin-bottom: 16px; }

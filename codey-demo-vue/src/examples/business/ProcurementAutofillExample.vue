@@ -30,6 +30,7 @@ const formModel = reactive({
   purchaseType: '',
   requestDescription: '',
   budgetAmount: 0,
+  actualAmount: 0,
   requestReason: '',
   exceedReason: '',
   // 需求附件列表，每个附件包含 originalName, storedName, size, uploadTime 等字段
@@ -52,7 +53,7 @@ const totalAmount = computed(() =>
   lineItems.value.reduce((sum, item) => sum + toNumber(item.quantity) * toNumber(item.unitPrice), 0)
 )
 
-const aiContextFileKey = "采购文件申请"
+const aiContextFileKey = "context.json"
 
 function handleAiCollapseChange(collapsed) {
   aiCollapsed.value = collapsed
@@ -114,6 +115,7 @@ function buildContextSnapshot() {
     },
     detail: {
       budgetAmount: formModel.budgetAmount,
+      actualAmount: formModel.actualAmount,
       requestReason: formModel.requestReason,
       exceedReason: formModel.exceedReason,
     },
@@ -169,6 +171,7 @@ function applyScenarioContext(context) {
   formModel.purchaseType = context?.header?.purchaseType || ''
   formModel.requestDescription = context?.header?.requestDescription || ''
   formModel.budgetAmount = toNumber(context?.detail?.budgetAmount)
+  formModel.actualAmount = toNumber(context?.detail?.actualAmount)
   formModel.requestReason = context?.detail?.requestReason || ''
   formModel.exceedReason = context?.detail?.exceedReason || ''
   lineItems.value = Array.isArray(context?.items)
@@ -286,6 +289,7 @@ function applyAiAutofillPayload(payload = {}) {
 
   const budgetAmount = toNumber(detail.budgetAmount)
   formModel.budgetAmount = budgetAmount > 0 ? budgetAmount : totalAmount.value
+  formModel.actualAmount = toNumber(detail.actualAmount)
   if (!budgetAmount) {
     recalculateBudgetAmount()
   }
@@ -493,6 +497,16 @@ onMounted(async () => {
                         :min="0"
                         :step="100"
                         controls-position="right"
+                      />
+                    </el-form-item>
+
+                    <el-form-item label="实际金额（元）">
+                      <el-input-number
+                        v-model="formModel.actualAmount"
+                        :min="0"
+                        :step="100"
+                        controls-position="right"
+                        disabled
                       />
                     </el-form-item>
 
@@ -783,7 +797,7 @@ onMounted(async () => {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: auto auto minmax(0, 1fr);
   gap: 8px 12px;
 }
 

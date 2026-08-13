@@ -70,6 +70,10 @@ export function useAiAssistantHandlers(options = {}) {
     return chatApi.createEventSource(sessionId)
   }
 
+  function confirmDecision(sessionId, confirmationId, payload) {
+    return chatApi.confirmDecision(sessionId, confirmationId, payload)
+  }
+
   function queryWorkspace(params = {}) {
     const path = typeof params === 'string' ? params : (params?.path || '')
     const readMode = typeof params === 'object' ? params?.readMode : ''
@@ -97,6 +101,7 @@ export function useAiAssistantHandlers(options = {}) {
     deleteHistorySession,
     clearHistorySessions,
     createEventSource,
+    confirmDecision,
     queryWorkspace,
     writeWorkspaceFile,
   }
@@ -112,6 +117,7 @@ export function useAiAssistantHandlers(options = {}) {
     deleteHistorySession,
     clearHistorySessions,
     createEventSource,
+    confirmDecision,
     queryWorkspace,
     writeWorkspaceFile,
     // 统一 v-bind 对象（兼容 v-bind="aiAssistantHandlers" 方式）

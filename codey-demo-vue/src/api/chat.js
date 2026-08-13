@@ -1,4 +1,4 @@
-﻿import { fetchJson } from './http'
+import { fetchJson } from './http'
 
 // 统一封装聊天接口，便于其它页面直接复用这套组件能力。
 export function createChatApi(baseUrl = '/api/chat', historyBaseUrl = '/api/chat/history') {
@@ -27,6 +27,13 @@ export function createChatApi(baseUrl = '/api/chat', historyBaseUrl = '/api/chat
     closeSession(sessionId) {
       return fetchJson(`${baseUrl}/sessions/${encodeURIComponent(sessionId)}/close`, {
         method: 'POST',
+      })
+    },
+
+    confirmDecision(sessionId, confirmationId, payload = {}) {
+      return fetchJson(`${baseUrl}/sessions/${encodeURIComponent(sessionId)}/confirmations/${encodeURIComponent(confirmationId)}`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
       })
     },
 

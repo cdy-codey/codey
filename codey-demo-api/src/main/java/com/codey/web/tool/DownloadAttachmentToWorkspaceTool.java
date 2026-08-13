@@ -25,11 +25,11 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
-import org.apache.poi.xwpf.usermodel.XWPFDocument;
 
 /**
  * 附件下载工具，将已上传的附件下载后转换为 TXT 格式放入工作目录，
@@ -47,7 +47,8 @@ public class DownloadAttachmentToWorkspaceTool extends AbstractTool {
         return new ToolDescriptor(
                 "download_attachment_to_workspace",
                 "下载附件",
-                "将已上传的附件文件读取并转换为 TXT 格式，保存到当前工作目录中，供 AI 读取分析。"
+                "将已上传的附件文件读取并转换为文本，同时保存到当前工作目录中。"
+                        + "返回结果的 content 字段即为附件全文，可直接读取使用，无需再单独读取文件。"
                         + "支持纯文本文件直接复制，以及常见二进制文件的内容提取。",
                 buildParameters()
         );
@@ -55,8 +56,8 @@ public class DownloadAttachmentToWorkspaceTool extends AbstractTool {
 
     @Override
     public ToolCapability capability() {
-        // 该工具读取上传文件并写入工作目录，属于读写混合操作
-        return ToolCapability.standard();
+        // 本质是“读取附件并转存文本”，只产生派生缓存，不修改用户表单/源文件，按只读处理、无需人工确认。
+        return ToolCapability.readOnlyParallel();
     }
     @Override
     public ToolMetadata metadata() {
@@ -108,17 +109,18 @@ public class DownloadAttachmentToWorkspaceTool extends AbstractTool {
                     sourcePath, workspaceTargetPath, extractedText.length()
             );
 
-            // 组装返回结果
+            // 组装返回结果：直接返回全文，避免 AI 再读一次文件，加快读取速度。
+            // 不再重复返回 contentPreview：content 已是全文，重复字段只会放大模型输入体积、拖慢生成。
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("sourcePath", sourcePath.toString());
             result.put("outputPath", workspaceTargetPath.toString());
             result.put("outputFileName", outputFileName);
             result.put("contentLength", extractedText.length());
-            result.put("contentPreview", truncatePreview(extractedText, 500));
+            result.put("content", extractedText);
 
             return ToolResult.ok(
                     toPrettyJson(result),
-                    "附件已下载并转换为 TXT 格式，保存到: " + outputFileName
+                    "附件已读取并转换为文本（content 字段为全文），同时保存到: " + outputFileName
             );
         } catch (IllegalArgumentException exception) {
             return ToolResult.fail("下载附件失败: " + exception.getMessage());
@@ -220,30 +222,80 @@ public class DownloadAttachmentToWorkspaceTool extends AbstractTool {
     }
 
     /**
-     * 使用 POI 提取 DOCX 文件文本内容。
+     * 解压 DOCX（本质是 ZIP）并读取 word/document.xml 提取文本，
+     * 避免 POI 对部分 docx 解析卡死。
      */
     private String extractDocxText(Path filePath) {
-        InputStream inputStream = null;
-        XWPFDocument document = null;
-        XWPFWordExtractor extractor = null;
-        try {
-            inputStream = Files.newInputStream(filePath);
-            document = new XWPFDocument(inputStream);
-            extractor = new XWPFWordExtractor(document);
-            String text = extractor.getText();
-            if (text == null || text.trim().isEmpty()) {
-                return "[DOCX 文件内容为空。\n源文件路径: " + filePath + "]";
+        try (ZipFile zipFile = new ZipFile(filePath.toFile())) {
+            ZipEntry entry = zipFile.getEntry("word/document.xml");
+            if (entry == null) {
+                return "[DOCX 缺少 word/document.xml。\n源文件路径: " + filePath + "]";
             }
-            return text;
+            try (InputStream in = zipFile.getInputStream(entry)) {
+                String xml = readAllText(in);
+                return docxXmlToText(xml);
+            }
         } catch (Exception e) {
             LOGGER.warn("DOCX text extraction failed: {}", filePath, e);
             return "[DOCX 解析失败: " + e.getMessage()
                     + "\n源文件路径: " + filePath + "]";
-        } finally {
-            closeQuietly(extractor);
-            closeQuietly(document);
-            closeQuietly(inputStream);
         }
+    }
+
+    /**
+     * 读取输入流全部文本（Java 8 兼容，避免使用 Java 9 才有的 readAllBytes）。
+     */
+    private String readAllText(InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 将 docx 的 word/document.xml 转为纯文本：单元格用制表符分隔、表格行用换行分隔。
+     * 顺序：先标记行/单元格边界，再标记段落，避免表格行之间粘连导致明细行错位。
+     */
+    private String docxXmlToText(String xml) {
+        String text = xml;
+        // 单元格内的制表符（技术参数项之间）用换行表达，避免与“列分隔制表符”混淆导致字段错位。
+        text = text.replaceAll("<w:tab[^>]*/>", "\n");
+        text = text.replaceAll("<w:br[^>]*/>", "\n");
+        // 表格行结束必须换行，否则多行明细会全部挤在同一行，导致“提取不完整/字段错乱”。
+        text = text.replaceAll("</w:tr>", "\n");
+        // 单元格结束用制表符作为“列分隔符”。
+        text = text.replaceAll("</w:tc>", "\t");
+        text = text.replaceAll("</w:p>", "\n");
+        text = text.replaceAll("<[^>]+>", "");
+        text = text.replace("&lt;", "<").replace("&gt;", ">")
+                   .replace("&quot;", "\"").replace("&apos;", "'")
+                   .replace("&amp;", "&");
+        return normalizeWhitespace(text);
+    }
+
+    /**
+     * 规整提取后的空白：单元格内段落换行与单元格/行分隔符重叠时，只保留分隔符，
+     * 避免每个字段被拆成多行、字段错位；同时压缩连续空行与多余空格，保留制表符分隔。
+     */
+    private String normalizeWhitespace(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        String normalized = text
+                .replace("\r\n", "\n")
+                .replace("\r", "\n")
+                // 单元格内容后的段落换行紧跟单元格分隔符 → 只保留 tab（字段不被拆行）
+                .replace("\n\t", "\t")
+                // 行末单元格分隔符紧跟换行 → 只保留换行
+                .replace("\t\n", "\n");
+        // 压缩连续空行，保留单行换行与制表符分隔。
+        normalized = normalized.replaceAll("\n{3,}", "\n\n");
+        // 压缩行内连续空格，保留制表符。
+        normalized = normalized.replaceAll(" {2,}", " ");
+        return normalized.trim();
     }
 
     private void closeQuietly(AutoCloseable closeable) {
@@ -268,19 +320,6 @@ public class DownloadAttachmentToWorkspaceTool extends AbstractTool {
                 context.getWorkingDirectory(),
                 fileName
         );
-    }
-
-    /**
-     * 截取文本预览，避免返回内容过长。
-     */
-    private String truncatePreview(String text, int maxLength) {
-        if (text == null || text.isEmpty()) {
-            return "";
-        }
-        if (text.length() <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "...(共 " + text.length() + " 字符)";
     }
 
     private String getExtension(String fileName) {

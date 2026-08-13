@@ -52,6 +52,25 @@ public class FinalResult {
         this.uncertaintyReason = uncertaintyReason;
     }
 
+    /**
+     * 是否处于“等待用户决策”状态：user_choice 视图或显式 requiresHumanConfirmation。
+     * 该状态表示任务尚未真正完成，只是暂停等待用户输入，不应套用业务完成校验。
+     */
+    public boolean isAwaitingHumanDecision() {
+        if (Boolean.TRUE.equals(requiresHumanConfirmation)) {
+            return true;
+        }
+        return isUserChoiceView();
+    }
+
+    private boolean isUserChoiceView() {
+        if (!(view instanceof Map<?, ?>)) {
+            return false;
+        }
+        Object rawType = ((Map<?, ?>) view).get("_view_type");
+        return rawType != null && "user_choice".equalsIgnoreCase(String.valueOf(rawType).trim());
+    }
+
     public String toDisplayText() {
         String textViewContent = extractTextViewContent();
         if (textViewContent != null && !textViewContent.trim().isEmpty()) {

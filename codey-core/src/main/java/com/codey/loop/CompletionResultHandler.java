@@ -29,13 +29,17 @@ final class CompletionResultHandler {
                                 SkillDefinition skill,
                                 ModelResponse modelResponse,
                                 FinalResult finalResult) {
-        VerifyResult verifyResult = verifier.verifyCompletion(session, skill);
-        if (verifyResult.isApplicable()) {
-            sessionStore.appendEvent(SessionEventFactory.verification(session.getSessionId(), verifyResult));
-        }
-        if (verifyResult.isFailed()) {
-            replanService.appendFeedbackAndRequestReplan(session, verifyResult.getMessage());
-            return null;
+        // 等待用户决策（user_choice 视图或 requiresHumanConfirmation）时，任务只是暂停等待输入，
+        // 表单尚未填写完成，此时跑业务完成校验必然失败并触发反复重规划，导致同一段提取结果重复输出。
+        if (!finalResult.isAwaitingHumanDecision()) {
+            VerifyResult verifyResult = verifier.verifyCompletion(session, skill);
+            if (verifyResult.isApplicable()) {
+                sessionStore.appendEvent(SessionEventFactory.verification(session.getSessionId(), verifyResult));
+            }
+            if (verifyResult.isFailed()) {
+                replanService.appendFeedbackAndRequestReplan(session, verifyResult.getMessage());
+                return null;
+            }
         }
         replanService.appendAssistantResponse(session, modelResponse.getContent(), modelResponse.getReasoningContent(), null);
         sessionStore.appendEvent(SessionEventFactory.finalSummary(session.getSessionId(), finalResult));
