@@ -59,5 +59,6 @@ public class ProcurementFormSkill implements Skill {
         // 写入 context.json 并通过校验后直接结束，避免模型再多跑一轮输出 FINISH，缩短自动填写耗时。
         definition.setAutoCompleteOnVerifiedWrite(true);
         return definition;
+
     }
 }
