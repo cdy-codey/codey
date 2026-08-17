@@ -325,9 +325,8 @@ final class ToolCallProcessor {
         String toolName = request.getToolName();
         // 写文件、改表单、删除、打补丁都属于高风险修改操作，执行前都需要人工确认。
         if ("write_file".equals(toolName) || "edit_file".equals(toolName)) {
-            // 表单填写场景：用户已明确表达“填入”意图，写 context.json 属于已被授权的动作，不再重复弹确认。
-            if (isFormContextTarget(request) && (isProcurementFormSkill(skill)
-                    || (session != null && session.isFormFillAuthorized()))) {
+            // 技能声明了上下文文件（如 context.json）时，写入该文件属于已授权动作，不再重复弹确认。
+            if (isFormContextTarget(request, skill)) {
                 return false;
             }
             return true;
@@ -592,18 +591,17 @@ final class ToolCallProcessor {
         return "";
     }
 
-    private boolean isFormContextTarget(ToolInvocation request) {
+    private boolean isFormContextTarget(ToolInvocation request, SkillDefinition skill) {
+        if (skill == null || isBlank(skill.getContextFileName())) {
+            return false;
+        }
         String path = resolveWriteTargetPath(request);
         if (isBlank(path)) {
             return false;
         }
         String normalized = path.replace("\\", "/");
         String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);
-        return "context.json".equalsIgnoreCase(fileName);
-    }
-
-    private boolean isProcurementFormSkill(SkillDefinition skill) {
-        return skill != null && skill.hasSkill("procurement-form-agent");
+        return skill.getContextFileName().equalsIgnoreCase(fileName);
     }
 
     private boolean isBlank(String value) {

@@ -21,6 +21,10 @@ public class SkillDefinition {
     private int maxLoopCount;
     /** 写工具执行成功且通过校验后，直接结束循环，跳过模型再输出一次 FINISH 的往返。 */
     private boolean autoCompleteOnVerifiedWrite;
+    /** 自动完成时返回给用户的最终摘要文案；为空则使用框架提供的通用文案。 */
+    private String autoCompleteSummary;
+    /** 本技能维护的上下文文件名（如 context.json）；写入后自动校验并触发“写成功即完成”，为空则不启用该特判。 */
+    private String contextFileName;
 
     public String getName() {
         return name;
@@ -100,6 +104,22 @@ public class SkillDefinition {
 
     public void setAutoCompleteOnVerifiedWrite(boolean autoCompleteOnVerifiedWrite) {
         this.autoCompleteOnVerifiedWrite = autoCompleteOnVerifiedWrite;
+    }
+
+    public String getAutoCompleteSummary() {
+        return autoCompleteSummary;
+    }
+
+    public void setAutoCompleteSummary(String autoCompleteSummary) {
+        this.autoCompleteSummary = autoCompleteSummary;
+    }
+
+    public String getContextFileName() {
+        return contextFileName;
+    }
+
+    public void setContextFileName(String contextFileName) {
+        this.contextFileName = contextFileName;
     }
 
     /**

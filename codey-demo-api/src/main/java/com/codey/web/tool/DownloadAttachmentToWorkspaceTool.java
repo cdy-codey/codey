@@ -131,16 +131,21 @@ public class DownloadAttachmentToWorkspaceTool extends AbstractTool {
 
     /**
      * 解析上传目录中的源文件路径。
-     * 支持绝对路径和相对路径（相对于 upload.directory）。
+     * 支持绝对路径和相对路径（相对于 upload.directory），但最终路径必须仍位于上传根目录内，
+     * 防止通过绝对路径或 ../ 穿越读取上传目录之外的任意文件。
      */
     private Path resolveSourcePath(String filePath) {
+        Path basePath = Paths.get(uploadDir).toAbsolutePath().normalize();
         Path path = Paths.get(filePath);
         if (path.isAbsolute()) {
-            return path.normalize();
+            path = path.normalize();
+        } else {
+            path = basePath.resolve(filePath).normalize();
         }
-        // 相对路径：基于 upload.directory 解析
-        Path basePath = Paths.get(uploadDir).toAbsolutePath().normalize();
-        return basePath.resolve(filePath).normalize();
+        if (!path.startsWith(basePath)) {
+            throw new IllegalArgumentException("附件路径必须位于上传目录内: " + filePath);
+        }
+        return path;
     }
 
     /**

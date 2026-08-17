@@ -335,10 +335,6 @@ public class AgentSession {
         return conversationState.resolvePendingChoice(rawUserInput);
     }
 
-    public boolean isFormFillAuthorized() {
-        return conversationState.isFormFillAuthorized();
-    }
-
     public boolean isVerifiedWriteAutoComplete() {
         return verifiedWriteAutoComplete;
     }

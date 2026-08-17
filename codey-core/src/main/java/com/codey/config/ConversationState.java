@@ -17,7 +17,6 @@ final class ConversationState {
     private final List<String> interactionHistory = new ArrayList<String>();
     private final Map<String, String> pendingChoiceOptions = new HashMap<String, String>();
     private String pendingChoicePrompt;
-    private boolean formFillAuthorized = false;
 
     ConversationState(int maxChatHistory) {
         this.maxChatHistory = maxChatHistory;
@@ -121,9 +120,6 @@ final class ConversationState {
         if (option == null) {
             return "";
         }
-        if (isFormFillChoice(option)) {
-            formFillAuthorized = true;
-        }
         String prompt = pendingChoicePrompt;
         clearPendingChoice();
         if (prompt == null || prompt.trim().isEmpty()) {
@@ -132,18 +128,6 @@ final class ConversationState {
         return prompt.trim()
                 + "\n用户选择: " + matchedKey
                 + "\n请按这个选项继续执行: " + option;
-    }
-
-    boolean isFormFillAuthorized() {
-        return formFillAuthorized;
-    }
-
-    private boolean isFormFillChoice(String option) {
-        if (option == null) {
-            return false;
-        }
-        String lower = option.toLowerCase();
-        return lower.contains("填入") || lower.contains("回填") || lower.contains("填充");
     }
 
     private String findOptionByLabel(String input) {

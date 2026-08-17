@@ -35,9 +35,9 @@ public class ProcurementFormVerifier implements Verifier {
         if (!isProcurementSkill(skill)) {
             return VerifyResult.notApplicable("Not a procurement form skill");
         }
-        Path target = resolveContextJson(session);
+        Path target = resolveContextJson(session, skill);
         if (target == null) {
-            return VerifyResult.notApplicable("Last edited file is not procurement context.json");
+            return VerifyResult.notApplicable("Last edited file is not the skill's context file");
         }
         return verify(target);
     }
@@ -52,8 +52,8 @@ public class ProcurementFormVerifier implements Verifier {
         return skill != null && skill.hasSkill(SKILL_NAME);
     }
 
-    private Path resolveContextJson(AgentSession session) {
-        if (session == null) {
+    private Path resolveContextJson(AgentSession session, SkillDefinition skill) {
+        if (session == null || skill == null || isBlank(skill.getContextFileName())) {
             return null;
         }
         String lastEdited = session.getLastEditedFilePath();
@@ -62,7 +62,7 @@ public class ProcurementFormVerifier implements Verifier {
         }
         String normalized = lastEdited.replace("\\", "/");
         String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);
-        if (!"context.json".equalsIgnoreCase(fileName)) {
+        if (!skill.getContextFileName().equalsIgnoreCase(fileName)) {
             return null;
         }
         try {

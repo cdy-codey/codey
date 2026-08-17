@@ -115,7 +115,8 @@ final class LoopTurnEngine {
     private TaskResult completeAutoCompletedTurn(AgentSession session,
                                                 SkillDefinition skill,
                                                 ModelResponse modelResponse) {
-        String summary = "已根据附件内容完成表单填写，并写入 context.json。";
+        // 业务技能可通过 autoCompleteSummary 定制最终文案；未配置时回退为通用中性文案。
+        String summary = resolveAutoCompleteSummary(skill);
         FinalResult finalResult = new FinalResult();
         finalResult.setStatus("FINISH");
         finalResult.setSummary(summary);
@@ -134,6 +135,16 @@ final class LoopTurnEngine {
                 syntheticResponse,
                 finalResult
         );
+    }
+
+    private String resolveAutoCompleteSummary(SkillDefinition skill) {
+        if (skill != null) {
+            String summary = skill.getAutoCompleteSummary();
+            if (summary != null && !summary.trim().isEmpty()) {
+                return summary.trim();
+            }
+        }
+        return "已完成文件写入并通过校验。";
     }
 
     static final class TurnExecutionResult {
