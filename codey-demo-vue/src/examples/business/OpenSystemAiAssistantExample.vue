@@ -2,10 +2,9 @@
 // 本页面与 ProcurementAutofillExample 业务逻辑完全一致，唯一区别在于 AI 交互方式：
 // 本页面不自己挂载 AiChatWorkspace，而是通过 openSystemAiAssistant 调用布局层的全局实例。
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
-import 'element-plus/es/components/message-box/style/css'
-import { openSystemAiAssistant, closeSystemAiAssistant } from 'codey-chat-workspace'
+import { openSystemAiAssistant, closeSystemAiAssistant, appendSystemAiAssistantCard } from 'codey-chat-workspace'
 import { createBusinessScenarioApi } from '../../api/businessScenario'
 
 const businessScenarioApi = createBusinessScenarioApi()
@@ -246,6 +245,56 @@ function applyAiAutofillPayload(payload = {}) {
   }
 }
 
+// 根据生成的表单数据构造聊天流中的预览卡片：关键字段 + 完整明细表格。
+function buildFillConfirmCard(payload) {
+  const header = payload.header || {}
+  const detail = payload.detail || {}
+  const items = Array.isArray(payload.items) ? payload.items : []
+  const fields = []
+  if (header.requestDepartment) {
+    fields.push({ label: '申请部门', value: header.requestDepartment })
+  }
+  if (header.requestDate) {
+    fields.push({ label: '申请日期', value: header.requestDate })
+  }
+  if (header.purchaseType) {
+    fields.push({ label: '采购类型', value: header.purchaseType })
+  }
+  const budgetAmount = toNumber(detail.budgetAmount)
+  if (budgetAmount > 0) {
+    fields.push({ label: '预算金额', value: `¥${budgetAmount.toLocaleString()}` })
+  }
+  const headers = ['序号', '标的名称', '数量', '单价', '规格', '品牌']
+  const rows = items.map((item, index) => [
+    String(item.rowNo || index + 1),
+    item.itemName || '',
+    toNumber(item.quantity) ? String(toNumber(item.quantity)) : '',
+    toNumber(item.unitPrice) ? `¥${toNumber(item.unitPrice).toLocaleString()}` : '',
+    item.specification || '',
+    item.referenceBrand || '',
+  ])
+  return {
+    title: 'AI 已生成表单内容',
+    summary: `已生成 ${items.length} 条采购明细，请确认是否填入表单`,
+    fields,
+    table: items.length > 0 ? { headers, rows } : null,
+    payload,
+  }
+}
+
+// 聊天流卡片（确认填入/取消）的操作回调。
+function handleCardAction({ action, card }) {
+  if (action === 'confirm' && card?.payload) {
+    applyAiAutofillPayload(card.payload)
+    lastSubmittedContextSignature.value = buildContextSignature(card.payload)
+    ElMessage.success('已填入表单')
+    return
+  }
+  if (action === 'cancel') {
+    ElMessage.info('已取消应用，AI 结果未写入表单')
+  }
+}
+
 // 打开 AI 助手并注入本页面的 assistantProps（回调 + 上下文）。
 // 实际 AiChatWorkspace 实例在布局层 ExampleDetailPage 中。
 async function handleOpenAssistant() {
@@ -302,20 +351,10 @@ async function handleOpenAssistant() {
           if (!workspaceContext) return
           const latestSignature = buildContextSignature(workspaceContext)
           if (!latestSignature || latestSignature === lastSubmittedContextSignature.value) return
-          try {
-            await ElMessageBox.confirm(
-              'AI 已完成表单填写，是否将结果应用到当前表单？',
-              '应用确认',
-              { confirmButtonText: '应用', cancelButtonText: '暂不应用', type: 'warning' },
-            )
-          } catch (e) {
-            ElMessage.info('已取消应用，AI 结果未写入表单')
-            return
-          }
-          applyAiAutofillPayload(workspaceContext)
-          lastSubmittedContextSignature.value = latestSignature
-          ElMessage.success('已读取 AI 写入的 context.json 并刷新表单')
+          // 在右侧聊天区插入"表格预览 + 确认填入"卡片，替代居中弹窗
+          appendSystemAiAssistantCard(buildFillConfirmCard(workspaceContext))
         },
+        onCardAction: handleCardAction,
         onTaskFailed: (payload) => {
           ElMessage.error(payload?.message || 'AI 自动填写任务失败')
         },

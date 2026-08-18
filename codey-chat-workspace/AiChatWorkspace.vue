@@ -151,6 +151,14 @@ const props = defineProps({
     type: Function,
     default: null,
   },
+  onToolExecutionStarted: {
+    type: Function,
+    default: null,
+  },
+  onCardAction: {
+    type: Function,
+    default: null,
+  },
   onTaskAccepted: {
     type: Function,
     default: null,
@@ -273,6 +281,17 @@ function closeTableModal() {
   activeTableModal.value = null
 }
 
+function openCardTableModal(message) {
+  const card = message?.card
+  const table = card?.table
+  if (!table) return
+  const headers = table.headers || []
+  const data = (table.rows || []).map((row) =>
+    Object.fromEntries(headers.map((header, index) => [header, row[index]])),
+  )
+  openTableModal({ title: card.title || '表格明细', headers, data, fields: card.fields || [] })
+}
+
 const runtimeAssistantProps = ref({})
 let unregisterAssistantController = () => {}
 const currentFileResolved = ref(false)
@@ -316,6 +335,24 @@ function handleConfirmCancel() {
   confirmDialog.value.visible = false
 }
 
+// 判断是否在写入当前页面的上下文文件（如 context.json）。
+// 这类写入的确认已下沉到业务卡片（表格预览 + 确认填入），不应再弹网页中间的模态框。
+function isContextFileWrite(event) {
+  const toolName = event?.toolName || ''
+  if (toolName !== 'write_file' && toolName !== 'edit_file') {
+    return false
+  }
+  const args = event?.arguments || {}
+  const rawPath = args.path || args.file || ''
+  if (!rawPath) {
+    return false
+  }
+  const fileName = String(rawPath).replace(/\\/g, '/').split('/').pop() || ''
+  const contextKey = normalizeWorkspacePath(effectiveCurrentFileKey.value || 'context.json')
+  const contextFileName = contextKey.split('/').pop() || ''
+  return !!contextFileName && fileName === contextFileName
+}
+
 async function handleHumanConfirmation(event) {
   const sessionId = event?.sessionId || ''
   const confirmationId = event?.confirmationId || ''
@@ -323,25 +360,30 @@ async function handleHumanConfirmation(event) {
   const summary = event?.summary || ''
   const uncertaintyReason = event?.uncertaintyReason || ''
 
-  const lines = [`AI 准备执行「${toolName || '文件修改'}」操作`]
-  if (summary) {
-    lines.push(`摘要：${summary}`)
-  }
-  if (uncertaintyReason) {
-    lines.push(`说明：${uncertaintyReason}`)
-  }
-  lines.push('是否确认执行？')
-
   let approved = false
-  try {
-    await showConfirm(lines.join('\n'), '操作确认', {
-      confirmButtonText: '确认执行',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
+  if (isContextFileWrite(event)) {
+    // 上下文文件写入无需在此弹窗，直接批准；确认动作由业务卡片完成。
     approved = true
-  } catch (error) {
-    approved = false
+  } else {
+    const lines = [`AI 准备执行「${toolName || '文件修改'}」操作`]
+    if (summary) {
+      lines.push(`摘要：${summary}`)
+    }
+    if (uncertaintyReason) {
+      lines.push(`说明：${uncertaintyReason}`)
+    }
+    lines.push('是否确认执行？')
+
+    try {
+      await showConfirm(lines.join('\n'), '操作确认', {
+        confirmButtonText: '确认执行',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+      approved = true
+    } catch (error) {
+      approved = false
+    }
   }
 
   const confirmDecisionHandler = resolveAssistantFunctionProp('confirmDecision')
@@ -791,6 +833,9 @@ const {
   isLoadingSessions,
   isLoadingDetail,
   isSending,
+  progress,
+  progressVisible,
+  progressLabel,
   errorMessage,
   connectionStatus,
   historyEnabled,
@@ -808,6 +853,7 @@ const {
   clearSessions,
   hydrateLatestHistory,
   refreshWelcomeMessages,
+  appendAssistantCard,
 } = useAiChat({
   historyEnabled: () => effectiveHistoryEnabled.value,
   defaultWorkingDirectory: props.defaultWorkingDirectory,
@@ -851,6 +897,9 @@ const {
   },
   onToolCall: async (event) => {
     await emitAssistantCallback('onToolCall', event)
+  },
+  onToolExecutionStarted: async (event) => {
+    await emitAssistantCallback('onToolExecutionStarted', event)
   },
   onFinalSummary: async (event) => {
     await emitAssistantCallback('onFinalSummary', event)
@@ -927,6 +976,8 @@ const shellStyle = computed(() => ({
 }))
 const compactStatus = computed(() => (isSending.value ? '生成中...' : connectionStatus.value))
 const renderShell = computed(() => !(effectiveCollapsible.value && collapsed.value))
+const isPopupMode = computed(() => props.popupMode === true)
+const shellVisible = computed(() => (isPopupMode.value ? assistantVisible.value : renderShell.value))
 const composerContainerStyle = computed(() => ({
   display: 'flex',
   flexDirection: 'column',
@@ -936,6 +987,42 @@ const composerContainerStyle = computed(() => ({
   paddingBottom: effectiveComposerBottomOffset.value,
   borderTop: '1px solid var(--el-border-color-lighter)',
   boxSizing: 'border-box',
+}))
+const launcherStyle = computed(() => ({
+  position: 'fixed',
+  right: `${props.popupRight}px`,
+  top: props.popupLauncherTop,
+  transform: 'translateY(-50%)',
+  zIndex: props.popupZIndex,
+}))
+const popupMaskStyle = computed(() => ({
+  position: 'fixed',
+  top: '0',
+  left: '0',
+  right: '0',
+  bottom: '0',
+  background: 'rgba(15, 23, 42, 0.4)',
+  zIndex: props.popupZIndex - 1,
+}))
+const popupShellStyle = computed(() => ({
+  position: 'fixed',
+  top: '50%',
+  right: `${props.popupRight}px`,
+  transform: 'translateY(-50%)',
+  width: props.popupWidth,
+  height: props.popupHeight,
+  maxWidth: '95vw',
+  maxHeight: '92vh',
+  zIndex: props.popupZIndex,
+  display: 'flex',
+  flexDirection: 'column',
+  boxSizing: 'border-box',
+  padding: '8px 10px 8px',
+  background: '#ffffff',
+  border: '1px solid #e4e7ed',
+  boxShadow: '0 24px 64px rgba(15, 23, 42, 0.25)',
+  borderRadius: '12px',
+  overflow: 'hidden',
 }))
 
 async function scrollMessagesToBottom() {
@@ -1142,6 +1229,20 @@ function handleUserChoice(optionLabel) {
   submitChoice(optionLabel, note || '')
 }
 
+// 自定义卡片（如"确认填入表单"）的操作回调，交由业务层处理
+function handleCardAction(message, action) {
+  if (!message?.card || message.card.resolved) {
+    return
+  }
+  message.card.resolved = true
+  message.card.action = action
+  emitAssistantCallback('onCardAction', {
+    action,
+    card: message.card,
+    messageId: message.id,
+  })
+}
+
 function getRoleLabel(role) {
   if (role === 'user') {
     return '你'
@@ -1336,6 +1437,31 @@ function getToolStatus(message) {
   return '完成'
 }
 
+function toolCallStatusText(toolCall) {
+  const status = toolCall?.status || 'done'
+  if (status === 'pending') {
+    return '待执行'
+  }
+  if (status === 'running') {
+    return '进行中'
+  }
+  if (status === 'failed') {
+    return '失败'
+  }
+  return '完成'
+}
+
+function toolCallStatusClass(toolCall) {
+  const status = toolCall?.status || 'done'
+  if (status === 'running' || status === 'pending') {
+    return 'assistant-tool-call-pill--active'
+  }
+  if (status === 'failed') {
+    return 'assistant-tool-call-pill--failed'
+  }
+  return ''
+}
+
 function isConfirmStyledFormModule(module) {
   if (!module || module.type !== 'object') {
     return false
@@ -1371,6 +1497,7 @@ defineExpose({
   startNewSession: handleStartNewSession,
   reloadSessions: loadSessions,
   selectSession: handleSelectSession,
+  appendAssistantCard,
 })
 
 onMounted(async () => {
@@ -1379,6 +1506,7 @@ onMounted(async () => {
     closeAssistant,
     toggleAssistant,
     syncPagePayloadToWorkspace,
+    appendAssistantCard,
   })
   if (props.loadHistoryOnMounted) {
     await hydrateLatestHistory()
@@ -1482,8 +1610,8 @@ watch(
 
 </script>
 <template>
-  <!-- 折叠态 -->
-  <div v-if="effectiveCollapsible && collapsed" class="ai-chat-collapsed" @click="toggleCollapsed">
+  <!-- 折叠态（仅内联模式） -->
+  <div v-if="!isPopupMode && effectiveCollapsible && collapsed" class="ai-chat-collapsed" @click="toggleCollapsed">
     <!-- 右箭头 SVG 图标 -->
     <svg class="collapsed-icon" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor">
       <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
@@ -1491,8 +1619,41 @@ watch(
     <span class="collapsed-text">AI</span>
   </div>
 
-  <!-- 主面板 -->
-  <div v-if="renderShell" class="ai-chat-shell" :style="shellStyle">
+  <!-- 弹窗模式：悬浮启动器 -->
+  <Teleport to="body" v-if="isPopupMode">
+    <button
+      v-if="!assistantVisible"
+      class="ai-chat-launcher"
+      :style="launcherStyle"
+      :title="launcherHint"
+      type="button"
+      @click="toggleAssistant"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="8" width="18" height="13" rx="3" />
+        <line x1="12" y1="3" x2="12" y2="8" />
+        <circle cx="12" cy="2.5" r="1.2" fill="currentColor" stroke="none" />
+        <circle cx="9" cy="14" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="15" cy="14" r="1.5" fill="currentColor" stroke="none" />
+        <line x1="9.5" y1="18" x2="14.5" y2="18" />
+      </svg>
+      <span class="ai-chat-launcher-text">{{ launcherText }}</span>
+    </button>
+  </Teleport>
+
+  <!-- 弹窗模式：遮罩 -->
+  <Teleport to="body" v-if="isPopupMode && assistantVisible">
+    <div class="ai-chat-popup-mask" :style="popupMaskStyle" @click="closeAssistant" />
+  </Teleport>
+
+  <!-- 主面板：弹窗模式 teleport 到 body，内联模式原地渲染 -->
+  <Teleport to="body" :disabled="!isPopupMode">
+    <div
+      v-if="shellVisible"
+      class="ai-chat-shell"
+      :class="{ 'ai-chat-shell--popup': isPopupMode }"
+      :style="isPopupMode ? popupShellStyle : shellStyle"
+    >
     <div
       style="display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; box-sizing: border-box;"
     >
@@ -1533,6 +1694,11 @@ watch(
               </svg>
             </button>
             <button class="ai-btn ai-btn--primary toolbar-primary-button" @click="handleStartNewSession">新会话</button>
+            <button v-if="isPopupMode" class="ai-btn toolbar-secondary-button ai-chat-close-btn" title="关闭" @click="closeAssistant">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -1625,14 +1791,110 @@ watch(
                     >
                       <div
                         v-for="(toolCall, toolIndex) in message.toolCalls"
-                        :key="`${message.id}-tool-${toolIndex}-${toolCall}`"
+                        :key="`${message.id}-tool-${toolIndex}-${toolCall.name || toolCall}`"
                         class="assistant-tool-call-pill"
+                        :class="toolCallStatusClass(toolCall)"
                       >
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-5.8 5.8a1 1 0 0 0 0 1.4l1.2 1.2a1 1 0 0 0 1.4 0l5.8-5.8a4 4 0 0 0 5.4-5.4l-2.2 2.2-2-2 2.6-2.8z" />
+                        <span
+                          v-if="toolCall.status === 'running' || toolCall.status === 'pending'"
+                          class="ai-progress-indeterminate"
+                          role="progressbar"
+                          aria-label="工具运行中"
+                        ></span>
+                        <svg
+                          v-else-if="toolCall.status === 'failed'"
+                          viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        >
+                          <path d="M18 6 6 18M6 6l12 12" />
                         </svg>
-                        <span class="assistant-tool-call-name">{{ toolCall }}</span>
-                        <span class="assistant-tool-call-status">完成</span>
+                        <svg
+                          v-else
+                          viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        >
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                        <span class="assistant-tool-call-name">{{ toolCall.name || toolCall }}</span>
+                        <span class="assistant-tool-call-status">{{ toolCallStatusText(toolCall) }}</span>
+                      </div>
+                    </div>
+
+                    <!-- 自定义卡片（如：确认填入表单） -->
+                    <div v-if="message.card" class="ai-fill-confirm-card">
+                      <div class="ai-fill-confirm-header">
+                        <span>{{ message.card.title || '请确认' }}</span>
+                      </div>
+                      <div v-if="message.card.summary" class="ai-fill-confirm-summary">
+                        {{ message.card.summary }}
+                      </div>
+                      <div v-if="message.card.fields?.length" class="ai-fill-confirm-fields">
+                        <div
+                          v-for="(item, idx) in message.card.fields"
+                          :key="idx"
+                          class="ai-fill-confirm-field"
+                        >
+                          <span class="ai-fill-confirm-field-label">{{ item.label }}</span>
+                          <span class="ai-fill-confirm-field-value">{{ item.value }}</span>
+                        </div>
+                      </div>
+                      <div v-if="message.card.table" class="ai-fill-confirm-table">
+                        <div class="ai-fill-confirm-table-bar">
+                          <button
+                            type="button"
+                            class="ai-btn-link ai-btn-link--primary"
+                            @click="openCardTableModal(message)"
+                          >
+                            查看完整表格
+                          </button>
+                        </div>
+                        <table class="ai-form-table ai-markdown-table">
+                          <thead>
+                            <tr>
+                              <th
+                                v-for="(header, headerIndex) in message.card.table.headers"
+                                :key="headerIndex"
+                                class="ai-table-th"
+                              >
+                                {{ header }}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr
+                              v-for="(row, rowIndex) in message.card.table.rows"
+                              :key="rowIndex"
+                              class="ai-table-row"
+                            >
+                              <td
+                                v-for="(header, cellIndex) in message.card.table.headers"
+                                :key="cellIndex"
+                                class="ai-table-td"
+                              >
+                                {{ row[cellIndex] }}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div class="ai-fill-confirm-actions">
+                        <button
+                          type="button"
+                          class="ai-fill-confirm-btn ai-fill-confirm-btn--primary"
+                          :disabled="message.card.resolved || isSending"
+                          @click="handleCardAction(message, 'confirm')"
+                        >
+                          {{ message.card.confirmText || '确认填入' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="ai-fill-confirm-btn"
+                          :disabled="message.card.resolved || isSending"
+                          @click="handleCardAction(message, 'cancel')"
+                        >
+                          {{ message.card.cancelText || '取消' }}
+                        </button>
+                      </div>
+                      <div v-if="message.card.resolved" class="ai-fill-confirm-result">
+                        {{ message.card.action === 'confirm' ? '已确认填入' : '已取消' }}
                       </div>
                     </div>
 
@@ -1643,13 +1905,18 @@ watch(
                       >
                         <div class="reasoning-header">
                           <div class="reasoning-title">
-                            <!-- Loading 旋转 SVG 图标 -->
-                            <svg class="reasoning-loading-icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="3">
-                              <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
-                            </svg>
                             <span>思考中</span>
                           </div>
                           <span class="reasoning-tip">完成后自动收起</span>
+                        </div>
+                        <div class="ai-progress">
+                          <div class="ai-progress-track">
+                            <div class="ai-progress-bar" :style="{ width: `${progress}%` }"></div>
+                          </div>
+                          <div class="ai-progress-meta">
+                            <span class="ai-progress-label">{{ progressLabel || '正在处理...' }}</span>
+                            <span class="ai-progress-value">{{ progress }}%</span>
+                          </div>
                         </div>
                         <template v-if="reasoningBlockMap[message.id]?.length">
                           <div class="reasoning-body">
@@ -1766,10 +2033,16 @@ watch(
                         />
 
                         <div v-else-if="block.parsedUiView" class="ai-form-data-container">
-                          <div v-if="block.parsedUiView.streaming" class="ai-form-streaming-placeholder" style="padding: 12px 0; color: #94a3b8; display: flex; align-items: center; gap: 8px;">
-                            <svg class="ai-loading-icon" viewBox="0 0 24 24" width="1.2em" height="1.2em" fill="none" stroke="currentColor" stroke-width="3" style="animation: reasoning-spin 1.2s linear infinite;">
-                              <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
-                            </svg>
+                          <div v-if="block.parsedUiView.streaming" class="ai-form-streaming-placeholder" style="padding: 12px 0;">
+                            <div class="ai-progress">
+                              <div class="ai-progress-track">
+                                <div class="ai-progress-bar" :style="{ width: `${progress}%` }"></div>
+                              </div>
+                              <div class="ai-progress-meta">
+                                <span class="ai-progress-label">{{ progressLabel || '正在生成表单...' }}</span>
+                                <span class="ai-progress-value">{{ progress }}%</span>
+                              </div>
+                            </div>
                           </div>
                           <template v-else-if="block.parsedUiView._view_type === 'form_data'">
                             <div
@@ -1900,11 +2173,15 @@ watch(
                     </template>
 
                     <div v-else-if="shouldShowAssistantThinkingPlaceholder(message)" class="assistant-thinking-placeholder">
-                      <!-- Loading 旋转 SVG 图标 -->
-                      <svg class="reasoning-loading-icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="3">
-                        <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
-                      </svg>
-                      <span>正在思考中...</span>
+                      <div class="ai-progress">
+                        <div class="ai-progress-track">
+                          <div class="ai-progress-bar" :style="{ width: `${progress}%` }"></div>
+                        </div>
+                        <div class="ai-progress-meta">
+                          <span class="ai-progress-label">{{ progressLabel || '正在处理...' }}</span>
+                          <span class="ai-progress-value">{{ progress }}%</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2183,11 +2460,7 @@ watch(
               :disabled="!canSend"
               @click="handleSend(inputValue)"
             >
-              <!-- Loading 图标 -->
-              <svg v-if="isSending" class="ai-btn-spinner" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="3">
-                <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-linecap="round" />
-              </svg>
-              {{ isSending ? '生成中...' : '发送' }}
+              {{ isSending ? `生成中 ${progress}%` : '发送' }}
             </button>
           </div>
         </div>
@@ -2258,7 +2531,8 @@ watch(
         </div>
       </div>
     </template>
-  </div>
+    </div>
+  </Teleport>
 
   <!-- 确认对话框（替代 ElMessageBox.confirm） -->
   <Teleport to="body">
@@ -2289,6 +2563,12 @@ watch(
           <button class="ai-confirm-close" @click="closeTableModal">&times;</button>
         </div>
         <div class="ai-confirm-body" style="flex: 1; overflow: auto; padding-top: 16px; margin-bottom: 0;">
+          <div v-if="activeTableModal.fields?.length" class="ai-table-modal-fields">
+            <div v-for="(item, idx) in activeTableModal.fields" :key="idx" class="ai-table-modal-field">
+              <span class="ai-table-modal-field-label">{{ item.label }}</span>
+              <span class="ai-table-modal-field-value">{{ item.value }}</span>
+            </div>
+          </div>
           <table class="ai-form-table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
             <thead>
               <tr>
@@ -2378,11 +2658,6 @@ watch(
   background: #c45656;
   border-color: #c45656;
   color: #ffffff;
-}
-
-/* 按钮加载旋转图标 */
-.ai-btn-spinner {
-  animation: reasoning-spin 1.2s linear infinite;
 }
 
 /* 链接按钮 */
@@ -2759,14 +3034,82 @@ watch(
 
 /* ===== 原有样式（保持不变） ===== */
 .assistant-thinking-placeholder {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  padding: 2px 0;
+  width: 240px;
+  max-width: 100%;
+  padding: 4px 0;
   color: #94a3b8;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.ai-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.ai-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #2f6df6 0%, #2b5de7 100%);
+  transition: width 0.2s ease;
+}
+
+.ai-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-progress-label {
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-progress-value {
+  flex-shrink: 0;
+  color: #2f6df6;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 不确定进度条：用于无法给出具体百分比、但需要表达“仍在运行”的局部指示。 */
+.ai-progress-indeterminate {
+  position: relative;
+  flex-shrink: 0;
+  width: 16px;
+  height: 3px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.ai-progress-indeterminate::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 50%;
+  height: 100%;
+  border-radius: 999px;
+  background: #2563eb;
+  animation: ai-progress-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes ai-progress-slide {
+  from { transform: translateX(0); }
+  to { transform: translateX(320%); }
 }
 
 .ai-toolbar {
@@ -2875,6 +3218,149 @@ watch(
   font-size: 12px;
   line-height: 1;
   font-weight: 600;
+}
+
+.assistant-tool-call-pill--active {
+  color: #b45309;
+  background: linear-gradient(180deg, #fefce8 0%, #fef3c7 100%);
+  border-color: #fde68a;
+}
+
+.assistant-tool-call-pill--failed {
+  color: #dc2626;
+  background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
+  border-color: #fecaca;
+}
+
+.ai-fill-confirm-card {
+  margin: 8px 0;
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ai-fill-confirm-header {
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-bottom: 1px solid #bfdbfe;
+}
+
+.ai-fill-confirm-summary {
+  padding: 10px 12px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ai-fill-confirm-fields {
+  padding: 6px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ai-fill-confirm-field {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ai-fill-confirm-field-label {
+  flex-shrink: 0;
+  min-width: 72px;
+  color: #94a3b8;
+}
+
+.ai-fill-confirm-field-value {
+  color: #1e293b;
+  word-break: break-all;
+}
+
+.ai-fill-confirm-table {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ai-fill-confirm-table-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.ai-table-modal-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 0 16px 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ai-table-modal-field {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.ai-table-modal-field-label {
+  flex-shrink: 0;
+  color: #94a3b8;
+}
+
+.ai-table-modal-field-value {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.ai-fill-confirm-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.ai-fill-confirm-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+
+.ai-fill-confirm-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.ai-fill-confirm-btn--primary {
+  color: #ffffff;
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.ai-fill-confirm-btn--primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.ai-fill-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ai-fill-confirm-result {
+  padding: 6px 12px 10px;
+  font-size: 12px;
+  color: #16a34a;
 }
 
 .assistant-tool-call-name {
@@ -3147,11 +3633,6 @@ watch(
   gap: 6px;
 }
 
-.reasoning-loading-icon {
-  color: #2563eb;
-  animation: reasoning-spin 1.2s linear infinite;
-}
-
 .reasoning-tip {
   color: #94a3b8;
   font-size: 12px;
@@ -3184,11 +3665,6 @@ watch(
 .reasoning-fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
-}
-
-@keyframes reasoning-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .message-row {
@@ -3358,4 +3834,43 @@ watch(
 }
 
 /* ===== 用户选择按钮 ===== */
+
+/* ===== 弹窗模式 ===== */
+.ai-chat-launcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2f6df6 0%, #2b5de7 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(47, 109, 246, 0.28);
+  transition: box-shadow 0.15s ease, filter 0.15s ease;
+}
+.ai-chat-launcher:hover {
+  box-shadow: 0 14px 30px rgba(47, 109, 246, 0.36);
+  filter: brightness(1.04);
+}
+.ai-chat-launcher-text {
+  white-space: nowrap;
+}
+
+.ai-chat-popup-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.ai-chat-shell--popup {
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.25);
+}
 </style>

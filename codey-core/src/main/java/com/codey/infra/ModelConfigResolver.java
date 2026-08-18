@@ -43,6 +43,7 @@ public final class ModelConfigResolver {
         copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
         copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
         copy.setMaxRetries(source.getMaxRetries());
+        copy.setMaxTokens(source.getMaxTokens());
         return copy;
     }
 
@@ -76,6 +77,9 @@ public final class ModelConfigResolver {
         }
         if (properties.getMaxRetries() != null) {
             target.setMaxRetries(properties.getMaxRetries().intValue());
+        }
+        if (properties.getMaxTokens() != null) {
+            target.setMaxTokens(properties.getMaxTokens());
         }
     }
 

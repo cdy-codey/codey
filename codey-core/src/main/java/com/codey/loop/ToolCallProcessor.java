@@ -51,13 +51,13 @@ final class ToolCallProcessor {
         this.replanService = replanService;
     }
 
-    void processToolCalls(List<ModelToolCall> toolCalls,
+    ToolResult processToolCalls(List<ModelToolCall> toolCalls,
                           AgentSession session,
                           SkillDefinition skill,
                           String assistantContent,
                           String assistantReasoningContent) {
         if (toolCalls == null || toolCalls.isEmpty()) {
-            return;
+            return null;
         }
         assignMissingToolCallIds(toolCalls);
         // 每轮处理前重置“写成功即自动完成”标记，避免上一轮残留影响本轮判断。
@@ -70,6 +70,7 @@ final class ToolCallProcessor {
         List<ModelToolCall> parallelToolCalls = new ArrayList<ModelToolCall>();
         List<ModelToolCall> executedToolCalls = new ArrayList<ModelToolCall>();
         List<ModelMessage> toolResultMessages = new ArrayList<ModelMessage>();
+        ToolResult pendingUserChoice = null;
         for (ModelToolCall toolCall : toolCalls) {
             ToolInvocation request = toToolInvocation(toolCall, session);
             if (!toolExecutor.canRunInParallel(request)
@@ -134,6 +135,12 @@ final class ToolCallProcessor {
             ToolResult result = toolExecutor.execute(request, session.getWorkingDirectory(), session.getTenantId());
             sessionStore.appendEvent(SessionEventFactory.toolCall(session.getSessionId(), request, result));
             rememberExecutedToolCall(executedToolCalls, toolCall);
+            if (result.isUserChoice()) {
+                // 工具要求用户先选择再继续（如校验未通过列出问题），暂停本循环等待用户决策。
+                appendToolResultMessage(toolResultMessages, toolCall, result.getContentForModel());
+                pendingUserChoice = result;
+                break;
+            }
             if (!result.isSuccess()) {
                 // #endregion
                 loopGuard.recordFailure(session, requestSignature);
@@ -174,6 +181,7 @@ final class ToolCallProcessor {
 
         flushParallelBatch(parallelBatch, parallelSignatures, parallelToolCalls, session, executedToolCalls, toolResultMessages);
         flushExecutedToolTranscript(session, assistantContent, assistantReasoningContent, executedToolCalls, toolResultMessages);
+        return pendingUserChoice;
     }
 
     private ToolInvocation toToolInvocation(ModelToolCall toolCall) {

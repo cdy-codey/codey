@@ -212,6 +212,9 @@ public class HttpModelGateway implements ModelGateway {
         body.put("messages", messages);
         body.put("temperature",
                 effectiveConfig.getTemperature() == null ? Double.valueOf(0.2d) : effectiveConfig.getTemperature());
+        if (effectiveConfig.getMaxTokens() != null) {
+            body.put("max_tokens", effectiveConfig.getMaxTokens());
+        }
         body.put("stream", Boolean.TRUE);
         // 前端控制是否启用推理模型思考过程
         if (!request.isIncludeThinking()) {

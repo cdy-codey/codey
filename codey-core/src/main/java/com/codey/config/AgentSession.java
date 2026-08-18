@@ -401,6 +401,7 @@ public class AgentSession {
         copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
         copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
         copy.setMaxRetries(source.getMaxRetries());
+        copy.setMaxTokens(source.getMaxTokens());
         return copy;
     }
 }

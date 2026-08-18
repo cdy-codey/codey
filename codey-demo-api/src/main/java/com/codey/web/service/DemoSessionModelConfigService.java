@@ -56,7 +56,8 @@ public class DemoSessionModelConfigService {
         databaseConfig.setTemperature(Double.valueOf(0.2d));
         databaseConfig.setConnectTimeoutMillis(Integer.valueOf(10000));
         databaseConfig.setReadTimeoutMillis(Integer.valueOf(30000));
-        databaseConfig.setMaxRetries(Integer.valueOf(2));
+        databaseConfig.setMaxRetries(Integer.valueOf(1));
+        databaseConfig.setMaxTokens(Integer.valueOf(8192));
         return databaseConfig;
     }
 
@@ -74,6 +75,7 @@ public class DemoSessionModelConfigService {
         copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
         copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
         copy.setMaxRetries(source.getMaxRetries());
+        copy.setMaxTokens(source.getMaxTokens());
         return copy;
     }
 }

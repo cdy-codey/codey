@@ -13,6 +13,10 @@ const assistantRef = ref(null)
 const loading = ref(false)
 const aiCollapsed = ref(false)
 const aiSummary = ref('')
+// 待确认的填入数据：AI 生成表单内容后先展示预览卡片，由询问者确认后才回填。
+const pendingFill = ref(null)
+// 本次填写流程是否已插入过确认卡片，避免 task-ended 兜底重复插入。
+const fillCardHandled = ref(false)
 const scenario = ref(null)
 const lineItems = ref([])
 const lastSubmittedContextSignature = ref('')
@@ -300,6 +304,91 @@ function applyAiAutofillPayload(payload = {}) {
   }
 }
 
+function isContextJsonPath(path) {
+  return /(^|\/)context\.json$/i.test(String(path || '').replace(/\\/g, '/'))
+}
+
+// 根据生成的表单数据构造聊天流中的预览卡片：关键字段 + 完整明细表格。
+function buildFillConfirmCard(payload) {
+  const header = payload.header || {}
+  const detail = payload.detail || {}
+  const items = Array.isArray(payload.items) ? payload.items : []
+  const fields = []
+  if (header.requestDepartment) {
+    fields.push({ label: '申请部门', value: header.requestDepartment })
+  }
+  if (header.requestDate) {
+    fields.push({ label: '申请日期', value: header.requestDate })
+  }
+  if (header.purchaseType) {
+    fields.push({ label: '采购类型', value: header.purchaseType })
+  }
+  const budgetAmount = toNumber(detail.budgetAmount)
+  if (budgetAmount > 0) {
+    fields.push({ label: '预算金额', value: `¥${budgetAmount.toLocaleString()}` })
+  }
+  const headers = ['序号', '标的名称', '数量', '单价', '规格', '品牌']
+  const rows = items.map((item, index) => [
+    String(item.rowNo || index + 1),
+    item.itemName || '',
+    toNumber(item.quantity) ? String(toNumber(item.quantity)) : '',
+    toNumber(item.unitPrice) ? `¥${toNumber(item.unitPrice).toLocaleString()}` : '',
+    item.specification || '',
+    item.referenceBrand || '',
+  ])
+  return {
+    title: 'AI 已生成表单内容',
+    summary: `已生成 ${items.length} 条采购明细，请确认是否填入表单`,
+    fields,
+    table: items.length > 0 ? { headers, rows } : null,
+    payload,
+  }
+}
+
+// 聊天流卡片（确认填入/取消）的操作回调。
+function handleCardAction({ action, card }) {
+  if (action === 'confirm' && card?.payload) {
+    applyAiAutofillPayload(card.payload)
+    pendingFill.value = null
+    lastSubmittedContextSignature.value = buildContextSignature(card.payload)
+    ElMessage.success('已填入表单')
+    return
+  }
+  if (action === 'cancel') {
+    pendingFill.value = null
+  }
+}
+
+// write_file 写入 context.json 时，事件里已携带完整 JSON 内容。
+// 先展示预览卡片由询问者确认，确认后才回填表格，避免未经确认直接改动表单。
+function handleToolCall(event) {
+  const toolName = event?.toolName || ''
+  if (toolName !== 'write_file' && toolName !== 'edit_file') {
+    return
+  }
+  const request = event?.payload?.payload?.request
+  const args = request?.arguments || {}
+  if (!isContextJsonPath(args?.path)) {
+    return
+  }
+  const content = args?.content
+  if (!content) {
+    return
+  }
+  let parsed = null
+  try {
+    parsed = typeof content === 'string' ? JSON.parse(content) : content
+  } catch (error) {
+    return
+  }
+  if (!parsed) {
+    return
+  }
+  pendingFill.value = parsed
+  fillCardHandled.value = true
+  assistantRef.value?.appendAssistantCard?.(buildFillConfirmCard(parsed))
+}
+
 // 折叠态下从页面头部重新打开 AI 助手
 function handleToggleAiAssistant() {
   if (aiCollapsed.value) {
@@ -324,6 +413,9 @@ async function triggerAiAutofill() {
 }
 
 async function handleBeforeAiSend({ prompt, syncPagePayloadToWorkspace }) {
+  // 每次发起新的填写请求前重置待确认状态，避免上一轮的确认卡片影响本轮。
+  pendingFill.value = null
+  fillCardHandled.value = false
   // 业务表单可能被用户手动改动，所以每次发送前都同步一次最新上下文。
   const contextSnapshot = buildContextSnapshot()
   if (typeof syncPagePayloadToWorkspace === 'function') {
@@ -334,8 +426,12 @@ async function handleBeforeAiSend({ prompt, syncPagePayloadToWorkspace }) {
 }
 
 async function handleAiTaskEnded(event) {
+  // 回填改由询问者确认驱动：若 write_file 阶段已插入确认卡片，这里不再自动回填。
+  if (fillCardHandled.value) {
+    return
+  }
   try {
-    // 任务结束后直接消费 queryWorkspace 返回的 JSON 内容，避免再从快照 currentFile 提取。
+    // 兜底：write_file 未被前端捕获（如历史/恢复场景）时，用 queryWorkspace 结果构造确认卡片。
     const workspaceContext = normalizeWorkspaceContextContent(event?.data)
     if (!workspaceContext) {
       return
@@ -344,9 +440,9 @@ async function handleAiTaskEnded(event) {
     if (!latestSignature || latestSignature === lastSubmittedContextSignature.value) {
       return
     }
-    applyAiAutofillPayload(workspaceContext)
-    lastSubmittedContextSignature.value = latestSignature
-    ElMessage.success('已读取 AI 写入的 context.json 并刷新表单')
+    fillCardHandled.value = true
+    pendingFill.value = workspaceContext
+    assistantRef.value?.appendAssistantCard?.(buildFillConfirmCard(workspaceContext))
   } catch (error) {
     ElMessage.warning(error.message || '读取 AI 写入的 context.json 失败，请检查文件是否已更新')
   }
@@ -683,6 +779,8 @@ onMounted(async () => {
           :collapsible="true"
           :on-before-send="handleBeforeAiSend"      
           :on-task-ended="handleAiTaskEnded"
+          :on-tool-call="handleToolCall"
+          :on-card-action="handleCardAction"
           height="calc(100vh - 96px)"
           :min-height="460"
           @collapse-change="handleAiCollapseChange"

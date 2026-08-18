@@ -20,4 +20,5 @@ codey:
     temperature: 0.2
     connect-timeout-millis: 10000
     read-timeout-millis: 30000
-    max-retries: 2
+    max-retries: 1
+    max-tokens: 8192
