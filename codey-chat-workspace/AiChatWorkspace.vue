@@ -39,6 +39,21 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  // 表单模式：开启后 AI 直接按表单 Schema 输出 JSON，不再多轮读写文件
+  formModeValue: {
+    type: Boolean,
+    default: false,
+  },
+  // 表单名称：表单模式下用于匹配业务实现的表单定义（FormProvider）
+  formNameValue: {
+    type: String,
+    default: '',
+  },
+  // 表单可见字段名称列表：仅序列化列表内字段，用于过滤界面未展示的噪音字段
+  formVisibleFieldsValue: {
+    type: Array,
+    default: () => [],
+  },
   pagePayloadValue: {
     type: [Object, Array, String, Number, Boolean],
     default: null,
@@ -387,6 +402,15 @@ const effectiveIdentitiesValue = computed(() => {
   const value = resolveAssistantProp('identitiesValue')
   return Array.isArray(value) ? value : []
 })
+// 表单模式相关配置，透传给后端 RunRequest，供会话初始化时解析表单定义
+const effectiveFormModeValue = computed(() => resolveAssistantBooleanProp('formModeValue', false))
+const effectiveFormNameValue = computed(() => resolveAssistantStringProp('formNameValue', ''))
+const effectiveFormVisibleFieldsValue = computed(() => {
+  const value = resolveAssistantProp('formVisibleFieldsValue')
+  return Array.isArray(value)
+    ? value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter((item) => item.length > 0)
+    : []
+})
 // 深度思考由本地开关控制，prop 提供初始值
 const effectiveShowThinking = computed(() => {
   // 如果通过 openAssistant 传入了 assistantProps.showThinking，则采用传入值
@@ -632,6 +656,9 @@ function buildChatContext() {
     contextNotes,
     tenantId: effectiveTenantIdValue.value,
     identities: normalizeIdentityList(effectiveIdentitiesValue.value),
+    formMode: effectiveFormModeValue.value,
+    formName: effectiveFormNameValue.value,
+    formVisibleFields: effectiveFormVisibleFieldsValue.value,
   }
 }
 

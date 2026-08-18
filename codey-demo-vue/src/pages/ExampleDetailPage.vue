@@ -163,11 +163,7 @@ function handleAiPanelVisibilityChange(visible) {
   border-radius: 12px;
   background: #ffffff;
   border: 1px solid #e5e7eb;
-  overflow: hidden;
-}
-
-.detail-content-panel :deep(> *) {
-  height: 100%;
+  overflow-y: auto;
 }
 
 .detail-ai-panel {
