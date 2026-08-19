@@ -19,9 +19,11 @@ export function parseModelOutputPayload(payload) {
     const root = typeof rawOutput === 'string' ? JSON.parse(rawOutput) : rawOutput
     const choice = Array.isArray(root?.choices) ? root.choices[0] : null
     const message = choice?.message || {}
+    // 优先取后端注入的中文 displayName，与 tool_execution_started / tool_call 等事件的展示名保持一致，
+    // 避免同一工具因中英文名不同而在工具调用列表中重复展示；无 displayName 时回退真实 function.name。
     const toolCalls = Array.isArray(message?.tool_calls)
       ? message.tool_calls
-          .map((item) => item?.function?.name || item?.name || '')
+          .map((item) => item?.function?.displayName || item?.function?.name || item?.name || '')
           .filter(Boolean)
       : []
     return {

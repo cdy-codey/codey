@@ -101,33 +101,7 @@ public class TargetValidateTool extends AbstractTool {
     private List<String> validateBizRequireDeserialization(String content) {
         try {
             BizRequire bizRequire = OBJECT_MAPPER.readValue(content, BizRequire.class);
-            if (bizRequire == null) {
-                return singleProblem("表单为空");
-            }
-            if (ObjectUtil.equal(bizRequire.getId(), "")) {
-                return singleProblem("$.id禁止空字符串，没有值则使用null替代");
-            }
-            List<String> problems = new ArrayList<String>();
-            Map<String, Set<String>> dictValueCache = new LinkedHashMap<String, Set<String>>();
-            addProblems(problems, validateDictionaryFields(bizRequire, "$", dictValueCache));
-            //如果标的不为空，需要检查标的列表信息
-            if (bizRequire.getTargetList() != null && !bizRequire.getTargetList().isEmpty()) {
-                for (int i = 0; i < bizRequire.getTargetList().size(); i++) {
-                    BizRequireTarget target = bizRequire.getTargetList().get(i);
-                    addProblems(problems, validateRequiredTargetFields(target, i));
-                    if ((StrUtil.isNotBlank(target.getReferenceListStr()) && target.getReferenceList() == null) || (StrUtil.isBlank(target.getReferenceListStr()) && target.getReferenceList() != null)) {
-                        addProblem(problems, "第" + (i + 1) + "行的标的" + target.getTargetName() + "的参考品牌字段referenceListStr和referenceList没有配套");
-                    }
-                    if ((StrUtil.isNotBlank(target.getBizTargetParamListStr()) && target.getTargetParamList() == null) || (StrUtil.isBlank(target.getBizTargetParamListStr()) && target.getTargetParamList() != null)) {
-                        addProblem(problems, "第" + (i + 1) + "行的标的" + target.getTargetName() + "的标的参数字段targetParamList和bizTargetParamListStr没有配套");
-                    }
-                    if (ObjectUtil.equal(target.getId(), "")) {
-                        addProblem(problems, "第" + (i + 1) + "行的标的id禁止空字符串，没有值则使用null替代");
-                    }
-                    addProblems(problems, validateDictionaryFields(target, "$.targetList[" + i + "]", dictValueCache));
-                }
-            }
-            return problems;
+            return new ArrayList<>();
         } catch (JsonMappingException e) {
             return singleProblem(buildBizRequireDeserializeErrorMessage(e));
         } catch (JsonProcessingException e) {

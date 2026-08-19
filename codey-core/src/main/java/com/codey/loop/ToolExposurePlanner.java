@@ -8,13 +8,33 @@ import com.codey.tools.ToolRegistry;
 import com.codey.tool.ToolMetadata;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 参考成熟引擎的工具目录策略：
  * 先暴露读取/搜索工具，拿到上下文后再放开 edit_code。
  */
 public class ToolExposurePlanner {
+    /**
+     * 表单模式下屏蔽的基础工具：表单模式字段信息已完整提供，AI 直接输出 JSON 结果，
+     * 不需要（也不允许）通过多轮文件读写来修改结果，因此屏蔽两类工具：
+     * <ul>
+     *   <li>编辑文件工具：edit_file / apply_structured_patch / delete_file</li>
+     *   <li>格式读写工具：read_json / search_json / edit_json</li>
+     * </ul>
+     */
+    private static final Set<String> FORM_MODE_BLOCKED_TOOLS = new HashSet<String>(Arrays.asList(
+            "edit_file",
+            "apply_structured_patch",
+            "delete_file",
+            "read_json",
+            "search_json",
+            "edit_json"
+    ));
+
     private final ToolRegistry toolRegistry;
 
     public ToolExposurePlanner() {
@@ -32,11 +52,25 @@ public class ToolExposurePlanner {
         List<String> visibleTools = new ArrayList<String>();
         for (ToolSpec tool : candidateTools(skill)) {
             if (supportsSessionIdentities(tool, session)
-                    && matchesSkillMetadata(tool, skill)) {
+                    && matchesSkillMetadata(tool, skill)
+                    && !isBlockedInFormMode(tool, session)) {
                 visibleTools.add(tool.descriptor().getName());
             }
         }
         return visibleTools;
+    }
+
+    /**
+     * 表单模式下屏蔽指定的编辑文件工具与格式读写工具。
+     * 命中屏蔽名单的工具既不暴露给模型，也不允许在运行时被调用。
+     */
+    private boolean isBlockedInFormMode(ToolSpec tool, AgentSession session) {
+        if (session == null || !session.isFormMode()) {
+            return false;
+        }
+        return tool != null
+                && tool.descriptor() != null
+                && FORM_MODE_BLOCKED_TOOLS.contains(tool.descriptor().getName());
     }
 
     private List<ToolSpec> candidateTools(SkillDefinition skill) {

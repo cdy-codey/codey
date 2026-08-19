@@ -13,11 +13,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 
 /**
  * 交互式控制台会话存储。
@@ -27,9 +22,6 @@ public class ConsoleSessionStore implements SessionStore {
     private static final int MAX_OUTPUT_LENGTH = 1200;
     private static final String FINAL_JSON_PREFIX = "{\"status\":\"FINISH\"";
     private static final int STREAM_LOOKBEHIND = FINAL_JSON_PREFIX.length();
-    private static final long WRITE_PROGRESS_TICK_MILLIS = 200L;
-    private static final int WRITE_PROGRESS_MAX = 95;
-    private static final String PROGRESS_PREFIX = "处理中> ";
     private static final String ASSISTANT_PREFIX = "助手> ";
     private static final String THINKING_PREFIX = "思考> ";
     private static final String SYSTEM_PREFIX = "系统> ";
@@ -38,7 +30,6 @@ public class ConsoleSessionStore implements SessionStore {
     private final PrintStream err;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Object consoleLock = new Object();
-    private final ScheduledExecutorService progressExecutor;
     private final Set<String> activeStreamingSessions = new HashSet<String>();
     private final Set<String> streamedSessions = new HashSet<String>();
     private final Set<String> displayedFinalSummarySessions = new HashSet<String>();
@@ -48,24 +39,14 @@ public class ConsoleSessionStore implements SessionStore {
     private final Map<String, String> completedStreamingText = new HashMap<String, String>();
     private final Map<String, String> lastProgressMessage = new HashMap<String, String>();
     private final Map<String, LineMode> currentLineModes = new HashMap<String, LineMode>();
-    private final Map<String, ToolProgressState> toolProgressStates = new HashMap<String, ToolProgressState>();
 
     public ConsoleSessionStore(PrintStream out, PrintStream err) {
-        this(out, err, WRITE_PROGRESS_TICK_MILLIS);
-    }
-
-    ConsoleSessionStore(PrintStream out, PrintStream err, long writeProgressTickMillis) {
         this.out = out;
         this.err = err;
-        this.progressExecutor = Executors.newSingleThreadScheduledExecutor(newProgressThreadFactory());
-        this.progressTickMillis = Math.max(50L, writeProgressTickMillis);
     }
-
-    private final long progressTickMillis;
 
     @Override
     public void completeModelText(String sessionId) {
-        stopToolProgress(sessionId);
         flushPendingStreamingText(sessionId, true);
         finishCurrentLine(sessionId);
         activeStreamingSessions.remove(sessionId);
@@ -191,11 +172,11 @@ public class ConsoleSessionStore implements SessionStore {
         if (isBlank(label)) {
             return;
         }
-        startToolProgress(event.getSessionId(), label);
+        // 工具确实在真实执行：以普通进度行展示真实状态文案，不输出编造的进度百分比
+        emitProgressMessage(event.getSessionId(), label);
     }
 
     private void handleToolCall(SessionEvent event) {
-        stopToolProgress(event.getSessionId());
         Object request = SessionEventFactory.payloadValue(event, "request");
         Object result = SessionEventFactory.payloadValue(event, "result");
         if (!(request instanceof ToolInvocation) || !(result instanceof ToolResult)) {
@@ -258,7 +239,7 @@ public class ConsoleSessionStore implements SessionStore {
         synchronized (consoleLock) {
             flushPendingStreamingText(sessionId, true);
             finishCurrentLine(sessionId);
-            out.println(PROGRESS_PREFIX + display);
+            out.println(SYSTEM_PREFIX + display);
         }
     }
 
@@ -364,90 +345,6 @@ public class ConsoleSessionStore implements SessionStore {
             out.println();
         }
         currentLineModes.remove(sessionId);
-    }
-
-    private void startToolProgress(final String sessionId, final String label) {
-        synchronized (consoleLock) {
-            stopToolProgress(sessionId);
-            flushPendingStreamingText(sessionId, true);
-            finishCurrentLine(sessionId);
-            ToolProgressState state = new ToolProgressState(label);
-            toolProgressStates.put(sessionId, state);
-            renderToolProgress(sessionId, state);
-            state.future = progressExecutor.scheduleAtFixedRate(new Runnable() {
-                @Override
-                public void run() {
-                    advanceToolProgress(sessionId, label);
-                }
-            }, progressTickMillis, progressTickMillis, TimeUnit.MILLISECONDS);
-        }
-    }
-
-    private void advanceToolProgress(String sessionId, String label) {
-        synchronized (consoleLock) {
-            ToolProgressState state = toolProgressStates.get(sessionId);
-            if (state == null || !label.equals(state.label)) {
-                return;
-            }
-            if (state.percent >= WRITE_PROGRESS_MAX) {
-                return;
-            }
-            state.percent = nextToolProgressPercent(state.percent);
-            renderToolProgress(sessionId, state);
-        }
-    }
-
-    private void stopToolProgress(String sessionId) {
-        synchronized (consoleLock) {
-            ToolProgressState state = toolProgressStates.remove(sessionId);
-            if (state == null) {
-                return;
-            }
-            if (state.future != null) {
-                state.future.cancel(true);
-            }
-            out.print("\r");
-            out.print(repeat(' ', state.lastRenderedLength));
-            out.print("\r");
-            out.flush();
-        }
-    }
-
-    private void renderToolProgress(String sessionId, ToolProgressState state) {
-        String text = PROGRESS_PREFIX + state.label + "... " + state.percent + "%";
-        out.print("\r");
-        out.print(text);
-        int trailingSpaces = Math.max(0, state.lastRenderedLength - text.length());
-        if (trailingSpaces > 0) {
-            out.print(repeat(' ', trailingSpaces));
-        }
-        out.flush();
-        state.lastRenderedLength = text.length();
-        lastProgressMessage.put(sessionId, state.label);
-    }
-
-    private int nextToolProgressPercent(int current) {
-        if (current < 5) {
-            return current + 1;
-        }
-        if (current < 25) {
-            return Math.min(25, current + 4);
-        }
-        if (current < 60) {
-            return Math.min(60, current + 3);
-        }
-        if (current < 85) {
-            return Math.min(85, current + 2);
-        }
-        return Math.min(WRITE_PROGRESS_MAX, current + 1);
-    }
-
-    private String repeat(char value, int count) {
-        StringBuilder builder = new StringBuilder();
-        for (int index = 0; index < count; index++) {
-            builder.append(value);
-        }
-        return builder.toString();
     }
 
     private String mapToolStartMessage(String toolName) {
@@ -732,27 +629,5 @@ public class ConsoleSessionStore implements SessionStore {
     private enum LineMode {
         THINKING,
         ASSISTANT
-    }
-
-    private ThreadFactory newProgressThreadFactory() {
-        return new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable runnable) {
-                Thread thread = new Thread(runnable, "console-session-progress");
-                thread.setDaemon(true);
-                return thread;
-            }
-        };
-    }
-
-    private static final class ToolProgressState {
-        private final String label;
-        private int percent = 1;
-        private int lastRenderedLength;
-        private ScheduledFuture<?> future;
-
-        private ToolProgressState(String label) {
-            this.label = label;
-        }
     }
 }

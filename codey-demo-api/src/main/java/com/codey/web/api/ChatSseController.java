@@ -142,6 +142,9 @@ public class ChatSseController {
         if (event == null || event.getType() == null) {
             return event;
         }
+        if (event.getType() == SessionEventType.MODEL_OUTPUT) {
+            return enrichModelOutputDisplayName(event);
+        }
         if (event.getType() != SessionEventType.MODEL_TOOL_CALL_STARTED
                 && event.getType() != SessionEventType.TOOL_EXECUTION_STARTED
                 && event.getType() != SessionEventType.TOOL_CALL) {
@@ -168,6 +171,80 @@ public class ChatSseController {
                 event.getMessage(),
                 payload
         );
+    }
+
+    /**
+     * model_output 事件保留模型原始 rawOutput，但为其 tool_calls 补充中文 displayName：
+     * 真实 function.name（英文）保持不变以兼容模型协议，前端优先展示 displayName，
+     * 与其它工具事件（model_tool_call_started 等）名称一致，避免同一工具中英文重复展示。
+     */
+    private SessionEvent enrichModelOutputDisplayName(SessionEvent event) {
+        String rawOutput = event.getMessage();
+        String enrichedRawOutput = injectToolDisplayNames(rawOutput);
+        if (enrichedRawOutput == null || enrichedRawOutput.equals(rawOutput)) {
+            return event;
+        }
+        Map<String, Object> payload = toMutableMap(event.getPayload());
+        payload.put("rawOutput", enrichedRawOutput);
+        return new SessionEvent(event.getSessionId(), event.getType(), event.getStage(), enrichedRawOutput, payload);
+    }
+
+    /**
+     * 解析模型原始输出 JSON，为每个 tool_calls[].function 注入 displayName 字段；
+     * 解析失败或无工具调用时原样返回，保证不影响主链路。
+     */
+    private String injectToolDisplayNames(String rawOutput) {
+        if (isBlank(rawOutput)) {
+            return rawOutput;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(rawOutput);
+            if (!(root instanceof ObjectNode)) {
+                return rawOutput;
+            }
+            ObjectNode copy = ((ObjectNode) root).deepCopy();
+            JsonNode choices = copy.path("choices");
+            if (!choices.isArray()) {
+                return rawOutput;
+            }
+            boolean changed = false;
+            for (JsonNode choice : choices) {
+                if (!(choice instanceof ObjectNode)) {
+                    continue;
+                }
+                JsonNode message = choice.path("message");
+                if (!(message instanceof ObjectNode)) {
+                    continue;
+                }
+                ObjectNode messageNode = (ObjectNode) message;
+                JsonNode toolCalls = messageNode.path("tool_calls");
+                if (!toolCalls.isArray()) {
+                    continue;
+                }
+                for (JsonNode toolCall : toolCalls) {
+                    if (!(toolCall instanceof ObjectNode)) {
+                        continue;
+                    }
+                    JsonNode functionNode = toolCall.path("function");
+                    if (!(functionNode instanceof ObjectNode)) {
+                        continue;
+                    }
+                    ObjectNode function = (ObjectNode) functionNode;
+                    JsonNode nameNode = function.path("name");
+                    if (!nameNode.isTextual() || function.has("displayName")) {
+                        continue;
+                    }
+                    String displayName = resolveToolDisplayName(nameNode.asText());
+                    if (displayName != null && !displayName.equals(nameNode.asText())) {
+                        function.put("displayName", displayName);
+                        changed = true;
+                    }
+                }
+            }
+            return changed ? objectMapper.writeValueAsString(copy) : rawOutput;
+        } catch (Exception exception) {
+            return rawOutput;
+        }
     }
 
     private String resolveEventToolName(SessionEvent event) {

@@ -14,8 +14,8 @@ public class FormContext {
     private String context;
     /** 角色扮演描述（自然语言），设定模型填写表单的行为与语气，可为空 */
     private String role;
-    /** 可见字段名称列表：非空时仅序列化列表内的字段，用于过滤表单中未展示字段的噪音 */
-    private List<String> visibleFields = new ArrayList<String>();
+    /** 可见字段列表：非空时仅序列化列表内的字段，用于过滤表单中未展示字段的噪音 */
+    private List<FormVisibleField> visibleFields = new ArrayList<FormVisibleField>();
 
     public List<FormField> getFields() {
         return fields;
@@ -41,12 +41,12 @@ public class FormContext {
         this.role = role;
     }
 
-    public List<String> getVisibleFields() {
+    public List<FormVisibleField> getVisibleFields() {
         return visibleFields;
     }
 
-    public void setVisibleFields(List<String> visibleFields) {
-        this.visibleFields = visibleFields == null ? new ArrayList<String>() : visibleFields;
+    public void setVisibleFields(List<FormVisibleField> visibleFields) {
+        this.visibleFields = visibleFields == null ? new ArrayList<FormVisibleField>() : visibleFields;
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.codey.loop;
 
 import com.codey.client.FormContext;
+import com.codey.client.FormVisibleField;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
@@ -23,7 +24,8 @@ final class FormSchemaSerializer {
      */
     String serialize(FormContext formContext) {
         Set<String> visibleFields = collectVisibleFields(formContext);
-        Map<String, Object> schema = buildObjectSchema(formContext == null ? null : formContext.getFields(), visibleFields, "");
+        Map<String, String> visibleLabels = collectVisibleFieldLabels(formContext);
+        Map<String, Object> schema = buildObjectSchema(formContext == null ? null : formContext.getFields(), visibleFields, visibleLabels, "");
         // 顶层禁止模型新增 Schema 之外的字段，保证输出 key 与字段定义严格一致
         schema.put("additionalProperties", Boolean.FALSE);
 
@@ -40,7 +42,7 @@ final class FormSchemaSerializer {
      * visibleFields 非空时按点分路径（如 targetList.targetName）过滤各层级字段：
      * 顶层字段与递归子字段都遵循同一白名单，避免只过滤顶层导致嵌套结构塞满噪音字段。
      */
-    private Map<String, Object> buildObjectSchema(List<FormContext.FormField> fields, Set<String> visibleFields, String pathPrefix) {
+    private Map<String, Object> buildObjectSchema(List<FormContext.FormField> fields, Set<String> visibleFields, Map<String, String> visibleLabels, String pathPrefix) {
         Map<String, Object> properties = new LinkedHashMap<String, Object>();
         List<String> required = new ArrayList<String>();
         if (fields != null) {
@@ -57,7 +59,7 @@ final class FormSchemaSerializer {
                 if (!isVisible(visibleFields, fullPath)) {
                     continue;
                 }
-                properties.put(field.getName(), buildProperty(field, visibleFields, fullPath));
+                properties.put(field.getName(), buildProperty(field, visibleFields, visibleLabels, fullPath));
                 if (field.isRequired()) {
                     required.add(field.getName());
                 }
@@ -124,12 +126,29 @@ final class FormSchemaSerializer {
             return null;
         }
         Set<String> visible = new LinkedHashSet<String>();
-        for (String name : formContext.getVisibleFields()) {
-            if (!isBlank(name)) {
-                visible.add(name.trim());
+        for (FormVisibleField field : formContext.getVisibleFields()) {
+            if (field != null && !isBlank(field.getField())) {
+                visible.add(field.getField().trim());
             }
         }
         return visible;
+    }
+
+    /**
+     * 收集可见字段的中文名映射（完整字段路径 -> 界面中文名）。
+     * 前端对象化可见字段时提供 label，用于覆盖 Schema 中实体注解的字段中文描述。
+     */
+    private Map<String, String> collectVisibleFieldLabels(FormContext formContext) {
+        if (formContext == null || formContext.getVisibleFields() == null || formContext.getVisibleFields().isEmpty()) {
+            return null;
+        }
+        Map<String, String> labels = new LinkedHashMap<String, String>();
+        for (FormVisibleField field : formContext.getVisibleFields()) {
+            if (field != null && !isBlank(field.getField())) {
+                labels.put(field.getField().trim(), field.getLabel());
+            }
+        }
+        return labels;
     }
 
     /**
@@ -155,7 +174,7 @@ final class FormSchemaSerializer {
     /**
      * 构建单个字段的 JSON Schema 属性定义：类型 + 嵌套子结构 + 枚举 + 描述（含中文名、说明、特殊规则）。
      */
-    private Map<String, Object> buildProperty(FormContext.FormField field, Set<String> visibleFields, String pathPrefix) {
+    private Map<String, Object> buildProperty(FormContext.FormField field, Set<String> visibleFields, Map<String, String> visibleLabels, String pathPrefix) {
         Map<String, Object> property = new LinkedHashMap<String, Object>();
         String type = mapType(field.getType());
         property.put("type", type);
@@ -165,9 +184,9 @@ final class FormSchemaSerializer {
             // 白名单只写到当前字段（无更深层子路径）时，其子字段全部保留，不再递归过滤
             Set<String> childVisibleFields = hasChildVisibleFields(visibleFields, pathPrefix) ? visibleFields : null;
             if ("array".equals(type)) {
-                property.put("items", buildObjectSchema(field.getChildren(), childVisibleFields, pathPrefix));
+                property.put("items", buildObjectSchema(field.getChildren(), childVisibleFields, visibleLabels, pathPrefix));
             } else if ("object".equals(type)) {
-                Map<String, Object> childSchema = buildObjectSchema(field.getChildren(), childVisibleFields, pathPrefix);
+                Map<String, Object> childSchema = buildObjectSchema(field.getChildren(), childVisibleFields, visibleLabels, pathPrefix);
                 property.put("properties", childSchema.get("properties"));
                 if (childSchema.containsKey("required")) {
                     property.put("required", childSchema.get("required"));
@@ -188,7 +207,9 @@ final class FormSchemaSerializer {
             }
         }
 
-        String description = buildDescription(field);
+        // 前端对象化可见字段传入的中文名优先于实体注解 label，保证 AI 看到的中文名与界面一致
+        String visibleLabel = visibleLabels == null ? null : visibleLabels.get(pathPrefix);
+        String description = buildDescription(field, visibleLabel);
         if (!isBlank(description)) {
             property.put("description", description);
         }
@@ -220,10 +241,12 @@ final class FormSchemaSerializer {
     /**
      * 把中文名、说明、枚举项说明与特殊规则合并为 Schema 描述，保证模型理解字段语义。
      */
-    private String buildDescription(FormContext.FormField field) {
+    private String buildDescription(FormContext.FormField field, String visibleLabel) {
         List<String> parts = new ArrayList<String>();
-        if (!isBlank(field.getLabel())) {
-            parts.add(field.getLabel().trim());
+        // 前端对象化可见字段传入的 label 优先，未提供时回退到实体注解 label
+        String label = isBlank(visibleLabel) ? field.getLabel() : visibleLabel;
+        if (!isBlank(label)) {
+            parts.add(label.trim());
         }
         if (!isBlank(field.getDescription())) {
             parts.add(field.getDescription().trim());

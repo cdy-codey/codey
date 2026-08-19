@@ -70,15 +70,23 @@ public class SkillSelector {
     }
 
     private List<String> resolveRequestedSkillNames(GenerateTask task) {
-        // 表单模式只注入表单自身绑定的 skill，忽略前端额外传入的展示类等无关 skill
+        // 表单模式以表单绑定的业务 skill 为主，同时保留前端显式传入的展示类 skill（如 ui-json-render-agent），
+        // 让模型既按 Schema 填写字段，又遵循结构化展示协议输出结果。
         if (task != null && task.isFormMode() && formSelector != null) {
+            Set<String> names = new LinkedHashSet<String>();
             String formSkillName = formSelector.resolveSkillName(task.getFormName());
             if (formSkillName != null && !formSkillName.trim().isEmpty()) {
-                List<String> names = new ArrayList<String>();
                 names.add(formSkillName.trim());
-                return names;
             }
-            return new ArrayList<String>();
+            if (task.getSkillNames() != null) {
+                for (String item : task.getSkillNames()) {
+                    addSkillNames(names, item);
+                }
+            }
+            if (names.isEmpty()) {
+                addSkillNames(names, task.getSkillName());
+            }
+            return new ArrayList<String>(names);
         }
         Set<String> names = new LinkedHashSet<String>();
         if (task != null && task.getSkillNames() != null) {

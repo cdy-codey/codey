@@ -1,7 +1,7 @@
 <script setup>
 // 本页面与 ProcurementAutofillExample 业务逻辑完全一致，唯一区别在于 AI 交互方式：
 // 本页面不自己挂载 AiChatWorkspace，而是通过 openSystemAiAssistant 调用布局层的全局实例。
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
 import { openSystemAiAssistant, closeSystemAiAssistant } from 'codey-chat-workspace'
@@ -13,27 +13,65 @@ const aiLoading = ref(false)
 // 跟踪助手面板是否已打开
 const aiPanelVisible = ref(false)
 const scenario = ref(null)
-// 采购标的明细列表，对应 BizRequire.targetList / BizRequireTarget
-const targetList = ref([])
-// 采购商务条款列表，对应 BizRequire.businessEntryList / BizBusinessEntry
-const businessEntryList = ref([])
 const lastSubmittedContextSignature = ref('')
-const PROCUREMENT_FORM_SKILL = ['procurement-form-agent', 'ui-json-render-agent']
+const PROCUREMENT_FORM_SKILL = ['ui-json-render-agent']
 const BUSINESS_AI_SYSTEM_PROMPT = '1.思考内容不要出现表单字段的英文名称，使用中文替代'
 // 本页面只用表单模式：固定 formMode 直出 JSON，不再提供旧 skill 编辑文件模式的开关
 // 表单模式对应的业务表单名称，后端按该名称精确匹配 ProcurementFormProvider
 const PROCUREMENT_FORM_NAME = 'procurement-form'
-// 表单界面展示的可见字段（对应后端 BizRequire 实体字段名），用于过滤未展示的噪音字段
-const PROCUREMENT_FORM_VISIBLE_FIELDS = [
-  'requireTitle', 'requireDepartId', 'requireDepartName',
-  'requireAttribute', 'purchaseAmount', 'confirmAmount',
-  'purchaseContent', 'busService', 'purchaseCategory',
-  'organizeForm', 'purchaseWay', 'requireCatalog',
-  'budgetType', 'fundsSource', 'emergency',
-  'estimatedStartTime', 'isSingleSource', 'isImportPurchase',
-  'isMajor', 'isInformation', 'isEntrust', 'isSecret',
-  'targetList',
-]
+
+// 表单字段中文名映射：与 formModel 字段一一对应，作为可见字段的 label 来源（前端为权威）
+const PROCUREMENT_FORM_FIELD_LABELS = {
+  requireTitle: '需求标题',
+  requireNo: '需求编号',
+  requireAttribute: '需求属性',
+  purchaseCategory: '采购类别',
+  emergency: '需求紧急度',
+  estimatedStartTime: '预计启动时间',
+  subscribeDepartName: '申购部门',
+  requireDepartNames: '需求部门',
+  operatorName: '经办人',
+  applyName: '申请人',
+  purchaseContent: '采购内容描述',
+  busService: '商务服务要求',
+  isSingleSource: '是否单一来源',
+  isImportPurchase: '是否进口采购',
+  isMajor: '是否三重一大',
+  isInformation: '是否信息化',
+  isEntrust: '是否委托',
+  isSecret: '是否涉密',
+  isSmb: '适宜中小企业',
+  isBeginningBudget: '是否年初预算',
+  requireCatalog: '采购目录性质',
+  budgetType: '预算类型',
+  fundsSource: '资金性质',
+  costSubject: '资金来源',
+  fundFlow: '资金方向',
+  organizeForm: '初拟组织形式',
+  organizeFormExtra: '组织形式性质',
+  purchaseWay: '初拟采购方式',
+  processWay: '采购执行方式',
+  centralizedDepartName: '归口执行部门',
+  purchaseDepartName: '采购执行部门',
+  budgetName: '预算项目',
+  budgetNo: '预算编号',
+  purchaseAmount: '申购金额',
+  confirmAmount: '审定金额',
+  requireBudgetAmount: '预算总金额',
+  planBeginTime: '计划开始时间',
+  planFinishTime: '计划完成时间',
+  businessDocType: '单据类型',
+  fromBizName: '关联单据',
+  isOverYear: '是否跨年项目',
+  isAddition: '是否补录',
+  isChangeStructure: '改变主体结构',
+  containContent: '项目包含内容',
+  budgetDesc: '资金说明',
+  budgetRemark: '备注',
+  targetList: '采购标的明细',
+  businessEntryList: '采购商务条款',
+  attachments: '需求附件',
+}
 
 // 采购需求基础信息，字段映射自 BizRequire 实体
 const formModel = reactive({
@@ -94,9 +132,20 @@ const formModel = reactive({
   containContent: '',
   budgetDesc: '',
   budgetRemark: '',
+  // 采购标的明细列表（对应 BizRequire.targetList / BizRequireTarget）
+  targetList: [],
+  // 采购商务条款列表（对应 BizRequire.businessEntryList / BizBusinessEntry）
+  businessEntryList: [],
   // 需求附件列表
   attachments: [],
 })
+
+// 表单界面展示的可见字段：由 formModel 顶层字段派生，label 取字段中文名映射（前端为权威）。
+// 对象化结构（{ label, field }）供后端按 field 过滤、用 label 覆盖 Schema 中的字段中文描述。
+const PROCUREMENT_FORM_VISIBLE_FIELDS = Object.keys(formModel).map((field) => ({
+  label: PROCUREMENT_FORM_FIELD_LABELS[field] || field,
+  field,
+}))
 
 // 附件上传相关状态
 const uploading = ref(false)
@@ -125,10 +174,9 @@ const optionMaps = reactive({
 
 // 标的明细金额汇总（申购金额由标的明细自动汇总）
 const totalTargetAmount = computed(() =>
-  targetList.value.reduce((sum, item) => sum + toNumber(item.num) * toNumber(item.unitPrice), 0)
+  formModel.targetList.reduce((sum, item) => sum + toNumber(item.num) * toNumber(item.unitPrice), 0)
 )
 
-const aiWorkingDirectory = "business-procurement"
 const aiContextFileKey = "采购文件申请"
 
 function toNumber(value) {
@@ -182,82 +230,11 @@ function normalizeBusinessEntry(item = {}, index = 0) {
 }
 
 function buildContextSnapshot() {
-  return {
-    scenarioId: scenario.value?.scenarioId || 'purchase-require',
-    title: scenario.value?.title || '采购需求申请',
-    subtitle: scenario.value?.subtitle || '',
-    breadcrumbs: scenario.value?.breadcrumbs || [],
-    goal: scenario.value?.goal || '',
-    // 采购需求基础信息 — 对应 BizRequire 字段
-    basicInfo: {
-      requireTitle: formModel.requireTitle,
-      requireNo: formModel.requireNo,
-      requireAttribute: formModel.requireAttribute,
-      purchaseCategory: formModel.purchaseCategory,
-      emergency: formModel.emergency,
-      estimatedStartTime: formModel.estimatedStartTime,
-      subscribeDepartName: formModel.subscribeDepartName,
-      requireDepartNames: formModel.requireDepartNames,
-      operatorName: formModel.operatorName,
-      applyName: formModel.applyName,
-      purchaseContent: formModel.purchaseContent,
-      busService: formModel.busService,
-      isSingleSource: formModel.isSingleSource,
-      isImportPurchase: formModel.isImportPurchase,
-      isMajor: formModel.isMajor,
-      isInformation: formModel.isInformation,
-      isEntrust: formModel.isEntrust,
-      isSecret: formModel.isSecret,
-      isSmb: formModel.isSmb,
-      isBeginningBudget: formModel.isBeginningBudget,
-      requireCatalog: formModel.requireCatalog,
-      budgetType: formModel.budgetType,
-      fundsSource: formModel.fundsSource,
-      costSubject: formModel.costSubject,
-      fundFlow: formModel.fundFlow,
-      organizeForm: formModel.organizeForm,
-      organizeFormExtra: formModel.organizeFormExtra,
-      purchaseWay: formModel.purchaseWay,
-      processWay: formModel.processWay,
-      centralizedDepartName: formModel.centralizedDepartName,
-      purchaseDepartName: formModel.purchaseDepartName,
-      budgetName: formModel.budgetName,
-      budgetNo: formModel.budgetNo,
-      purchaseAmount: formModel.purchaseAmount,
-      confirmAmount: formModel.confirmAmount,
-      requireBudgetAmount: formModel.requireBudgetAmount,
-      planBeginTime: formModel.planBeginTime,
-      planFinishTime: formModel.planFinishTime,
-      businessDocType: formModel.businessDocType,
-      fromBizName: formModel.fromBizName,
-      isOverYear: formModel.isOverYear,
-      isAddition: formModel.isAddition,
-      isChangeStructure: formModel.isChangeStructure,
-      containContent: formModel.containContent,
-      budgetDesc: formModel.budgetDesc,
-      budgetRemark: formModel.budgetRemark,
-    },
-    // 采购标的明细 — 对应 BizRequireTarget 列表
-    targetList: targetList.value.map((item) => ({
-      rowNo: item.rowNo, targetName: item.targetName, targetTypeName: item.targetTypeName,
-      purchaseTypeName: item.purchaseTypeName, num: item.num, unitPrice: item.unitPrice,
-      unit: item.unit, targetPrice: item.targetPrice, targetContent: item.targetContent,
-      storageArea: item.storageArea, expectPurchaseTime: item.expectPurchaseTime,
-      referenceListStr: item.referenceListStr, remark: item.remark,
-    })),
-    // 采购商务条款 — 对应 BizBusinessEntry 列表
-    businessEntryList: businessEntryList.value.map((item) => ({
-      rowNo: item.rowNo, entriesCategory: item.entriesCategory,
-      businessItem: item.businessItem, businessRequirement: item.businessRequirement,
-      businessRequirementResult: item.businessRequirementResult, standardBasis: item.standardBasis,
-    })),
-    formFields: scenario.value?.formFields || [],
-    aiInsightCards: scenario.value?.aiInsightCards || [],
-    aiSuggestions: scenario.value?.aiSuggestions || [],
-    aiInstruction: scenario.value?.aiInstruction || '',
-    // 附件
-    attachments: formModel.attachments || [],
-  }
+  // 直接以 formModel 作为同步到 AI 工作区的业务对象，结构与后端 BizRequire 保持一致
+  // 调试日志：确认同步快照时 attachments 是否已包含已上传附件
+  console.log('[buildContextSnapshot] 当前快照 attachments 数量:', formModel.attachments.length,
+    '内容:', JSON.stringify(formModel.attachments, null, 2))
+  return formModel
 }
 
 function buildContextSignature(payload) { return JSON.stringify(payload || {}) }
@@ -271,60 +248,18 @@ function normalizeWorkspaceContextContent(content) {
 
 function applyScenarioContext(context) {
   scenario.value = context || null
-  const basicInfo = context?.basicInfo || {}
-  // 还原基础信息
-  formModel.requireTitle = basicInfo.requireTitle || ''
-  formModel.requireNo = basicInfo.requireNo || ''
-  formModel.requireAttribute = basicInfo.requireAttribute || ''
-  formModel.purchaseCategory = basicInfo.purchaseCategory || ''
-  formModel.emergency = basicInfo.emergency || ''
-  formModel.estimatedStartTime = basicInfo.estimatedStartTime || ''
-  formModel.subscribeDepartName = basicInfo.subscribeDepartName || ''
-  formModel.requireDepartNames = basicInfo.requireDepartNames || ''
-  formModel.operatorName = basicInfo.operatorName || ''
-  formModel.applyName = basicInfo.applyName || ''
-  formModel.purchaseContent = basicInfo.purchaseContent || ''
-  formModel.busService = basicInfo.busService || ''
-  formModel.isSingleSource = basicInfo.isSingleSource || ''
-  formModel.isImportPurchase = basicInfo.isImportPurchase || ''
-  formModel.isMajor = basicInfo.isMajor || ''
-  formModel.isInformation = basicInfo.isInformation || ''
-  formModel.isEntrust = basicInfo.isEntrust || ''
-  formModel.isSecret = basicInfo.isSecret || ''
-  formModel.isSmb = basicInfo.isSmb || ''
-  formModel.isBeginningBudget = basicInfo.isBeginningBudget || ''
-  formModel.requireCatalog = basicInfo.requireCatalog || ''
-  formModel.budgetType = basicInfo.budgetType || ''
-  formModel.fundsSource = basicInfo.fundsSource || ''
-  formModel.costSubject = basicInfo.costSubject || ''
-  formModel.fundFlow = basicInfo.fundFlow || ''
-  formModel.organizeForm = basicInfo.organizeForm || ''
-  formModel.organizeFormExtra = basicInfo.organizeFormExtra || ''
-  formModel.purchaseWay = basicInfo.purchaseWay || ''
-  formModel.processWay = basicInfo.processWay || ''
-  formModel.centralizedDepartName = basicInfo.centralizedDepartName || ''
-  formModel.purchaseDepartName = basicInfo.purchaseDepartName || ''
-  formModel.budgetName = basicInfo.budgetName || ''
-  formModel.budgetNo = basicInfo.budgetNo || ''
-  formModel.purchaseAmount = toNumber(basicInfo.purchaseAmount)
-  formModel.confirmAmount = toNumber(basicInfo.confirmAmount)
-  formModel.requireBudgetAmount = toNumber(basicInfo.requireBudgetAmount)
-  formModel.planBeginTime = basicInfo.planBeginTime || ''
-  formModel.planFinishTime = basicInfo.planFinishTime || ''
-  formModel.businessDocType = basicInfo.businessDocType || ''
-  formModel.fromBizName = basicInfo.fromBizName || ''
-  formModel.isOverYear = basicInfo.isOverYear || ''
-  formModel.isAddition = basicInfo.isAddition || ''
-  formModel.isChangeStructure = basicInfo.isChangeStructure || ''
-  formModel.containContent = basicInfo.containContent || ''
-  formModel.budgetDesc = basicInfo.budgetDesc || ''
-  formModel.budgetRemark = basicInfo.budgetRemark || ''
+  // 后端基础信息已平铺在 context 顶层，与 formModel 字段一一对应，直接整体覆盖
+  Object.assign(formModel, context || {})
+  // 金额字段统一归一化为数字，防止 null/字符串导致后续计算异常
+  formModel.purchaseAmount = toNumber(formModel.purchaseAmount)
+  formModel.confirmAmount = toNumber(formModel.confirmAmount)
+  formModel.requireBudgetAmount = toNumber(formModel.requireBudgetAmount)
   // 还原标的明细
-  targetList.value = Array.isArray(context?.targetList)
+  formModel.targetList = Array.isArray(context?.targetList)
     ? context.targetList.map((item, index) => normalizeTarget(item, index))
     : []
   // 还原文商务条款
-  businessEntryList.value = Array.isArray(context?.businessEntryList)
+  formModel.businessEntryList = Array.isArray(context?.businessEntryList)
     ? context.businessEntryList.map((item, index) => normalizeBusinessEntry(item, index))
     : []
   // 还原选项
@@ -354,7 +289,7 @@ async function loadScenarioContext(showMessage = false) {
   try {
     const context = await businessScenarioApi.getProcurementContext()
     applyScenarioContext(context)
-    if (showMessage) ElMessage.success('演示数据已重新加载')
+    if (showMessage) ElMessage.success('演示数据已初始化')
   } catch (error) {
     ElMessage.error(error.message || '读取业务示例失败')
   } finally { loading.value = false }
@@ -366,24 +301,24 @@ function recalculatePurchaseAmount() {
 
 // 标的明细操作
 function addTarget() {
-  targetList.value.push(normalizeTarget({ rowNo: targetList.value.length + 1 }, targetList.value.length))
+  formModel.targetList.push(normalizeTarget({ rowNo: formModel.targetList.length + 1 }, formModel.targetList.length))
   recalculatePurchaseAmount()
 }
 
 function removeTarget(index) {
-  targetList.value.splice(index, 1)
-  targetList.value = targetList.value.map((item, rowIndex) => ({ ...item, rowNo: rowIndex + 1 }))
+  formModel.targetList.splice(index, 1)
+  formModel.targetList = formModel.targetList.map((item, rowIndex) => ({ ...item, rowNo: rowIndex + 1 }))
   recalculatePurchaseAmount()
 }
 
 // 商务条款操作
 function addBusinessEntry() {
-  businessEntryList.value.push(normalizeBusinessEntry({ rowNo: businessEntryList.value.length + 1 }, businessEntryList.value.length))
+  formModel.businessEntryList.push(normalizeBusinessEntry({ rowNo: formModel.businessEntryList.length + 1 }, formModel.businessEntryList.length))
 }
 
 function removeBusinessEntry(index) {
-  businessEntryList.value.splice(index, 1)
-  businessEntryList.value = businessEntryList.value.map((item, rowIndex) => ({ ...item, rowNo: rowIndex + 1 }))
+  formModel.businessEntryList.splice(index, 1)
+  formModel.businessEntryList = formModel.businessEntryList.map((item, rowIndex) => ({ ...item, rowNo: rowIndex + 1 }))
 }
 
 // 打开文件选择器并上传附件
@@ -417,7 +352,7 @@ function removeAttachment(index) {
 }
 
 function applyAiAutofillPayload(payload = {}) {
-  const basicInfo = payload.basicInfo || {}
+  const basicInfo = payload || {}
   const targets = Array.isArray(payload.targetList) ? payload.targetList : []
   const entries = Array.isArray(payload.businessEntryList) ? payload.businessEntryList : []
 
@@ -444,17 +379,17 @@ function applyAiAutofillPayload(payload = {}) {
 
   // 回填标的明细
   if (targets.length > 0) {
-    targetList.value = targets.map((item, index) => normalizeTarget({ ...item, rowNo: item.rowNo || index + 1 }, index))
+    formModel.targetList = targets.map((item, index) => normalizeTarget({ ...item, rowNo: item.rowNo || index + 1 }, index))
   }
 
   // 回填商务条款
   if (entries.length > 0) {
-    businessEntryList.value = entries.map((item, index) => normalizeBusinessEntry({ ...item, rowNo: item.rowNo || index + 1 }, index))
+    formModel.businessEntryList = entries.map((item, index) => normalizeBusinessEntry({ ...item, rowNo: item.rowNo || index + 1 }, index))
   }
 
   // 回填附件
   if (Array.isArray(payload.attachments)) {
-    formModel.attachments = [...payload.attachments]
+   // formModel.attachments = [...payload.attachments]
   }
 
   recalculatePurchaseAmount()
@@ -494,6 +429,8 @@ async function handleOpenAssistant() {
         loadHistoryOnMounted: true,
         onBeforeSend: async ({ prompt, syncPagePayloadToWorkspace }) => {
           const snapshot = buildContextSnapshot()
+          // 调试日志：确认发送前同步到工作区的快照是否携带附件
+          console.log('[onBeforeSend] 即将同步到工作区的快照 attachments:', JSON.stringify(snapshot.attachments, null, 2))
           if (typeof syncPagePayloadToWorkspace === 'function') {
             await syncPagePayloadToWorkspace(snapshot, 'before-send')
           }
@@ -539,7 +476,6 @@ async function handleCloseAssistant() {
   }
 }
 
-onMounted(async () => { await loadScenarioContext() })
 </script>
 
 <template>
@@ -556,7 +492,7 @@ onMounted(async () => { await loadScenarioContext() })
             <p class="page-subtitle">{{ scenario?.subtitle }}</p>
           </div>
           <el-space wrap>
-            <el-button @click="loadScenarioContext(true)">重置演示数据</el-button>
+            <el-button @click="loadScenarioContext(true)">初始化数据</el-button>
             <el-button v-if="!aiPanelVisible" type="primary" :loading="aiLoading" @click="handleOpenAssistant">
               打开 AI 助手
             </el-button>
@@ -834,7 +770,7 @@ onMounted(async () => { await loadScenarioContext() })
             </div>
           </div>
 
-          <el-table :data="targetList" border class="line-item-table">
+          <el-table :data="formModel.targetList" border class="line-item-table">
             <el-table-column prop="rowNo" label="序号" width="60" align="center" />
             <el-table-column label="标的名称" min-width="140">
               <template #default="{ row }"><el-input v-model="row.targetName" placeholder="请输入" /></template>
@@ -911,7 +847,7 @@ onMounted(async () => { await loadScenarioContext() })
               <el-button link type="primary" @click="addBusinessEntry">新增条款</el-button>
             </div>
           </template>
-          <el-table :data="businessEntryList" border class="line-item-table">
+          <el-table :data="formModel.businessEntryList" border class="line-item-table">
             <el-table-column prop="rowNo" label="序号" width="60" align="center" />
             <el-table-column label="适用分类" min-width="120">
               <template #default="{ row }"><el-input v-model="row.entriesCategory" placeholder="请输入" /></template>

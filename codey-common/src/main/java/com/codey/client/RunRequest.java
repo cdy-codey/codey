@@ -30,8 +30,8 @@ public class RunRequest {
     private boolean formMode = false;
     /** 表单名称：表单模式下用于匹配业务实现的表单定义（FormProvider） */
     private String formName;
-    /** 表单可见字段名称列表：非空时仅序列化列表内的字段，用于过滤表单中未展示字段的噪音 */
-    private List<String> formVisibleFields = new ArrayList<String>();
+    /** 表单可见字段列表：非空时仅序列化列表内的字段，用于过滤表单中未展示字段的噪音 */
+    private List<FormVisibleField> formVisibleFields = new ArrayList<FormVisibleField>();
 
     public static RunRequest ofGoal(String goal) {
         RunRequest request = new RunRequest();
@@ -183,16 +183,20 @@ public class RunRequest {
         this.formName = formName;
     }
 
-    public List<String> getFormVisibleFields() {
-        return copyList(formVisibleFields);
+    public List<FormVisibleField> getFormVisibleFields() {
+        return copyVisibleFields(formVisibleFields);
     }
 
-    public void setFormVisibleFields(List<String> formVisibleFields) {
-        this.formVisibleFields = copyList(formVisibleFields);
+    public void setFormVisibleFields(List<FormVisibleField> formVisibleFields) {
+        this.formVisibleFields = copyVisibleFields(formVisibleFields);
     }
 
     private List<String> copyList(List<String> source) {
         return source == null ? new ArrayList<String>() : new ArrayList<String>(source);
+    }
+
+    private List<FormVisibleField> copyVisibleFields(List<FormVisibleField> source) {
+        return source == null ? new ArrayList<FormVisibleField>() : new ArrayList<FormVisibleField>(source);
     }
 
     private ModelProperties copyModelConfig(ModelProperties source) {

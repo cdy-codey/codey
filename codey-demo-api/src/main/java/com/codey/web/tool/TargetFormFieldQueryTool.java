@@ -54,10 +54,10 @@ public class TargetFormFieldQueryTool extends AbstractTool {
     @Override
     public ToolMetadata metadata() {
         ToolMetadata metadata = ToolMetadata.standard();
-        metadata.setSupportedIdentities(Arrays.asList("programming"));
-        metadata.setIdentityMatchMode(IdentityMatchMode.ANY);
-        metadata.setGroup("procurement");
-        metadata.setBundle("procurement");
+       // metadata.setSupportedIdentities(Arrays.asList("programming"));
+       // metadata.setIdentityMatchMode(IdentityMatchMode.ANY);
+       // metadata.setGroup("procurement");
+        //metadata.setBundle("procurement");
         return metadata;
     }
 

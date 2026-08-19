@@ -481,6 +481,17 @@ export function useAiChat(options = {}) {
     upsertToolCalls(pendingToolCalls.value, normalized)
   }
 
+  // 把模型输出事件中的工具调用名合并到活动助手消息的 toolCalls 列表（去重 + 状态推进）
+  function mergeToolCalls(message, toolCalls) {
+    if (!message || !Array.isArray(toolCalls) || !toolCalls.length) {
+      return
+    }
+    if (!Array.isArray(message.toolCalls)) {
+      message.toolCalls = []
+    }
+    upsertToolCalls(message.toolCalls, toolCalls)
+  }
+
   // 向聊天流中追加一条携带自定义卡片的助手消息，供业务层展示预览与确认操作。
   function appendAssistantCard(card) {
     const message = createMessage('assistant', '', { live: false })
@@ -717,9 +728,9 @@ function parseEventPayload(event) {
       message.content = normalizeStructuredAssistantContent(parsedOutput.content) || parsedOutput.content
     }
     mergeToolCalls(message, parsedOutput.toolCalls)
-    if (parsedOutput.finishReason === 'tool_calls') {
-      closeActiveAssistantMessage()
-    }
+    // 工具调用轮次不再关闭当前消息：一轮对话内所有输出（含多轮工具调用的中间文本）
+    // 聚合到同一个 AI 气泡，避免每次 finishReason=tool_calls 截断导致同一轮出现多个气泡。
+    // 消息统一由 final_summary 收口关闭。
   }
 
   function normalizeStructuredAssistantContent(content) {

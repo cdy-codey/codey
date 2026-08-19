@@ -49,7 +49,8 @@ const props = defineProps({
     type: String,
     default: '',
   },
-  // 表单可见字段名称列表：仅序列化列表内字段，用于过滤界面未展示的噪音字段
+  // 表单可见字段列表：元素为 { label, field }，label 为界面中文名、field 为实体字段名
+  // 仅序列化列表内字段，用于过滤界面未展示的噪音字段，同时为后端提供字段中文描述
   formVisibleFieldsValue: {
     type: Array,
     default: () => [],
@@ -351,14 +352,17 @@ function handleConfirmCancel() {
 }
 
 // 判断是否在写入当前页面的上下文文件（如 context.json）。
-// 这类写入的确认已下沉到业务卡片（表格预览 + 确认填入），不应再弹网页中间的模态框。
+// 兼容两种事件载荷结构：human_confirmation_required 直接携带 arguments，
+// tool_call 的调用参数嵌套在 payload.payload.request 中。
+// 这类写入的确认已下沉到消息末尾操作，不应再弹网页中间的模态框。
 function isContextFileWrite(event) {
   const toolName = event?.toolName || ''
   if (toolName !== 'write_file' && toolName !== 'edit_file') {
     return false
   }
-  const args = event?.arguments || {}
-  const rawPath = args.path || args.file || ''
+  const args = event?.arguments || event?.payload?.payload?.request?.arguments || event?.payload?.request?.arguments || {}
+  // 部分实现直接把 path 平铺在 request 上，兼容这种情况
+  const rawPath = args.path || args.file || event?.payload?.payload?.request?.path || event?.payload?.request?.path || ''
   if (!rawPath) {
     return false
   }
@@ -496,9 +500,23 @@ const effectiveFormModeValue = computed(() => resolveAssistantBooleanProp('formM
 const effectiveFormNameValue = computed(() => resolveAssistantStringProp('formNameValue', ''))
 const effectiveFormVisibleFieldsValue = computed(() => {
   const value = resolveAssistantProp('formVisibleFieldsValue')
-  return Array.isArray(value)
-    ? value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter((item) => item.length > 0)
-    : []
+  if (!Array.isArray(value)) {
+    return []
+  }
+  // 兼容旧的字符串数组形式；对象形式要求 field 非空，label 缺省时透传为空串
+  return value
+    .map((item) => {
+      if (typeof item === 'string' && item.trim()) {
+        return { label: '', field: item.trim() }
+      }
+      if (item && typeof item === 'object') {
+        const field = typeof item.field === 'string' ? item.field.trim() : ''
+        if (!field) return null
+        return { label: typeof item.label === 'string' ? item.label.trim() : '', field }
+      }
+      return null
+    })
+    .filter(Boolean)
 })
 // 深度思考由本地开关控制，prop 提供初始值
 const effectiveShowThinking = computed(() => {
@@ -629,6 +647,9 @@ async function syncPagePayloadToWorkspace(payloadOverride, reason = 'manual') {
     return null
   }
   const content = resolvePagePayloadContent(payload)
+  // 调试日志：确认最终写入后端工作区文件的内容是否携带附件
+  console.log(`[syncPagePayloadToWorkspace] 原因=${reason} 路径=${targetPath} attachments数量=`,
+    payload && Array.isArray(payload.attachments) ? payload.attachments.length : '无该字段')
   await writeWorkspaceFile({ path: targetPath, content })
   const syncResult = {
     path: targetPath,
@@ -780,6 +801,12 @@ function applyUiError(error, fallbackMessage, scope = 'AiChatWorkspace') {
   errorMessage.value = error?.message || fallbackMessage
 }
 
+// 表单模式下"待用户确认的 AI 结果"事件载荷：非空时挂起 onTaskEnded 回调并拦截发送前同步
+const pendingConfirmResult = ref(null)
+// 本轮是否调用过写结果文件工具（write_file/edit_file 写入 context.json）：
+// 仅在调用过时，才在最后一条助手消息末尾展示"确认采用"操作
+const writeToolInvoked = ref(false)
+
 async function emitAssistantCallback(name, payload) {
   const handler = resolveAssistantFunctionProp(name)
   if (!handler) {
@@ -821,6 +848,22 @@ async function notifyTaskEnded(reason = 'manual') {
       readMode: effectiveTaskEndedReadMode.value,
       data,
     })
+    // 表单模式下：
+    // 1) 用户对上一轮结果尚未确认/放弃 → 持续挂起，既不重复挂载确认，也不直接回调业务层；
+    // 2) 本轮调用了写结果文件工具（write_file/edit_file 写入 context.json）→ 在最后一条助手消息
+    //    末尾追加"确认采用"操作，用户确认后才触发 onTaskEnded；
+    // 3) 其它情况 → 直接回调业务层。
+    // 未确认前挂起结果并拦截发送前同步，避免当前表单快照覆盖 AI 写入的 context.json
+    if (effectiveFormModeValue.value) {
+      if (pendingConfirmResult.value) {
+        return pendingConfirmResult.value
+      }
+      if (writeToolInvoked.value) {
+        pendingConfirmResult.value = eventPayload
+        attachMessageConfirmation(eventPayload)
+        return eventPayload
+      }
+    }
     emit('task-ended', eventPayload)
     emitSystemAiAssistantEvent('task-ended', eventPayload)
     await emitAssistantCallback('onTaskEnded', eventPayload)
@@ -831,6 +874,57 @@ async function notifyTaskEnded(reason = 'manual') {
   } finally {
     taskEndedPromise = null
   }
+}
+
+// 在最后一条助手消息上挂载"确认采用"操作：完整事件载荷保存在消息上，确认时补发 onTaskEnded 回调
+function attachMessageConfirmation(eventPayload) {
+  const lastAssistantMessage = [...messages.value].reverse().find((item) => item.role === 'assistant')
+  if (!lastAssistantMessage) {
+    return
+  }
+  lastAssistantMessage.confirmation = {
+    eventPayload,
+    resolved: false,
+    action: '',
+  }
+}
+
+// 末尾确认操作按钮回调：确认采用补发挂起的 onTaskEnded，放弃仅解除挂起状态
+function handleMessageConfirmation(message, action) {
+  const confirmation = message?.confirmation
+  if (!confirmation || confirmation.resolved) {
+    return
+  }
+  confirmation.resolved = true
+  confirmation.action = action
+  if (action === 'confirm') {
+    flushConfirmResult(confirmation.eventPayload)
+  } else {
+    discardConfirmResult()
+  }
+}
+
+// 用户确认采用：补发被挂起的 onTaskEnded 业务回调（复用完整事件载荷），并解除挂起状态
+async function flushConfirmResult(eventPayload) {
+  pendingConfirmResult.value = null
+  if (!eventPayload) {
+    return
+  }
+  emit('task-ended', eventPayload)
+  emitSystemAiAssistantEvent('task-ended', eventPayload)
+  await emitAssistantCallback('onTaskEnded', eventPayload)
+}
+
+// 用户放弃采用：仅解除挂起状态，不触发 onTaskEnded 业务回调
+function discardConfirmResult() {
+  pendingConfirmResult.value = null
+}
+
+// 切换/新建会话时清空未决的确认状态：
+// 旧会话的 AI 结果已不属于当前会话，不应再拦截新会话的发送前同步或触发旧结果回调
+function resetPendingConfirmState() {
+  pendingConfirmResult.value = null
+  writeToolInvoked.value = false
 }
 
 function normalizeDirectory(value) {
@@ -900,6 +994,11 @@ const {
   buildRequestContext: buildChatContext,
   filterArchivedSession: matchArchivedSessionScope,
   onBeforeSend: async ({ prompt }) => {
+    // 存在待确认的 AI 结果时，不调用业务层 onBeforeSend：
+    // 避免当前表单快照被同步到工作区覆盖 AI 已写入的结果，待用户确认或放弃后再恢复
+    if (effectiveFormModeValue.value && pendingConfirmResult.value) {
+      return prompt
+    }
     const beforeSendHandler = resolveAssistantFunctionProp('onBeforeSend')
     if (!beforeSendHandler) {
       return prompt
@@ -923,6 +1022,10 @@ const {
     await handleHumanConfirmation(event)
   },
   onToolCall: async (event) => {
+    // 记录本轮是否调用过写结果文件工具，用于末尾"确认采用"操作是否展示
+    if (isContextFileWrite(event)) {
+      writeToolInvoked.value = true
+    }
     await emitAssistantCallback('onToolCall', event)
   },
   onToolExecutionStarted: async (event) => {
@@ -1073,6 +1176,8 @@ async function openHistoryDrawer() {
 }
 
 async function handleSelectSession(sessionId) {
+  // 切换到其它会话：清空当前会话未决的确认状态，避免影响新会话
+  resetPendingConfirmState()
   await selectSession(sessionId)
   historyDrawerVisible.value = false
   emit('session-change', sessionId)
@@ -1085,6 +1190,10 @@ async function handleSend(prompt = inputValue.value) {
   }
   currentFileResolved.value = false
   taskEndedPromise = null
+  // 新一轮对话开始：重置"写结果文件工具"标记。
+  // 注意：不能清空 pendingConfirmResult —— 上一轮 AI 结果在用户点击"确认采用/暂不采用"前
+  // 必须持续保持挂起，否则 onBeforeSend 拦截失效，会把当前表单快照推送到工作区覆盖 AI 结果
+  writeToolInvoked.value = false
   try {
     await sendPrompt(goal)
     emit('message-sent', goal)
@@ -1186,6 +1295,8 @@ async function handleStartNewSession() {
       return
     }
   }
+  // 确认新建后：清空当前会话未决的确认状态，避免影响新会话
+  resetPendingConfirmState()
   if (props.popupMode && !assistantVisible.value) {
     openAssistant()
   }
@@ -1263,6 +1374,14 @@ function handleCardAction(message, action) {
   }
   message.card.resolved = true
   message.card.action = action
+  // 表单模式下 core 生成的"确认采用"卡片：确认才补发挂起的 onTaskEnded，放弃则仅解除挂起
+  if (effectiveFormModeValue.value && pendingConfirmResult.value) {
+    if (action === 'confirm') {
+      flushConfirmResult(message.card?.payload)
+    } else {
+      discardConfirmResult()
+    }
+  }
   emitAssistantCallback('onCardAction', {
     action,
     card: message.card,
@@ -2209,6 +2328,30 @@ watch(
                           <span class="ai-progress-value">{{ progress }}%</span>
                         </div>
                       </div>
+                    </div>
+
+                    <!-- 末尾确认操作：仅当本轮调用了写结果文件工具后才展示，确认采用才触发 onTaskEnded -->
+                    <div v-if="message.confirmation" class="ai-message-confirmation">
+                      <span class="ai-message-confirmation-text">AI 已生成表单内容，是否确认采用？</span>
+                      <button
+                        type="button"
+                        class="ai-fill-confirm-btn ai-fill-confirm-btn--primary"
+                        :disabled="message.confirmation.resolved || isSending"
+                        @click="handleMessageConfirmation(message, 'confirm')"
+                      >
+                        确认采用
+                      </button>
+                      <button
+                        type="button"
+                        class="ai-fill-confirm-btn"
+                        :disabled="message.confirmation.resolved || isSending"
+                        @click="handleMessageConfirmation(message, 'cancel')"
+                      >
+                        暂不采用
+                      </button>
+                      <span v-if="message.confirmation.resolved" class="ai-fill-confirm-result">
+                        {{ message.confirmation.action === 'confirm' ? '已确认采用' : '已放弃' }}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -3388,6 +3531,24 @@ watch(
   padding: 6px 12px 10px;
   font-size: 12px;
   color: #16a34a;
+}
+
+/* 助手消息末尾的"确认采用"操作条：与消息气泡同宽，视觉上与消息内容区分 */
+.ai-message-confirmation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+}
+
+.ai-message-confirmation-text {
+  font-size: 13px;
+  color: #334155;
 }
 
 .assistant-tool-call-name {

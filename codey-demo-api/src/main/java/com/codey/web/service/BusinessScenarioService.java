@@ -10,7 +10,8 @@ import java.util.List;
 /**
  * 业务示例固定数据服务。
  * Demo 阶段直接返回手写样例，便于前端快速联调 AI 自动填写流程。
- * 数据格式与 BizRequire / BizRequireTarget / BizBusinessEntry 实体保持一致。
+ * 数据格式与 BizRequire / BizRequireTarget / BizBusinessEntry 实体保持一致，
+ * 基础信息字段直接平铺在上下文顶层，不再嵌套 basicInfo。
  */
 @Service
 public class BusinessScenarioService {
@@ -19,56 +20,6 @@ public class BusinessScenarioService {
      * 返回采购需求申请演示页面所需的完整上下文。
      */
     public ProcurementFormContext getProcurementFormContext() {
-        // 采购需求基础信息（对应 BizRequire）
-        BasicInfo basicInfo = new BasicInfo(
-                "2026年度办公设备采购需求", // requireTitle
-                "XQ-2026-0001",              // requireNo
-                "goods",                     // requireAttribute: 货物类
-                "非政府采购",                 // purchaseCategory
-                "一般",                       // emergency
-                "2026-08-15",                // estimatedStartTime
-                "行政服务部",                 // subscribeDepartName
-                "行政服务部,信息技术部",       // requireDepartNames
-                "张三",                       // operatorName
-                "李四",                       // applyName
-                "采购一批办公台式计算机及外设，用于替换老旧设备，满足部门日常办公需求。", // purchaseContent
-                "1. 供应商需提供原厂授权及售后服务承诺函；2. 质保期不少于3年；3. 交货周期不超过30个自然日。", // busService
-                "0",  // isSingleSource: 否
-                "0",  // isImportPurchase: 否
-                "0",  // isMajor: 否
-                "1",  // isInformation: 是
-                "0",  // isEntrust: 否
-                "0",  // isSecret: 否
-                "1",  // isSmb: 是
-                "1",  // isBeginningBudget: 是
-                "目录内",       // requireCatalog
-                "一般公共预算",  // budgetType
-                "财政拨款",     // fundsSource
-                "公用经费",     // costSubject
-                "pay",         // fundFlow: 支出
-                "分散采购",     // organizeForm
-                "非政府采购",   // organizeFormExtra
-                "询价",        // purchaseWay
-                "自行组织",     // processWay
-                "采购部",       // centralizedDepartName
-                "采购部",       // purchaseDepartName
-                "2026年度办公设备采购预算", // budgetName
-                "YS-2026-BG-001",        // budgetNo
-                new BigDecimal("12800"),  // purchaseAmount
-                new BigDecimal("0"),      // confirmAmount
-                new BigDecimal("15000"),  // requireBudgetAmount
-                "2026-08-15",             // planBeginTime
-                "2026-11-30",             // planFinishTime
-                "day",                    // businessDocType: 日常零星采购
-                "",                       // fromBizName
-                "0",                      // isOverYear: 否
-                "0",                      // isAddition: 否
-                "0",                      // isChangeStructure: 否
-                "采购,设备,办公",            // containContent
-                "本批次采购资金来源于年度公用经费预算，已纳入2026年度部门预算。", // budgetDesc
-                ""                        // budgetRemark
-        );
-
         // 采购标的明细（对应 BizRequireTarget）
         List<TargetItem> targetList = Arrays.asList(
                 new TargetItem(1, "台式计算机", "信息化设备", "固定资产", 10.0, new BigDecimal("4800"), "台",
@@ -168,13 +119,13 @@ public class BusinessScenarioService {
         );
 
         List<FormFieldDefinition> formFields = Arrays.asList(
-                new FormFieldDefinition("basicInfo.requireTitle", "需求标题", "string", true, Collections.emptyList()),
-                new FormFieldDefinition("basicInfo.requireAttribute", "需求属性", "enum", true, Arrays.asList("goods", "build", "service")),
-                new FormFieldDefinition("basicInfo.purchaseCategory", "采购类别", "enum", true, Arrays.asList("政府采购", "非政府采购")),
-                new FormFieldDefinition("basicInfo.emergency", "需求紧急度", "enum", true, Arrays.asList("紧急", "一般")),
-                new FormFieldDefinition("basicInfo.purchaseContent", "采购内容描述", "string", true, Collections.emptyList()),
-                new FormFieldDefinition("basicInfo.busService", "商务服务要求", "string", false, Collections.emptyList()),
-                new FormFieldDefinition("basicInfo.purchaseAmount", "申购金额（元）", "number", true, Collections.singletonList("0-15000")),
+                new FormFieldDefinition("requireTitle", "需求标题", "string", true, Collections.emptyList()),
+                new FormFieldDefinition("requireAttribute", "需求属性", "enum", true, Arrays.asList("goods", "build", "service")),
+                new FormFieldDefinition("purchaseCategory", "采购类别", "enum", true, Arrays.asList("政府采购", "非政府采购")),
+                new FormFieldDefinition("emergency", "需求紧急度", "enum", true, Arrays.asList("紧急", "一般")),
+                new FormFieldDefinition("purchaseContent", "采购内容描述", "string", true, Collections.emptyList()),
+                new FormFieldDefinition("busService", "商务服务要求", "string", false, Collections.emptyList()),
+                new FormFieldDefinition("purchaseAmount", "申购金额（元）", "number", true, Collections.singletonList("0-15000")),
                 new FormFieldDefinition("targetList[].targetName", "标的名称", "string", true, Collections.emptyList()),
                 new FormFieldDefinition("targetList[].num", "数量", "number", true, Collections.singletonList(">=1")),
                 new FormFieldDefinition("targetList[].unitPrice", "单价", "number", true, Collections.singletonList(">=0")),
@@ -220,7 +171,53 @@ public class BusinessScenarioService {
                 "根据采购需求表单上下文让 AI 自动填写申请信息，并支持一键回填页面字段。",
                 Arrays.asList("首页", "采购管理", "采购需求申请"),
                 "让 AI 结合表单上下文、预算限制和历史推荐自动补齐采购需求申请信息。",
-                basicInfo,
+                // 采购需求基础信息（对应 BizRequire），已平铺到顶层
+                "2026年度办公设备采购需求", // requireTitle
+                "XQ-2026-0001",              // requireNo
+                "goods",                     // requireAttribute: 货物类
+                "非政府采购",                 // purchaseCategory
+                "一般",                       // emergency
+                "2026-08-15",                // estimatedStartTime
+                "行政服务部",                 // subscribeDepartName
+                "行政服务部,信息技术部",       // requireDepartNames
+                "张三",                       // operatorName
+                "李四",                       // applyName
+                "采购一批办公台式计算机及外设，用于替换老旧设备，满足部门日常办公需求。", // purchaseContent
+                "1. 供应商需提供原厂授权及售后服务承诺函；2. 质保期不少于3年；3. 交货周期不超过30个自然日。", // busService
+                "0",  // isSingleSource: 否
+                "0",  // isImportPurchase: 否
+                "0",  // isMajor: 否
+                "1",  // isInformation: 是
+                "0",  // isEntrust: 否
+                "0",  // isSecret: 否
+                "1",  // isSmb: 是
+                "1",  // isBeginningBudget: 是
+                "目录内",       // requireCatalog
+                "一般公共预算",  // budgetType
+                "财政拨款",     // fundsSource
+                "公用经费",     // costSubject
+                "pay",         // fundFlow: 支出
+                "分散采购",     // organizeForm
+                "非政府采购",   // organizeFormExtra
+                "询价",        // purchaseWay
+                "自行组织",     // processWay
+                "采购部",       // centralizedDepartName
+                "采购部",       // purchaseDepartName
+                "2026年度办公设备采购预算", // budgetName
+                "YS-2026-BG-001",        // budgetNo
+                new BigDecimal("12800"),  // purchaseAmount
+                new BigDecimal("0"),      // confirmAmount
+                new BigDecimal("15000"),  // requireBudgetAmount
+                "2026-08-15",             // planBeginTime
+                "2026-11-30",             // planFinishTime
+                "day",                    // businessDocType: 日常零星采购
+                "",                       // fromBizName
+                "0",                      // isOverYear: 否
+                "0",                      // isAddition: 否
+                "0",                      // isChangeStructure: 否
+                "采购,设备,办公",            // containContent
+                "本批次采购资金来源于年度公用经费预算，已纳入2026年度部门预算。", // budgetDesc
+                "",                       // budgetRemark
                 targetList,
                 businessEntryList,
                 formFields,
@@ -254,117 +251,7 @@ public class BusinessScenarioService {
         private final String subtitle;
         private final List<String> breadcrumbs;
         private final String goal;
-        private final BasicInfo basicInfo;
-        private final List<TargetItem> targetList;
-        private final List<BusinessEntryItem> businessEntryList;
-        private final List<FormFieldDefinition> formFields;
-        private final List<AiInsightCard> aiInsightCards;
-        private final List<String> aiSuggestions;
-        private final List<SelectionOption> requireAttributeOptions;
-        private final List<SelectionOption> purchaseCategoryOptions;
-        private final List<SelectionOption> emergencyOptions;
-        private final List<SelectionOption> requireCatalogOptions;
-        private final List<SelectionOption> budgetTypeOptions;
-        private final List<SelectionOption> fundsSourceOptions;
-        private final List<SelectionOption> fundFlowOptions;
-        private final List<SelectionOption> organizeFormOptions;
-        private final List<SelectionOption> organizeFormExtraOptions;
-        private final List<SelectionOption> purchaseWayOptions;
-        private final List<SelectionOption> processWayOptions;
-        private final List<SelectionOption> businessDocTypeOptions;
-        private final List<SelectionOption> ynOptions;
-        private final List<SelectionOption> isSmbOptions;
-        private final List<SelectionOption> targetTypeOptions;
-        private final List<SelectionOption> purchaseTypeOptions;
-        private final String aiInstruction;
-
-        public ProcurementFormContext(String scenarioId, String title, String subtitle,
-                                      List<String> breadcrumbs, String goal,
-                                      BasicInfo basicInfo, List<TargetItem> targetList,
-                                      List<BusinessEntryItem> businessEntryList,
-                                      List<FormFieldDefinition> formFields,
-                                      List<AiInsightCard> aiInsightCards, List<String> aiSuggestions,
-                                      List<SelectionOption> requireAttributeOptions,
-                                      List<SelectionOption> purchaseCategoryOptions,
-                                      List<SelectionOption> emergencyOptions,
-                                      List<SelectionOption> requireCatalogOptions,
-                                      List<SelectionOption> budgetTypeOptions,
-                                      List<SelectionOption> fundsSourceOptions,
-                                      List<SelectionOption> fundFlowOptions,
-                                      List<SelectionOption> organizeFormOptions,
-                                      List<SelectionOption> organizeFormExtraOptions,
-                                      List<SelectionOption> purchaseWayOptions,
-                                      List<SelectionOption> processWayOptions,
-                                      List<SelectionOption> businessDocTypeOptions,
-                                      List<SelectionOption> ynOptions,
-                                      List<SelectionOption> isSmbOptions,
-                                      List<SelectionOption> targetTypeOptions,
-                                      List<SelectionOption> purchaseTypeOptions,
-                                      String aiInstruction) {
-            this.scenarioId = scenarioId;
-            this.title = title;
-            this.subtitle = subtitle;
-            this.breadcrumbs = breadcrumbs;
-            this.goal = goal;
-            this.basicInfo = basicInfo;
-            this.targetList = targetList;
-            this.businessEntryList = businessEntryList;
-            this.formFields = formFields;
-            this.aiInsightCards = aiInsightCards;
-            this.aiSuggestions = aiSuggestions;
-            this.requireAttributeOptions = requireAttributeOptions;
-            this.purchaseCategoryOptions = purchaseCategoryOptions;
-            this.emergencyOptions = emergencyOptions;
-            this.requireCatalogOptions = requireCatalogOptions;
-            this.budgetTypeOptions = budgetTypeOptions;
-            this.fundsSourceOptions = fundsSourceOptions;
-            this.fundFlowOptions = fundFlowOptions;
-            this.organizeFormOptions = organizeFormOptions;
-            this.organizeFormExtraOptions = organizeFormExtraOptions;
-            this.purchaseWayOptions = purchaseWayOptions;
-            this.processWayOptions = processWayOptions;
-            this.businessDocTypeOptions = businessDocTypeOptions;
-            this.ynOptions = ynOptions;
-            this.isSmbOptions = isSmbOptions;
-            this.targetTypeOptions = targetTypeOptions;
-            this.purchaseTypeOptions = purchaseTypeOptions;
-            this.aiInstruction = aiInstruction;
-        }
-
-        // Getters
-        public String getScenarioId() { return scenarioId; }
-        public String getTitle() { return title; }
-        public String getSubtitle() { return subtitle; }
-        public List<String> getBreadcrumbs() { return breadcrumbs; }
-        public String getGoal() { return goal; }
-        public BasicInfo getBasicInfo() { return basicInfo; }
-        public List<TargetItem> getTargetList() { return targetList; }
-        public List<BusinessEntryItem> getBusinessEntryList() { return businessEntryList; }
-        public List<FormFieldDefinition> getFormFields() { return formFields; }
-        public List<AiInsightCard> getAiInsightCards() { return aiInsightCards; }
-        public List<String> getAiSuggestions() { return aiSuggestions; }
-        public List<SelectionOption> getRequireAttributeOptions() { return requireAttributeOptions; }
-        public List<SelectionOption> getPurchaseCategoryOptions() { return purchaseCategoryOptions; }
-        public List<SelectionOption> getEmergencyOptions() { return emergencyOptions; }
-        public List<SelectionOption> getRequireCatalogOptions() { return requireCatalogOptions; }
-        public List<SelectionOption> getBudgetTypeOptions() { return budgetTypeOptions; }
-        public List<SelectionOption> getFundsSourceOptions() { return fundsSourceOptions; }
-        public List<SelectionOption> getFundFlowOptions() { return fundFlowOptions; }
-        public List<SelectionOption> getOrganizeFormOptions() { return organizeFormOptions; }
-        public List<SelectionOption> getOrganizeFormExtraOptions() { return organizeFormExtraOptions; }
-        public List<SelectionOption> getPurchaseWayOptions() { return purchaseWayOptions; }
-        public List<SelectionOption> getProcessWayOptions() { return processWayOptions; }
-        public List<SelectionOption> getBusinessDocTypeOptions() { return businessDocTypeOptions; }
-        public List<SelectionOption> getYnOptions() { return ynOptions; }
-        public List<SelectionOption> getIsSmbOptions() { return isSmbOptions; }
-        public List<SelectionOption> getTargetTypeOptions() { return targetTypeOptions; }
-        public List<SelectionOption> getPurchaseTypeOptions() { return purchaseTypeOptions; }
-        public String getAiInstruction() { return aiInstruction; }
-    }
-
-    // ============ 基础信息（对应 BizRequire） ============
-
-    public static class BasicInfo {
+        // 采购需求基础信息（对应 BizRequire），已平铺
         private final String requireTitle;
         private final String requireNo;
         private final String requireAttribute;
@@ -411,27 +298,76 @@ public class BusinessScenarioService {
         private final String containContent;
         private final String budgetDesc;
         private final String budgetRemark;
+        private final List<TargetItem> targetList;
+        private final List<BusinessEntryItem> businessEntryList;
+        private final List<FormFieldDefinition> formFields;
+        private final List<AiInsightCard> aiInsightCards;
+        private final List<String> aiSuggestions;
+        private final List<SelectionOption> requireAttributeOptions;
+        private final List<SelectionOption> purchaseCategoryOptions;
+        private final List<SelectionOption> emergencyOptions;
+        private final List<SelectionOption> requireCatalogOptions;
+        private final List<SelectionOption> budgetTypeOptions;
+        private final List<SelectionOption> fundsSourceOptions;
+        private final List<SelectionOption> fundFlowOptions;
+        private final List<SelectionOption> organizeFormOptions;
+        private final List<SelectionOption> organizeFormExtraOptions;
+        private final List<SelectionOption> purchaseWayOptions;
+        private final List<SelectionOption> processWayOptions;
+        private final List<SelectionOption> businessDocTypeOptions;
+        private final List<SelectionOption> ynOptions;
+        private final List<SelectionOption> isSmbOptions;
+        private final List<SelectionOption> targetTypeOptions;
+        private final List<SelectionOption> purchaseTypeOptions;
+        private final String aiInstruction;
 
-        public BasicInfo(String requireTitle, String requireNo, String requireAttribute,
-                         String purchaseCategory, String emergency, String estimatedStartTime,
-                         String subscribeDepartName, String requireDepartNames,
-                         String operatorName, String applyName,
-                         String purchaseContent, String busService,
-                         String isSingleSource, String isImportPurchase, String isMajor,
-                         String isInformation, String isEntrust, String isSecret,
-                         String isSmb, String isBeginningBudget,
-                         String requireCatalog, String budgetType, String fundsSource,
-                         String costSubject, String fundFlow,
-                         String organizeForm, String organizeFormExtra,
-                         String purchaseWay, String processWay,
-                         String centralizedDepartName, String purchaseDepartName,
-                         String budgetName, String budgetNo,
-                         BigDecimal purchaseAmount, BigDecimal confirmAmount,
-                         BigDecimal requireBudgetAmount,
-                         String planBeginTime, String planFinishTime,
-                         String businessDocType, String fromBizName,
-                         String isOverYear, String isAddition, String isChangeStructure,
-                         String containContent, String budgetDesc, String budgetRemark) {
+        public ProcurementFormContext(String scenarioId, String title, String subtitle,
+                                      List<String> breadcrumbs, String goal,
+                                      String requireTitle, String requireNo, String requireAttribute,
+                                      String purchaseCategory, String emergency, String estimatedStartTime,
+                                      String subscribeDepartName, String requireDepartNames,
+                                      String operatorName, String applyName,
+                                      String purchaseContent, String busService,
+                                      String isSingleSource, String isImportPurchase, String isMajor,
+                                      String isInformation, String isEntrust, String isSecret,
+                                      String isSmb, String isBeginningBudget,
+                                      String requireCatalog, String budgetType, String fundsSource,
+                                      String costSubject, String fundFlow,
+                                      String organizeForm, String organizeFormExtra,
+                                      String purchaseWay, String processWay,
+                                      String centralizedDepartName, String purchaseDepartName,
+                                      String budgetName, String budgetNo,
+                                      BigDecimal purchaseAmount, BigDecimal confirmAmount,
+                                      BigDecimal requireBudgetAmount,
+                                      String planBeginTime, String planFinishTime,
+                                      String businessDocType, String fromBizName,
+                                      String isOverYear, String isAddition, String isChangeStructure,
+                                      String containContent, String budgetDesc, String budgetRemark,
+                                      List<TargetItem> targetList, List<BusinessEntryItem> businessEntryList,
+                                      List<FormFieldDefinition> formFields,
+                                      List<AiInsightCard> aiInsightCards, List<String> aiSuggestions,
+                                      List<SelectionOption> requireAttributeOptions,
+                                      List<SelectionOption> purchaseCategoryOptions,
+                                      List<SelectionOption> emergencyOptions,
+                                      List<SelectionOption> requireCatalogOptions,
+                                      List<SelectionOption> budgetTypeOptions,
+                                      List<SelectionOption> fundsSourceOptions,
+                                      List<SelectionOption> fundFlowOptions,
+                                      List<SelectionOption> organizeFormOptions,
+                                      List<SelectionOption> organizeFormExtraOptions,
+                                      List<SelectionOption> purchaseWayOptions,
+                                      List<SelectionOption> processWayOptions,
+                                      List<SelectionOption> businessDocTypeOptions,
+                                      List<SelectionOption> ynOptions,
+                                      List<SelectionOption> isSmbOptions,
+                                      List<SelectionOption> targetTypeOptions,
+                                      List<SelectionOption> purchaseTypeOptions,
+                                      String aiInstruction) {
+            this.scenarioId = scenarioId;
+            this.title = title;
+            this.subtitle = subtitle;
+            this.breadcrumbs = breadcrumbs;
+            this.goal = goal;
             this.requireTitle = requireTitle;
             this.requireNo = requireNo;
             this.requireAttribute = requireAttribute;
@@ -478,9 +414,36 @@ public class BusinessScenarioService {
             this.containContent = containContent;
             this.budgetDesc = budgetDesc;
             this.budgetRemark = budgetRemark;
+            this.targetList = targetList;
+            this.businessEntryList = businessEntryList;
+            this.formFields = formFields;
+            this.aiInsightCards = aiInsightCards;
+            this.aiSuggestions = aiSuggestions;
+            this.requireAttributeOptions = requireAttributeOptions;
+            this.purchaseCategoryOptions = purchaseCategoryOptions;
+            this.emergencyOptions = emergencyOptions;
+            this.requireCatalogOptions = requireCatalogOptions;
+            this.budgetTypeOptions = budgetTypeOptions;
+            this.fundsSourceOptions = fundsSourceOptions;
+            this.fundFlowOptions = fundFlowOptions;
+            this.organizeFormOptions = organizeFormOptions;
+            this.organizeFormExtraOptions = organizeFormExtraOptions;
+            this.purchaseWayOptions = purchaseWayOptions;
+            this.processWayOptions = processWayOptions;
+            this.businessDocTypeOptions = businessDocTypeOptions;
+            this.ynOptions = ynOptions;
+            this.isSmbOptions = isSmbOptions;
+            this.targetTypeOptions = targetTypeOptions;
+            this.purchaseTypeOptions = purchaseTypeOptions;
+            this.aiInstruction = aiInstruction;
         }
 
         // Getters
+        public String getScenarioId() { return scenarioId; }
+        public String getTitle() { return title; }
+        public String getSubtitle() { return subtitle; }
+        public List<String> getBreadcrumbs() { return breadcrumbs; }
+        public String getGoal() { return goal; }
         public String getRequireTitle() { return requireTitle; }
         public String getRequireNo() { return requireNo; }
         public String getRequireAttribute() { return requireAttribute; }
@@ -527,6 +490,28 @@ public class BusinessScenarioService {
         public String getContainContent() { return containContent; }
         public String getBudgetDesc() { return budgetDesc; }
         public String getBudgetRemark() { return budgetRemark; }
+        public List<TargetItem> getTargetList() { return targetList; }
+        public List<BusinessEntryItem> getBusinessEntryList() { return businessEntryList; }
+        public List<FormFieldDefinition> getFormFields() { return formFields; }
+        public List<AiInsightCard> getAiInsightCards() { return aiInsightCards; }
+        public List<String> getAiSuggestions() { return aiSuggestions; }
+        public List<SelectionOption> getRequireAttributeOptions() { return requireAttributeOptions; }
+        public List<SelectionOption> getPurchaseCategoryOptions() { return purchaseCategoryOptions; }
+        public List<SelectionOption> getEmergencyOptions() { return emergencyOptions; }
+        public List<SelectionOption> getRequireCatalogOptions() { return requireCatalogOptions; }
+        public List<SelectionOption> getBudgetTypeOptions() { return budgetTypeOptions; }
+        public List<SelectionOption> getFundsSourceOptions() { return fundsSourceOptions; }
+        public List<SelectionOption> getFundFlowOptions() { return fundFlowOptions; }
+        public List<SelectionOption> getOrganizeFormOptions() { return organizeFormOptions; }
+        public List<SelectionOption> getOrganizeFormExtraOptions() { return organizeFormExtraOptions; }
+        public List<SelectionOption> getPurchaseWayOptions() { return purchaseWayOptions; }
+        public List<SelectionOption> getProcessWayOptions() { return processWayOptions; }
+        public List<SelectionOption> getBusinessDocTypeOptions() { return businessDocTypeOptions; }
+        public List<SelectionOption> getYnOptions() { return ynOptions; }
+        public List<SelectionOption> getIsSmbOptions() { return isSmbOptions; }
+        public List<SelectionOption> getTargetTypeOptions() { return targetTypeOptions; }
+        public List<SelectionOption> getPurchaseTypeOptions() { return purchaseTypeOptions; }
+        public String getAiInstruction() { return aiInstruction; }
     }
 
     // ============ 标的明细（对应 BizRequireTarget） ============

@@ -1,5 +1,6 @@
 package com.codey.task;
 
+import com.codey.client.FormVisibleField;
 import com.codey.config.ModelProperties;
 
 import java.util.ArrayList;
@@ -32,8 +33,8 @@ public class GenerateTask {
     private boolean formMode = false;
     /** 表单名称：表单模式下用于匹配业务实现的表单定义（FormProvider） */
     private String formName;
-    /** 表单可见字段名称列表：非空时仅序列化列表内的字段，用于过滤表单中未展示字段的噪音 */
-    private List<String> formVisibleFields = new ArrayList<String>();
+    /** 表单可见字段列表：非空时仅序列化列表内的字段，用于过滤表单中未展示字段的噪音 */
+    private List<FormVisibleField> formVisibleFields = new ArrayList<FormVisibleField>();
 
     public String getSessionId() {
         return sessionId;
@@ -179,12 +180,12 @@ public class GenerateTask {
         this.formName = formName;
     }
 
-    public List<String> getFormVisibleFields() {
-        return formVisibleFields == null ? new ArrayList<String>() : new ArrayList<String>(formVisibleFields);
+    public List<FormVisibleField> getFormVisibleFields() {
+        return formVisibleFields == null ? new ArrayList<FormVisibleField>() : new ArrayList<FormVisibleField>(formVisibleFields);
     }
 
-    public void setFormVisibleFields(List<String> formVisibleFields) {
-        this.formVisibleFields = formVisibleFields == null ? new ArrayList<String>() : new ArrayList<String>(formVisibleFields);
+    public void setFormVisibleFields(List<FormVisibleField> formVisibleFields) {
+        this.formVisibleFields = formVisibleFields == null ? new ArrayList<FormVisibleField>() : new ArrayList<FormVisibleField>(formVisibleFields);
     }
 
     private ModelProperties copyModelConfig(ModelProperties source) {
