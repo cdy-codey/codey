@@ -28,6 +28,12 @@ public class GenerateTask {
     private boolean singleFileMode = true;
     /** 是否启用推理模型思考过程，默认关闭（DeepSeek thinking.type） */
     private boolean includeThinking = false;
+    /** 表单模式：字段信息已完整提供，AI 直接输出 JSON 结果，不进行多轮文件读写 */
+    private boolean formMode = false;
+    /** 表单名称：表单模式下用于匹配业务实现的表单定义（FormProvider） */
+    private String formName;
+    /** 表单可见字段名称列表：非空时仅序列化列表内的字段，用于过滤表单中未展示字段的噪音 */
+    private List<String> formVisibleFields = new ArrayList<String>();
 
     public String getSessionId() {
         return sessionId;
@@ -155,6 +161,30 @@ public class GenerateTask {
 
     public void setIncludeThinking(boolean includeThinking) {
         this.includeThinking = includeThinking;
+    }
+
+    public boolean isFormMode() {
+        return formMode;
+    }
+
+    public void setFormMode(boolean formMode) {
+        this.formMode = formMode;
+    }
+
+    public String getFormName() {
+        return formName;
+    }
+
+    public void setFormName(String formName) {
+        this.formName = formName;
+    }
+
+    public List<String> getFormVisibleFields() {
+        return formVisibleFields == null ? new ArrayList<String>() : new ArrayList<String>(formVisibleFields);
+    }
+
+    public void setFormVisibleFields(List<String> formVisibleFields) {
+        this.formVisibleFields = formVisibleFields == null ? new ArrayList<String>() : new ArrayList<String>(formVisibleFields);
     }
 
     private ModelProperties copyModelConfig(ModelProperties source) {

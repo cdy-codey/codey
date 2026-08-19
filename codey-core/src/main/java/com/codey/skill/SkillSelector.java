@@ -1,6 +1,7 @@
 package com.codey.skill;
 
 import com.codey.meta.IdentityMatcher;
+import com.codey.form.FormSelector;
 import com.codey.task.GenerateTask;
 
 import java.util.ArrayList;
@@ -14,9 +15,16 @@ import java.util.Set;
  */
 public class SkillSelector {
     private final SkillRegistry skillRegistry;
+    // 表单模式下用于解析表单绑定的 skill；非表单模式或未注入时为 null
+    private final FormSelector formSelector;
 
     public SkillSelector(SkillRegistry skillRegistry) {
+        this(skillRegistry, null);
+    }
+
+    public SkillSelector(SkillRegistry skillRegistry, FormSelector formSelector) {
         this.skillRegistry = skillRegistry;
+        this.formSelector = formSelector;
     }
 
     public Optional<Skill> select(GenerateTask task) {
@@ -62,6 +70,16 @@ public class SkillSelector {
     }
 
     private List<String> resolveRequestedSkillNames(GenerateTask task) {
+        // 表单模式只注入表单自身绑定的 skill，忽略前端额外传入的展示类等无关 skill
+        if (task != null && task.isFormMode() && formSelector != null) {
+            String formSkillName = formSelector.resolveSkillName(task.getFormName());
+            if (formSkillName != null && !formSkillName.trim().isEmpty()) {
+                List<String> names = new ArrayList<String>();
+                names.add(formSkillName.trim());
+                return names;
+            }
+            return new ArrayList<String>();
+        }
         Set<String> names = new LinkedHashSet<String>();
         if (task != null && task.getSkillNames() != null) {
             for (String item : task.getSkillNames()) {

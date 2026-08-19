@@ -40,6 +40,7 @@ public class ChatTurnSessionUpdater {
         }
         // 用户重新发起一条新消息时，本轮应从干净的循环态开始，
         // 避免继承上一轮因为 stagnation / replan 退出时留下的短期执行状态。
+        // 注意：transcript 跨轮保留，这里只清理摘要型运行态，不丢上一轮思考轨迹。
         session.resetForNextTurn();
         String rawGoal = goal;
         String normalized = rawGoal.trim();
@@ -48,10 +49,13 @@ public class ChatTurnSessionUpdater {
             if (!isBlank(resolved)) {
                 session.appendInteraction("用户选择: " + normalized + " => " + resolved);
                 session.setUserGoal(resolved);
+                // 用户输入进入 transcript，作为跨轮完整时间线的一部分。
+                session.appendUserMessage(resolved);
                 return;
             }
         }
         session.setUserGoal(rawGoal);
+        session.appendUserMessage(rawGoal);
     }
 
     private void appendDistinctContextFiles(AgentSession session, List<String> additions) {

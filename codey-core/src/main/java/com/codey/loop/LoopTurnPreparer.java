@@ -15,6 +15,8 @@ final class LoopTurnPreparer {
     private static final int CONTEXT_SESSION_HARD_LIMIT_CHARS = 800_000;
     /** 单表模式：上下文硬上限 100M 字符 */
     private static final int SINGLE_FILE_HARD_LIMIT_CHARS = 100_000_000;
+    /** 表单模式：上下文硬上限 100M 字符，避免摘要打断单轮直出 */
+    private static final int FORM_MODE_HARD_LIMIT_CHARS = 100_000_000;
 
     private final ToolExposurePlanner toolExposurePlanner;
     private final PromptAssembler promptAssembler;
@@ -40,10 +42,13 @@ final class LoopTurnPreparer {
         List<String> visibleTools = toolExposurePlanner.selectVisibleTools(session, skill);
         PromptPackage initialPromptPackage = promptAssembler.buildPackage(session, skill, visibleTools);
         PromptBudgetReport initialBudgetReport = promptBudgetEstimator.estimate(initialPromptPackage, promptContractDefinition);
-        // 单表模式使用更高的上下文上限
-        int hardLimit = (session != null && session.isSingleFileMode())
-                ? SINGLE_FILE_HARD_LIMIT_CHARS
-                : CONTEXT_SESSION_HARD_LIMIT_CHARS;
+        // 单表模式与表单模式使用更高的上下文上限，避免摘要打断直出
+        int hardLimit = CONTEXT_SESSION_HARD_LIMIT_CHARS;
+        if (session != null && session.isSingleFileMode()) {
+            hardLimit = SINGLE_FILE_HARD_LIMIT_CHARS;
+        } else if (session != null && session.isFormMode()) {
+            hardLimit = FORM_MODE_HARD_LIMIT_CHARS;
+        }
         if (initialBudgetReport.getEstimatedTotalChars() >= hardLimit) {
             String message = "当前会话上下文已达到 " + hardLimit
                     + " 字符上限，请重新开启一个新会话后继续。";

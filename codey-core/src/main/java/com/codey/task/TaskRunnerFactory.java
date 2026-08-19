@@ -1,5 +1,7 @@
 package com.codey.task;
 
+import com.codey.form.FormRegistry;
+import com.codey.form.FormSelector;
 import com.codey.infra.LocalWorkspaceGateway;
 import com.codey.infra.ModelGateway;
 import com.codey.loop.FinalResultInterpreter;
@@ -34,10 +36,12 @@ public class TaskRunnerFactory {
                              HumanConfirmationService humanConfirmationService,
                              ObjectMapper objectMapper,
                              Path workspaceRoot,
-                             LocalWorkspaceGateway workspaceGateway) {
+                             LocalWorkspaceGateway workspaceGateway,
+                             FormRegistry formRegistry) {
+        FormSelector formSelector = new FormSelector(formRegistry);
         return new TaskRunner(
-                new SkillSelector(skillRegistry),
-                new SessionFactory(),
+                new SkillSelector(skillRegistry, formSelector),
+                new SessionFactory(new TaskSessionInitializer(formSelector)),
                 new LoopOrchestrator(
                         new PromptAssembler(),
                         new PromptContractValidator(toolRegistry),

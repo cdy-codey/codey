@@ -1,5 +1,7 @@
 package com.codey.config;
 
+import com.codey.client.FormContext;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -28,6 +30,10 @@ final class SessionContextState {
     private boolean singleFileMode = true;
     /** 是否启用推理模型思考过程，默认关闭 */
     private boolean includeThinking = false;
+    /** 表单模式：字段信息已完整提供，AI 直接输出 JSON 结果，不进行多轮文件读写 */
+    private boolean formMode = false;
+    /** 表单字段定义，表单模式下用于理解表单结构与输出格式 */
+    private FormContext formContext;
 
     String getSkillName() {
         return skillName;
@@ -149,6 +155,22 @@ final class SessionContextState {
 
     void setIncludeThinking(boolean includeThinking) {
         this.includeThinking = includeThinking;
+    }
+
+    boolean isFormMode() {
+        return formMode;
+    }
+
+    void setFormMode(boolean formMode) {
+        this.formMode = formMode;
+    }
+
+    FormContext getFormContext() {
+        return formContext;
+    }
+
+    void setFormContext(FormContext formContext) {
+        this.formContext = formContext;
     }
 
     void appendContextFile(String path) {

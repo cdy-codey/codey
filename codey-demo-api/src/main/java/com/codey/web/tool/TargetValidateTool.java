@@ -1,4 +1,4 @@
-package com.codey.web.skill;
+package com.codey.web.tool;
 
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;

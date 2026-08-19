@@ -1,5 +1,6 @@
 package com.codey.config;
 
+import com.codey.client.FormContext;
 import com.codey.infra.ModelMessage;
 import com.codey.infra.ModelToolCall;
 
@@ -305,6 +306,22 @@ public class AgentSession {
         sessionContext.setIncludeThinking(includeThinking);
     }
 
+    public boolean isFormMode() {
+        return sessionContext.isFormMode();
+    }
+
+    public void setFormMode(boolean formMode) {
+        sessionContext.setFormMode(formMode);
+    }
+
+    public FormContext getFormContext() {
+        return sessionContext.getFormContext();
+    }
+
+    public void setFormContext(FormContext formContext) {
+        sessionContext.setFormContext(formContext);
+    }
+
     public void appendChatHistory(String content) {
         conversationState.appendChatHistory(content);
     }
@@ -349,6 +366,10 @@ public class AgentSession {
         executionState.appendAssistantMessage(content, reasoningContent);
     }
 
+    public void appendUserMessage(String content) {
+        executionState.appendUserMessage(content);
+    }
+
     public void appendToolResultMessage(String toolCallId, String toolName, String content) {
         executionState.appendToolResultMessage(toolCallId, toolName, content);
     }
@@ -358,7 +379,7 @@ public class AgentSession {
     }
 
     /**
-     * 当前 chat turn 结束后清空只对本轮生效的运行态，下一轮只保留稳定摘要和用户上下文。
+     * 当前 chat turn 结束后清空只对本轮生效的摘要型运行态；模型 transcript 跨轮保留以维持连续任务的思考上下文。
      */
     public void resetForNextTurn() {
         executionState.resetForNextTurn();

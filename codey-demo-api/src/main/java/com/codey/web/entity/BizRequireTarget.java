@@ -1,4 +1,5 @@
-﻿package com.codey.web.entity;
+package com.codey.web.entity;
+import com.codey.client.FormIgnore;
 import com.codey.web.common.Dict;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;
@@ -7,7 +8,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 import org.springframework.format.annotation.DateTimeFormat;
-
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.Date;
@@ -32,27 +32,35 @@ public class BizRequireTarget  implements Serializable {
      */
 
     @ApiModelProperty(value = "Tab页查询条件 mine:我经办的 depart:我部门的 all:全部需求")
+    @FormIgnore
     private String queryType;
 
     @ApiModelProperty(value = "是否库查询(需求单项目库) 1:是 0:否")
+    @FormIgnore
     private Integer isLibQuery;
 
     @ApiModelProperty("查询排除id")
+    @FormIgnore
     private String noIds;
 
     @ApiModelProperty("查询包含id")
+    @FormIgnore
     private String inIds;
 
     @ApiModelProperty(value = "创建时间开始")
+    @FormIgnore
     private String createTimeBegin;
 
     @ApiModelProperty(value = "创建时间结束")
+    @FormIgnore
     private String createTimeEnd;
 
     @ApiModelProperty(value = "需求id, 逗号分割")
+    @FormIgnore
     private String requireIds;
 
     @ApiModelProperty(value = "排除的标的id, 逗号分割")
+    @FormIgnore
     private String excludeTargetIds;
 
     /**

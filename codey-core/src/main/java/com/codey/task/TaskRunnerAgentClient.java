@@ -219,6 +219,9 @@ public class TaskRunnerAgentClient implements AgentClient {
         task.setCoreRules(source.getCoreRules());
         task.setSingleFileMode(source.isSingleFileMode());
         task.setIncludeThinking(source.isIncludeThinking());
+        task.setFormMode(source.isFormMode());
+        task.setFormName(source.getFormName());
+        task.setFormVisibleFields(source.getFormVisibleFields());
         if (resolveModelConfig) {
             task.setModelConfig(resolveInitialModelConfig(source));
         }

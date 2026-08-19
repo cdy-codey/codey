@@ -856,7 +856,6 @@ public class BizRequire implements Serializable {
 
     @ApiModelProperty(value = "是否删除：1是，0否")
     private String isDel;
-
     /**
      * 完成时间
      */

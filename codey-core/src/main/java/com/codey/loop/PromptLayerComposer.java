@@ -21,13 +21,20 @@ public class PromptLayerComposer {
     private static final String BASE_LAYER = normalizeBaseLayer(readResource("prompts/base.md"));
     private static final String CALM_PERSONALITY_LAYER = readResource("prompts/personalities/calm.md");
     private static final String AGENT_MODE_LAYER = readResource("prompts/modes/agent.md");
+    private static final String FORM_MODE_LAYER = readResource("prompts/modes/form.md");
     private static final String SUGGEST_APPROVAL_LAYER = readResource("prompts/approvals/suggest.md");
+
+    private final FormSchemaSerializer formSchemaSerializer = new FormSchemaSerializer();
 
     public String compose(SkillDefinition skill) {
         return compose(skill, null);
     }
 
     public String compose(SkillDefinition skill, AgentSession session) {
+        // 表单模式只需表单专用提示词，跳过通用规则、环境与 skill 层。
+        if (session != null && session.isFormMode()) {
+            return buildFormModeLayer(session);
+        }
         List<String> parts = new ArrayList<String>();
         append(parts, BASE_LAYER);
         append(parts, CALM_PERSONALITY_LAYER);
@@ -36,6 +43,42 @@ public class PromptLayerComposer {
         append(parts, buildEnvironmentLayer(session));
         append(parts, buildSkillLayer(skill));
         return join(parts);
+    }
+
+    /**
+     * 表单模式下追加表单专用提示词，并把结构化 JSON Schema 填充进模板占位符。
+     */
+    private String buildFormModeLayer(AgentSession session) {
+        if (session == null || !session.isFormMode()) {
+            return "";
+        }
+        return FORM_MODE_LAYER
+                .replace("{{formSchema}}", formSchemaSerializer.serialize(session.getFormContext()))
+                .replace("{{formContext}}", buildFormContextSection(session))
+                .replace("{{formRole}}", buildFormRoleSection(session))
+                .trim();
+    }
+
+    /**
+     * 渲染表单级填写上下文段落：上下文非空时输出「填写上下文 + JSON 代码块」，为空时输出空串，避免残留空标题。
+     */
+    private String buildFormContextSection(AgentSession session) {
+        String contextText = formSchemaSerializer.serializeContext(session == null ? null : session.getFormContext());
+        if (isBlank(contextText)) {
+            return "";
+        }
+        return "### 填写上下文\n\n" + contextText;
+    }
+
+    /**
+     * 渲染角色扮演段落：角色描述非空时输出「角色 + 描述文本」，为空时输出空串，避免残留空标题。
+     */
+    private String buildFormRoleSection(AgentSession session) {
+        String roleText = formSchemaSerializer.serializeRole(session == null ? null : session.getFormContext());
+        if (isBlank(roleText)) {
+            return "";
+        }
+        return "### 角色\n\n" + roleText;
     }
 
     private String buildSkillLayer(SkillDefinition skill) {

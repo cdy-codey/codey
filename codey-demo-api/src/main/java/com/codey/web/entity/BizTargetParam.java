@@ -1,5 +1,6 @@
 package com.codey.web.entity;
 
+import com.codey.client.FormIgnore;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
@@ -24,21 +25,27 @@ public class BizTargetParam implements Serializable {
 
 	/**ID*/
     @ApiModelProperty(value = "ID")
+    @FormIgnore
     private String id;
 	/**所属机构*/
     @ApiModelProperty(value = "所属机构")
+    @FormIgnore
     private String agencyId;
     /**业务Id*/
     @ApiModelProperty(value = "业务Id")
+    @FormIgnore
     private String bizId;
     /**业务类型*/
     @ApiModelProperty(value = "业务类型")
+    @FormIgnore
     private String bizType;
 	/**标的id*/
     @ApiModelProperty(value = "标的id")
+    @FormIgnore
     private String targetId;
 	/**标的id*/
     @ApiModelProperty(value = "标的库参数id")
+    @FormIgnore
     private String libraryParamId;
 	/**参数名称*/
     @ApiModelProperty(value = "参数名称")
@@ -54,19 +61,23 @@ public class BizTargetParam implements Serializable {
     private String isCoreParam;
 	/**创建人*/
     @ApiModelProperty(value = "创建人")
+    @FormIgnore
     private String createBy;
 	/**创建时间*/
 	@JsonFormat(timezone = "GMT+8",pattern = "yyyy-MM-dd HH:mm:ss")
     @DateTimeFormat(pattern="yyyy-MM-dd HH:mm:ss")
     @ApiModelProperty(value = "创建时间")
+    @FormIgnore
     private java.util.Date createTime;
 	/**更新人*/
     @ApiModelProperty(value = "更新人")
+    @FormIgnore
     private String updateBy;
 	/**更新时间*/
 	@JsonFormat(timezone = "GMT+8",pattern = "yyyy-MM-dd HH:mm:ss")
     @DateTimeFormat(pattern="yyyy-MM-dd HH:mm:ss")
     @ApiModelProperty(value = "更新时间")
+    @FormIgnore
     private java.util.Date updateTime;
 
 }

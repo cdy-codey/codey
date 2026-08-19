@@ -100,6 +100,16 @@ final class ExecutionState {
         appendModelTranscript(ModelMessage.assistant(content, reasoningContent));
     }
 
+    /**
+     * 把用户输入写入 transcript，使其与 assistant 轨迹、工具结果一起构成跨轮的完整会话时间线。
+     */
+    void appendUserMessage(String content) {
+        if (content == null || content.trim().isEmpty()) {
+            return;
+        }
+        appendModelTranscript(ModelMessage.user(content.trim()));
+    }
+
     void appendToolResultMessage(String toolCallId, String toolName, String content) {
         if (content == null || content.trim().isEmpty()) {
             return;
@@ -109,13 +119,14 @@ final class ExecutionState {
     }
 
     /**
-     * 结束一轮 chat turn 后清空执行期产物，避免下一轮继续回放上一轮的工具细节。
+     * 结束一轮 chat turn 后只清空本轮的摘要型执行状态（工具结果、编辑结果、系统反馈）。
+     * modelTranscript 跨轮保留，作为完整会话时间线回放，避免丢失上一轮的思考与工具轨迹。
      */
     void resetForNextTurn() {
         toolResults.clear();
         editResults.clear();
         systemFeedback.clear();
-        modelTranscript.clear();
+        // 注意：modelTranscript 不清空，跨轮保留以维持连续任务的思考上下文。
     }
 
     private void appendModelTranscript(ModelMessage message) {

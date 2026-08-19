@@ -31,7 +31,8 @@ public class ToolExposurePlanner {
         }
         List<String> visibleTools = new ArrayList<String>();
         for (ToolSpec tool : candidateTools(skill)) {
-            if (supportsSessionIdentities(tool, session) && matchesSkillMetadata(tool, skill)) {
+            if (supportsSessionIdentities(tool, session)
+                    && matchesSkillMetadata(tool, skill)) {
                 visibleTools.add(tool.descriptor().getName());
             }
         }

@@ -33,7 +33,10 @@ public class PromptAssembler {
     public String buildSystemPrompt(AgentSession session, SkillDefinition skill, List<String> visibleTools) {
         StringBuilder builder = new StringBuilder();
         builder.append(promptLayerComposer.compose(skill, session)).append("\n");
-        appendRuntimeGuardrails(builder);
+        // 表单模式只注入 form.md，不追加运行时规约段。
+        if (session == null || !session.isFormMode()) {
+            appendRuntimeGuardrails(builder);
+        }
         return builder.toString().trim();
     }
 

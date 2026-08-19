@@ -18,6 +18,8 @@ import com.codey.loop.FinalResultInterpreter;
 import com.codey.loop.ResponseContractValidator;
 import com.codey.session.SessionStore;
 import com.codey.client.AgentClient;
+import com.codey.client.FormProvider;
+import com.codey.form.FormRegistry;
 import com.codey.skill.SkillRegistry;
 import com.codey.task.TaskRunner;
 import com.codey.task.TaskRunnerAgentClient;
@@ -178,7 +180,9 @@ final class RunCommandBootstrap {
                 new ConsoleHumanConfirmationService(),
                 objectMapper,
                 workspaceRoot,
-                workspaceGateway
+                workspaceGateway,
+                // console 无业务表单实现，注册一个空表单注册表，保证表单模式可用但无内置表单。
+                new FormRegistry(java.util.Collections.<FormProvider>emptyList())
         );
     }
 

@@ -1,40 +1,24 @@
-package com.hcjy.modules.business.commom.codey.tool;
+package com.codey.web.tool;
 
+import com.codey.client.FormIgnore;
 import com.codey.meta.IdentityMatchMode;
-import com.codey.tool.AbstractTool;
-import com.codey.tool.ToolCapability;
-import com.codey.tool.ToolContext;
-import com.codey.tool.ToolDescriptor;
-import com.codey.tool.ToolInvocation;
-import com.codey.tool.ToolMetadata;
-import com.codey.tool.ToolResult;
+import com.codey.tool.*;
+import com.codey.web.common.Dict;
+import com.codey.web.entity.BizBusinessEntry;
+import com.codey.web.entity.BizRequire;
+import com.codey.web.entity.BizRequireTarget;
+import com.codey.web.entity.BizTargetParam;
+import com.codey.web.entity.BizTargetReference;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.hcjy.common.aspect.annotation.Dict;
-import com.hcjy.common.system.api.ISysBaseCloudAPI;
-import com.hcjy.common.system.vo.DictModel;
-import com.hcjy.modules.business.entity.BizRequire;
-import com.hcjy.modules.business.entity.BizTargetParam;
-import com.hcjy.modules.business.commom.codey.CodeyEnum;
-import com.hcjy.modules.business.entity.BizRequireTarget;
-import com.hcjy.modules.business.entity.device.BizTargetReference;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
-import org.springframework.stereotype.Component;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Date;
-
-import javax.annotation.Resource;
+import java.util.*;
 
 /**
  * 采购明细表单字段查询工具。
@@ -50,10 +34,7 @@ public class TargetFormFieldQueryTool extends AbstractTool {
     private volatile String cachedPrompt;
     // AI修改：缓存规则结果，避免同一进程内重复构建相同规则内容 - 2026-07-24
     private volatile String cachedRules;
-    
 
-    @Resource
-    private ISysBaseCloudAPI sysBaseCloudAPI;
 
     @Override
     public ToolDescriptor descriptor() {
@@ -73,10 +54,10 @@ public class TargetFormFieldQueryTool extends AbstractTool {
     @Override
     public ToolMetadata metadata() {
         ToolMetadata metadata = ToolMetadata.standard();
-        metadata.setSupportedIdentities(Arrays.asList(CodeyEnum.target.name()));
+        metadata.setSupportedIdentities(Arrays.asList("programming"));
         metadata.setIdentityMatchMode(IdentityMatchMode.ANY);
-        metadata.setGroup(CodeyEnum.target.name());
-        metadata.setBundle(CodeyEnum.target.name());
+        metadata.setGroup("procurement");
+        metadata.setBundle("procurement");
         return metadata;
     }
 
@@ -129,18 +110,25 @@ public class TargetFormFieldQueryTool extends AbstractTool {
         }
     }
 
+    /**
+     * 公开结构化的表单元数据，供独立的表单上下文构建器复用。
+     * 字段定义与实体注解保持同步，避免手工维护导致漂移。
+     */
+    public Map<String, Object> getFormMetadata() {
+        return buildFormMetadata();
+    }
+
     // AI修改：还原真实层级关系，顶层只返回 BizRequire 字段，标的明细(targetList)的子结构通过 nestedFieldInfo 展开 - 2026-07-29
     private Map<String, Object> buildFormMetadata() {
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         ApiModel apiModel = BIZ_REQUIRE_CLASS.getAnnotation(ApiModel.class);
         // AI修改：字典码从 BizRequire 和 BizRequireTarget 两个实体收集，确保嵌套结构的字典值也能展示 - 2026-07-29
-        Map<String, Map<String, Object>> dictResultMap = buildDictResultMap(BIZ_REQUIRE_CLASS, TARGET_FORM_CLASS);    
-        result.put("formDescription", apiModel == null ? "" : apiModel.description());    
+        result.put("formDescription", apiModel == null ? "" : apiModel.description());
         result.put("historyReferenceWorkflow", buildHistoryReferenceWorkflow());
         result.put("recommendedTools", buildRecommendedTools());
         result.put("specialFieldRules", buildSpecialFieldRules());
         // AI修改：顶层只返回 BizRequire 字段，标的明细(targetList)的字段通过 nestedFieldInfo 层级展开 - 2026-07-29
-        result.put("fields", collectFieldMetadata(BIZ_REQUIRE_CLASS, dictResultMap));
+        result.put("fields", collectFieldMetadata(BIZ_REQUIRE_CLASS, new HashMap<>()));
         result.put("oneTimeResponseNote", "本次返回为一次性完整返回，fields 为 BizRequire 的全部字段；targetList 字段的 nestedFieldInfo 中包含了标的明细(BizRequireTarget)的字段，标的明细下又有参考品牌(referenceList→BizTargetReference)和标的参数(targetParamList→BizTargetParam)的子字段。每个字段都已标注是否字典字段、字典类型，以及是否时间字段和时间格式。");
         return result;
     }
@@ -173,9 +161,9 @@ public class TargetFormFieldQueryTool extends AbstractTool {
                 md.append("|-------|------|------|\n");
                 for (Map<String, Object> item : entry.getValue()) {
                     md.append("| ").append(item.get("value"))
-                      .append(" | ").append(item.get("text"))
-                      .append(" | ").append(item.get("description"))
-                      .append(" |\n");
+                            .append(" | ").append(item.get("text"))
+                            .append(" | ").append(item.get("description"))
+                            .append(" |\n");
                 }
                 md.append("\n");
             }
@@ -210,10 +198,10 @@ public class TargetFormFieldQueryTool extends AbstractTool {
                         dictInfo = String.join(", ", values);
                     }
                     md.append("| ").append(fieldName)
-                      .append(" | ").append(fieldType)
-                      .append(" | ").append(desc)
-                      .append(" | ").append(dictInfo)
-                      .append(" |\n");
+                            .append(" | ").append(fieldType)
+                            .append(" | ").append(desc)
+                            .append(" | ").append(dictInfo)
+                            .append(" |\n");
                 }
             }
         }
@@ -294,12 +282,12 @@ public class TargetFormFieldQueryTool extends AbstractTool {
         String hint = (String) field.get("aiHint");
 
         return "| " + fieldName
-             + " | " + fieldType
-             + " | " + desc
-             + " | " + dictInfo
-             + " | " + timeFormat
-             + " | " + hint
-             + " |\n";
+                + " | " + fieldType
+                + " | " + desc
+                + " | " + dictInfo
+                + " | " + timeFormat
+                + " | " + hint
+                + " |\n";
     }
 
     // AI新增：构建嵌套子结构字段的 markdown 表格行 - 2026-07-29
@@ -491,6 +479,7 @@ public class TargetFormFieldQueryTool extends AbstractTool {
 
     /**
      * 收集表单字段元数据
+     *
      * @param formClass 表单类
      */
     private List<Map<String, Object>> collectFieldMetadata(Class<?> formClass, Map<String, Map<String, Object>> dictResultMap) {
@@ -540,6 +529,8 @@ public class TargetFormFieldQueryTool extends AbstractTool {
         fieldMetadata.put("ownerClass", ownerClass.getSimpleName());
         fieldMetadata.put("fieldName", field.getName());
         fieldMetadata.put("fieldType", resolveFieldType(field));
+        // 记录字段是否被 @FormIgnore 标记，供 core 底层在序列化时与可见字段过滤一并排除
+        fieldMetadata.put("ignored", field.isAnnotationPresent(FormIgnore.class));
         fieldMetadata.put("apiModelProperty", buildApiModelPropertyMetadata(apiModelProperty));
         fieldMetadata.put("hasDict", dict != null);
         fieldMetadata.put("dict", buildDictMetadata(dict, dictResultMap));
@@ -733,10 +724,10 @@ public class TargetFormFieldQueryTool extends AbstractTool {
             return "这是采购明细列表字段。targetList 本身只能是 一维对象数组，合法结构是 [{...}, {...}]，每个元素都必须是采购明细对象，禁止写成 [[...]]、[{...}, [{...}]] 或出现 } ], [ { 这类数组包数组分段结构。编辑时应直接在同一个数组中追加或修改对象，相邻条目只能用 }, { 分隔。";
         }
         if ("targetTypeId".equals(fieldName)) {
-            return "这是特殊联动字段，需要先调用 TargetTypeQueryTool 查询标的类型，并把返回结果中的 bizCode 赋值给 targetTypeId。";
+            return "这是特殊联动字段，需要先调用 TargetTypeQueryTool 查询标的类型，并把返回结果中的 bizCode 赋值给 targetTypeId。如果没有该工具则你自己决定";
         }
         if ("targetTypeName".equals(fieldName)) {
-            return "这是特殊联动字段，需要先调用 TargetTypeQueryTool 查询标的类型，并把返回结果中的 name 赋值给 targetTypeName。";
+            return "这是特殊联动字段，需要先调用 TargetTypeQueryTool 查询标的类型，并把返回结果中的 name 赋值给 targetTypeName。如果没有该工具则你自己决定";
         }
         if ("targetTypeCode".equals(fieldName)) {
             return "这是标的类型联动字段，跟随 targetTypeId / targetTypeName 联动填写。";
@@ -755,15 +746,7 @@ public class TargetFormFieldQueryTool extends AbstractTool {
         if ("targetTypeName".equals(fieldName)) {
             return "这是特殊联动字段，需要先调用 TargetTypeQueryTool 查询标的类型；如需判断是否超标，还可把该字段作为 categoryName 的参考值传给 AssetConfigQueryTool。";
         }
-        if ("referenceList".equals(fieldName)) {
-            return "这是参考品牌结构化字段，填写前优先调用 TargetReferenceQueryTool 查询历史参考，再填写品牌名称、规格型号、生产厂家，并同步生成 referenceListStr。";
-        }
-        if ("referenceListStr".equals(fieldName)) {
-            return "这是参考品牌展示字符串字段，不能单独填写，需要根据 referenceList 按 品牌名称：规格型号：生产厂家 的格式逐行生成。";
-        }
-        if ("targetParamList".equals(fieldName)) {
-            return "这是参考参数结构化字段，填写前优先调用 TargetParamQueryTool 查询历史参考，再填写参数名称、参数要求、结论参数、是否核心参数，并同步生成 bizTargetParamListStr 和 bizTargetResultParamsListStr。";
-        }
+
         if ("bizTargetParamListStr".equals(fieldName)) {
             return "这是参考参数字符串字段，不能单独填写，需要根据 targetParamList 按 参数名称：参数要求 的格式逐行生成，核心参数前加★。";
         }
@@ -782,14 +765,6 @@ public class TargetFormFieldQueryTool extends AbstractTool {
                 || "targetTypeCode".equals(fieldName);
     }
 
-    private Map<String, Map<String, Object>> buildDictResultMap(Class<?>... classes) {
-        Map<String, Map<String, Object>> dictResultMap = new LinkedHashMap<String, Map<String, Object>>();
-        Set<String> dictCodes = collectDictCodes(classes);
-        for (String dictCode : dictCodes) {
-            dictResultMap.put(dictCode, loadDictResult(dictCode));
-        }
-        return dictResultMap;
-    }
 
     private Set<String> collectDictCodes(Class<?>... classes) {
         Set<String> dictCodes = new LinkedHashSet<String>();
@@ -829,40 +804,6 @@ public class TargetFormFieldQueryTool extends AbstractTool {
         return dict.dicCode().trim();
     }
 
-    private Map<String, Object> loadDictResult(String dictCode) {
-        Map<String, Object> result = new LinkedHashMap<String, Object>();
-        String normalizedDictCode = dictCode == null ? "" : dictCode.trim();
-        result.put("dictCode", normalizedDictCode);
-        result.put("items", new ArrayList<Map<String, Object>>());
-        if (normalizedDictCode.isEmpty()) {
-            return result;
-        }
-        try {
-            // AI修改：系统字典回填只按 Dict.dicCode 查询，避免拼接表达式导致回填失败 - 2026-07-22
-            List<DictModel> dictItems = sysBaseCloudAPI.queryDictItemsByCode(normalizedDictCode);
-            result.put("items", convertDictItems(dictItems));
-            return result;
-        } catch (Exception e) {
-            return result;
-        }
-    }
-
-    private List<Map<String, Object>> convertDictItems(List<DictModel> dictItems) {
-        List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
-        if (dictItems == null) {
-            return items;
-        }
-        for (DictModel dictItem : dictItems) {
-            Map<String, Object> item = new LinkedHashMap<String, Object>();
-            item.put("value", dictItem.getValue());
-            item.put("text", dictItem.getText());
-            item.put("description", dictItem.getDescription());
-            item.put("sort", dictItem.getSort());
-            item.put("id", dictItem.getId());
-            items.add(item);
-        }
-        return items;
-    }
 
     private Map<String, Object> buildSpecialRule(String fieldName) {
         Map<String, Object> specialRule = new LinkedHashMap<String, Object>();
@@ -973,6 +914,12 @@ public class TargetFormFieldQueryTool extends AbstractTool {
             nestedFieldInfo.put("coreParamTip", "如果 isCoreParam=1，则字符串行前需要加★。");
             return nestedFieldInfo;
         }
+        if ("businessEntryList".equals(fieldName)) {
+            nestedFieldInfo.put("itemClassName", BizBusinessEntry.class.getSimpleName());
+            nestedFieldInfo.put("itemDescription", "商务条目对象列表。");
+            nestedFieldInfo.put("itemFields", collectNestedFieldMetadata(BizBusinessEntry.class));
+            return nestedFieldInfo;
+        }
         return nestedFieldInfo;
     }
 
@@ -993,7 +940,11 @@ public class TargetFormFieldQueryTool extends AbstractTool {
         ApiModelProperty apiModelProperty = field.getAnnotation(ApiModelProperty.class);
         nestedFieldMetadata.put("fieldName", field.getName());
         nestedFieldMetadata.put("fieldType", resolveFieldType(field));
+        // 记录嵌套字段是否被 @FormIgnore 标记，供 core 底层在序列化时与可见字段过滤一并排除
+        nestedFieldMetadata.put("ignored", field.isAnnotationPresent(FormIgnore.class));
         nestedFieldMetadata.put("apiModelProperty", buildApiModelPropertyMetadata(apiModelProperty));
+        // 嵌套字段同样需要递归携带子结构，保证 referenceList/targetParamList 能继续展开到品牌/参数明细
+        nestedFieldMetadata.put("nestedFieldInfo", buildNestedFieldInfo(field.getName()));
         return nestedFieldMetadata;
     }
 

@@ -6,6 +6,7 @@ import com.codey.infra.ModelConfigResolver;
 import com.codey.infra.ModelGateway;
 import com.codey.infra.ModelGatewayFactory;
 import com.codey.loop.HumanConfirmationService;
+import com.codey.workspace.WorkspaceDirectoryService;
 import com.codey.mcp.ListWorkspaceTool;
 import com.codey.mcp.ProjectMapTool;
 import com.codey.mcp.ReadFileTool;
@@ -19,9 +20,11 @@ import com.codey.skill.Skill;
 import com.codey.skill.SkillRegistry;
 import com.codey.skill.UiJsonRenderSkill;
 import com.codey.client.AgentClient;
+import com.codey.client.FormProvider;
 import com.codey.client.SessionEventListener;
 import com.codey.client.SessionEventPublisher;
 import com.codey.config.ModelProperties;
+import com.codey.form.FormRegistry;
 import com.codey.task.TaskRunner;
 import com.codey.task.TaskRunnerFactory;
 import com.codey.tool.ToolSpec;
@@ -85,6 +88,12 @@ public class AutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public WorkspaceDirectoryService workspaceDirectoryService(Path WorkspaceRoot) {
+        return new WorkspaceDirectoryService(WorkspaceRoot, null, null);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public UiJsonRenderSkill uiJsonRenderSkill() {
         return new UiJsonRenderSkill();
     }
@@ -99,6 +108,13 @@ public class AutoConfiguration {
             discoveredSkills.addAll(SkillRegistry.fromDirectory(Paths.get(properties.getSkillsDirectory())).getAll());
         }
         return new SkillRegistry(discoveredSkills);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public FormRegistry formRegistry(ObjectProvider<FormProvider> forms) {
+        // 收集 Spring 容器中实现了 FormProvider 接口的 Bean，按表单名称精确匹配。
+        return new FormRegistry(forms.orderedStream().collect(Collectors.toList()));
     }
 
     @Bean
@@ -266,7 +282,8 @@ public class AutoConfiguration {
                                  ObjectMapper objectMapper,
                                  Path WorkspaceRoot,
                                  LocalWorkspaceGateway workspaceGateway,
-                                 TaskRunnerFactory taskRunnerFactory) {
+                                 TaskRunnerFactory taskRunnerFactory,
+                                 FormRegistry formRegistry) {
         return taskRunnerFactory.create(
                 skillRegistry,
                 modelGateway,
@@ -276,7 +293,8 @@ public class AutoConfiguration {
                 humanConfirmationService,
                 objectMapper,
                 WorkspaceRoot,
-                workspaceGateway
+                workspaceGateway,
+                formRegistry
         );
     }
 

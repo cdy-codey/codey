@@ -59,9 +59,12 @@ public class PromptContractValidator {
             return PromptValidationResult.failed("Prompt contract failed: tool message must only contain actual tool result content", budgetDiagnostic);
         }
 
-        for (String section : contractDefinition.getRequiredSections()) {
-            if (!prompt.contains(section)) {
-                return PromptValidationResult.failed("Prompt contract failed: missing section " + section, budgetDiagnostic);
+        // 表单模式只注入 form.md，不包含通用 agent 规则段落，跳过 required sections 契约校验。
+        if (session == null || !session.isFormMode()) {
+            for (String section : contractDefinition.getRequiredSections()) {
+                if (!prompt.contains(section)) {
+                    return PromptValidationResult.failed("Prompt contract failed: missing section " + section, budgetDiagnostic);
+                }
             }
         }
 

@@ -30,35 +30,6 @@ final class PromptMessageTextSupport {
         return selected;
     }
 
-    static String detectHistoryRole(String line) {
-        if (line != null && line.startsWith("助手:")) {
-            return "assistant";
-        }
-        return "user";
-    }
-
-    static String stripHistoryRole(String line) {
-        if (isBlank(line)) {
-            return "";
-        }
-        int index = line.indexOf(':');
-        if (index < 0 || index + 1 >= line.length()) {
-            return line.trim();
-        }
-        return line.substring(index + 1).trim();
-    }
-
-    static String trimToLength(String value, int maxLength) {
-        if (value == null) {
-            return "";
-        }
-        String normalized = value.replace("\r", "").trim();
-        if (normalized.length() <= maxLength) {
-            return normalized;
-        }
-        return normalized.substring(0, Math.max(0, maxLength)).trim();
-    }
-
     static void appendUserProvidedFiles(StringBuilder builder, List<String> files) {
         List<String> selected = selectRecentUnique(files, 8);
         if (selected.isEmpty()) {
@@ -85,9 +56,11 @@ final class PromptMessageTextSupport {
         if (transcriptMessage == null) {
             return null;
         }
+        // 工具调用与工具结果原样回放，保持 tool_calls 与 tool 结果成对。
         if (transcriptMessage.hasToolCalls() || transcriptMessage.isToolResult()) {
             return transcriptMessage;
         }
+        // assistant 消息保留最终答复与思考（reasoning），思考作为跨轮上下文回传。
         if (transcriptMessage.isAssistant()
                 && (!isBlank(transcriptMessage.getContent())
                 || !isBlank(transcriptMessage.getReasoningContent()))) {
@@ -95,6 +68,10 @@ final class PromptMessageTextSupport {
                     isBlank(transcriptMessage.getContent()) ? "" : transcriptMessage.getContent(),
                     isBlank(transcriptMessage.getReasoningContent()) ? "" : transcriptMessage.getReasoningContent()
             );
+        }
+        // user 消息作为完整时间线中的用户输入回放。
+        if (transcriptMessage.isUser() && !isBlank(transcriptMessage.getContent())) {
+            return ModelMessage.user(transcriptMessage.getContent());
         }
         return null;
     }

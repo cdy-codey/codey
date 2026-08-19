@@ -26,6 +26,12 @@ public class RunRequest {
     private String coreRules;
     /** 单表模式：工作目录仅包含单个或少量文件，默认开启 */
     private boolean singleFileMode = true;
+    /** 表单模式：字段信息已完整提供，AI 直接输出 JSON 结果，不进行多轮文件读写 */
+    private boolean formMode = false;
+    /** 表单名称：表单模式下用于匹配业务实现的表单定义（FormProvider） */
+    private String formName;
+    /** 表单可见字段名称列表：非空时仅序列化列表内的字段，用于过滤表单中未展示字段的噪音 */
+    private List<String> formVisibleFields = new ArrayList<String>();
 
     public static RunRequest ofGoal(String goal) {
         RunRequest request = new RunRequest();
@@ -159,6 +165,30 @@ public class RunRequest {
 
     public void setSingleFileMode(boolean singleFileMode) {
         this.singleFileMode = singleFileMode;
+    }
+
+    public boolean isFormMode() {
+        return formMode;
+    }
+
+    public void setFormMode(boolean formMode) {
+        this.formMode = formMode;
+    }
+
+    public String getFormName() {
+        return formName;
+    }
+
+    public void setFormName(String formName) {
+        this.formName = formName;
+    }
+
+    public List<String> getFormVisibleFields() {
+        return copyList(formVisibleFields);
+    }
+
+    public void setFormVisibleFields(List<String> formVisibleFields) {
+        this.formVisibleFields = copyList(formVisibleFields);
     }
 
     private List<String> copyList(List<String> source) {
