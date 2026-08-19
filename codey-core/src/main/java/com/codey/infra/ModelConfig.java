@@ -13,8 +13,9 @@ public class ModelConfig {
     private boolean debugEnabled = false;
     private String debugDir = "sessions/model-debug";
     private int connectTimeoutMillis = 10000;
-    private int readTimeoutMillis = 90000; // 90s：并行工具调用时模型需处理多个结果，避免 Read timed out
-    private int maxRetries = 2;
+    private int readTimeoutMillis = 30000; // 30s：控制单次模型调用上限，避免拖长整体流程
+    private int maxRetries = 1;
+    private Integer maxTokens;
 
     public String getProvider() {
         return provider;
@@ -102,5 +103,13 @@ public class ModelConfig {
 
     public void setMaxRetries(int maxRetries) {
         this.maxRetries = maxRetries;
+    }
+
+    public Integer getMaxTokens() {
+        return maxTokens;
+    }
+
+    public void setMaxTokens(Integer maxTokens) {
+        this.maxTokens = maxTokens;
     }
 }

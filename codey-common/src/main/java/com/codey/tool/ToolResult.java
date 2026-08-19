@@ -15,6 +15,7 @@ public class ToolResult {
     protected String spilloverPath;
     protected int originalContentLength;
     protected boolean compactedForContext;
+    protected Map<String, Object> view;
 
     public static ToolResult ok(String content) {
         return ok(content, null);
@@ -38,6 +39,30 @@ public class ToolResult {
         result.errorMessage = errorMessage;
         result.summary = summary;
         return result;
+    }
+
+    /**
+     * 工具请求用户从选项中选择后才能继续（例如校验未通过时把问题列成选项）。
+     * 该结果不视为普通失败，循环层检测到后会暂停并等待用户选择。
+     */
+    public static ToolResult userChoice(Map<String, Object> view, String contentForModel) {
+        ToolResult result = new ToolResult();
+        result.success = false;
+        result.view = view;
+        result.content = contentForModel;
+        return result;
+    }
+
+    public Map<String, Object> getView() {
+        return view;
+    }
+
+    public boolean isUserChoice() {
+        if (view == null) {
+            return false;
+        }
+        Object type = view.get("_view_type");
+        return type != null && "user_choice".equalsIgnoreCase(String.valueOf(type).trim());
     }
 
     public boolean isSuccess() {

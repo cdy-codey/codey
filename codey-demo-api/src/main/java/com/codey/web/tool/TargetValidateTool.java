@@ -31,6 +31,21 @@ public class TargetValidateTool extends AbstractTool {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    /**
+     * Demo 字典数据源：仅内置少量常用字典的可选值，用于演示“命中则校验、未命中则跳过”。
+     * 真实场景应替换为字典接口 / 数据库查询结果。
+     */
+    private static final Map<String, Set<String>> DEMO_DICT_VALUES = buildDemoDictValues();
+
+    private static Map<String, Set<String>> buildDemoDictValues() {
+        Map<String, Set<String>> values = new LinkedHashMap<String, Set<String>>();
+        values.put("yn", new LinkedHashSet<String>(Arrays.asList("1", "0")));
+        values.put("project_attribute", new LinkedHashSet<String>(Arrays.asList("goods", "build", "service")));
+        values.put("require_confirm_status", new LinkedHashSet<String>(Arrays.asList("confirm", "notConfirm")));
+        values.put("business_doc_type", new LinkedHashSet<String>(Arrays.asList("year", "day")));
+        return values;
+    }
+
     @Override
     public ToolDescriptor descriptor() {
         return new ToolDescriptor("TargetValidateTool", "校验表单格式", "当编辑完表单后必须调用", buildParameters()
@@ -39,7 +54,8 @@ public class TargetValidateTool extends AbstractTool {
 
     @Override
     public ToolCapability capability() {
-        return ToolCapability.readOnlyParallel();
+        // 校验是“写文件前”的关卡，需要顺序执行，便于未通过时暂停等待用户选择。
+        return ToolCapability.readOnly();
     }
 
     @Override
@@ -71,63 +87,52 @@ public class TargetValidateTool extends AbstractTool {
                 return ToolResult.fail("校验表单格式失败", "表单内容为空");
             }
             OBJECT_MAPPER.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            String err = validateBizRequireDeserialization(content);
-            if (err != null) {
-                return ToolResult.fail(err, err);
+            List<String> problems = validateBizRequireDeserialization(content);
+            if (problems == null || problems.isEmpty()) {
+                return ToolResult.ok("校验成功");
             }
-            return ToolResult.ok("校验成功");
+            return buildUserChoiceResult(problems);
         } catch (Exception e) {
             e.printStackTrace();
             return ToolResult.fail(e.getMessage(), e.getMessage());
         }
     }
 
-    private String validateBizRequireDeserialization(String content) throws JsonProcessingException {
+    private List<String> validateBizRequireDeserialization(String content) {
         try {
             BizRequire bizRequire = OBJECT_MAPPER.readValue(content, BizRequire.class);
             if (bizRequire == null) {
-                return "表单为空";
+                return singleProblem("表单为空");
             }
             if (ObjectUtil.equal(bizRequire.getId(), "")) {
-                return "$.id禁止空字符串，没有值则使用null替代";
+                return singleProblem("$.id禁止空字符串，没有值则使用null替代");
             }
+            List<String> problems = new ArrayList<String>();
             Map<String, Set<String>> dictValueCache = new LinkedHashMap<String, Set<String>>();
-            StringBuilder err = new StringBuilder();
-            // AI修改：补充字典字段反射校验，确保 @Dict 字段的值必须能在字典接口返回结果中找到 - 2026-07-28
-            appendValidationError(err, validateDictionaryFields(bizRequire, "$", dictValueCache));
+            addProblems(problems, validateDictionaryFields(bizRequire, "$", dictValueCache));
             //如果标的不为空，需要检查标的列表信息
             if (bizRequire.getTargetList() != null && !bizRequire.getTargetList().isEmpty()) {
                 for (int i = 0; i < bizRequire.getTargetList().size(); i++) {
                     BizRequireTarget target = bizRequire.getTargetList().get(i);
-                    // AI修改：补充标的重要字段必填校验，避免标的名称、类型、采购目录等关键信息缺失 - 2026-07-28
-                    appendValidationError(err, validateRequiredTargetFields(target, i));
+                    addProblems(problems, validateRequiredTargetFields(target, i));
                     if ((StrUtil.isNotBlank(target.getReferenceListStr()) && target.getReferenceList() == null) || (StrUtil.isBlank(target.getReferenceListStr()) && target.getReferenceList() != null)) {
-                        //有字符串，也要有列表
-                        appendValidationError(err, "第" + (i + 1) + "行的标的" + target.getTargetName() + "的参考品牌字段referenceListStr和referenceList没有配套");
-
+                        addProblem(problems, "第" + (i + 1) + "行的标的" + target.getTargetName() + "的参考品牌字段referenceListStr和referenceList没有配套");
                     }
                     if ((StrUtil.isNotBlank(target.getBizTargetParamListStr()) && target.getTargetParamList() == null) || (StrUtil.isBlank(target.getBizTargetParamListStr()) && target.getTargetParamList() != null)) {
-                        //有字符串
-                        appendValidationError(err, "第" + (i + 1) + "行的标的" + target.getTargetName() + "的标的参数字段targetParamList和bizTargetParamListStr没有配套");
+                        addProblem(problems, "第" + (i + 1) + "行的标的" + target.getTargetName() + "的标的参数字段targetParamList和bizTargetParamListStr没有配套");
                     }
                     if (ObjectUtil.equal(target.getId(), "")) {
-                        return "第" + (i + 1) + "行的标的id禁止空字符串，没有值则使用null替代";
+                        addProblem(problems, "第" + (i + 1) + "行的标的id禁止空字符串，没有值则使用null替代");
                     }
-                    appendValidationError(err, validateDictionaryFields(target, "$.targetList[" + i + "]", dictValueCache));
+                    addProblems(problems, validateDictionaryFields(target, "$.targetList[" + i + "]", dictValueCache));
                 }
             }
-            if (err.length() > 0) {
-                err.append("\n请查询字段规则字段信息后修改");
-                return err.toString();
-            }
-
+            return problems;
         } catch (JsonMappingException e) {
-            return buildBizRequireDeserializeErrorMessage(e);
+            return singleProblem(buildBizRequireDeserializeErrorMessage(e));
         } catch (JsonProcessingException e) {
-            return e.getMessage();
+            return singleProblem(e.getMessage());
         }
-
-        return null;
     }
 
     private String buildBizRequireDeserializeErrorMessage(JsonMappingException e) {
@@ -160,23 +165,23 @@ public class TargetValidateTool extends AbstractTool {
         return pathBuilder.toString();
     }
 
-    private String validateRequiredTargetFields(BizRequireTarget target, int index) {
-        StringBuilder err = new StringBuilder();
-        String targetLabel = buildTargetLabel(target, index);
+    private List<String> validateRequiredTargetFields(BizRequireTarget target, int index) {
+        List<String> problems = new ArrayList<String>();
         if (target == null) {
-            appendValidationError(err, "第" + (index + 1) + "行的标的不能为空");
-            return err.toString();
+            addProblem(problems, "第" + (index + 1) + "行的标的不能为空");
+            return problems;
         }
-        appendRequiredTargetFieldError(err, target.getTargetName(), targetLabel, "标的名称", "targetName");
-        appendRequiredTargetFieldError(err, target.getTargetTypeId(), targetLabel, "标的类型id", "targetTypeId");
-        appendRequiredTargetFieldError(err, target.getTargetTypeName(), targetLabel, "标的类型名称", "targetTypeName");
-        appendRequiredTargetFieldError(err, target.getRequireCatalog(), targetLabel, "采购目录", "requireCatalog");
-        return err.length() == 0 ? null : err.toString();
+        String targetLabel = buildTargetLabel(target, index);
+        addRequiredTargetFieldProblem(problems, target.getTargetName(), targetLabel, "标的名称", "targetName");
+        addRequiredTargetFieldProblem(problems, target.getTargetTypeId(), targetLabel, "标的类型id", "targetTypeId");
+        addRequiredTargetFieldProblem(problems, target.getTargetTypeName(), targetLabel, "标的类型名称", "targetTypeName");
+        addRequiredTargetFieldProblem(problems, target.getRequireCatalog(), targetLabel, "采购目录", "requireCatalog");
+        return problems;
     }
 
-    private void appendRequiredTargetFieldError(StringBuilder err, String fieldValue, String targetLabel, String fieldLabel, String fieldName) {
+    private void addRequiredTargetFieldProblem(List<String> problems, String fieldValue, String targetLabel, String fieldLabel, String fieldName) {
         if (StrUtil.isBlank(fieldValue)) {
-            appendValidationError(err, targetLabel + "的" + fieldLabel + "不能为空(" + fieldName + ")");
+            addProblem(problems, targetLabel + "的" + fieldLabel + "不能为空(" + fieldName + ")");
         }
     }
 
@@ -188,11 +193,11 @@ public class TargetValidateTool extends AbstractTool {
         return "第" + (index + 1) + "行的标的";
     }
 
-    private String validateDictionaryFields(Object data, String jsonPath, Map<String, Set<String>> dictValueCache) {
+    private List<String> validateDictionaryFields(Object data, String jsonPath, Map<String, Set<String>> dictValueCache) {
+        List<String> problems = new ArrayList<String>();
         if (data == null) {
-            return null;
+            return problems;
         }
-        StringBuilder err = new StringBuilder();
         for (Class<?> currentClass = data.getClass(); currentClass != null && currentClass != Object.class; currentClass = currentClass.getSuperclass()) {
             Field[] declaredFields = currentClass.getDeclaredFields();
             for (Field field : declaredFields) {
@@ -205,10 +210,10 @@ public class TargetValidateTool extends AbstractTool {
                 }
                 Object fieldValue = readFieldValue(data, field);
                 if (fieldValue == null || fieldValue.equals("")) continue;
-                appendValidationError(err, validateDictionaryFieldValue(field, dict, fieldValue, jsonPath, dictValueCache));
+                addProblem(problems, validateDictionaryFieldValue(field, dict, fieldValue, jsonPath, dictValueCache));
             }
         }
-        return err.length() == 0 ? null : err.toString();
+        return problems;
     }
 
     private String validateDictionaryFieldValue(Field field, Dict dict, Object fieldValue, String jsonPath, Map<String, Set<String>> dictValueCache) {
@@ -218,8 +223,9 @@ public class TargetValidateTool extends AbstractTool {
         }
         String dictExpression = buildDictExpression(dict);
         Set<String> dictValueSet = loadDictionaryValueSet(dict, dictValueCache);
+        // 字典数据未返回时不再静默跳过，而是作为“需人工确认”的问题暴露给用户选择处理方式。
         if (dictValueSet.isEmpty()) {
-            return buildFieldPath(jsonPath, field.getName()) + " 对应的字典 " + dictExpression + " 未查询到可用值，无法完成校验";
+            return buildFieldPath(jsonPath, field.getName()) + " 依赖字典 " + dictExpression + "，但字典数据未返回，需人工确认该字段取值";
         }
         List<String> invalidValues = new ArrayList<String>();
         for (String value : values) {
@@ -239,9 +245,19 @@ public class TargetValidateTool extends AbstractTool {
         if (cachedValueSet != null) {
             return cachedValueSet;
         }
-        Set<String> valueSet = new LinkedHashSet<String>();
+        // 从 demo 字典数据源查询可用值；未配置的字典返回空集合，表示本次不参与校验。
+        Set<String> valueSet = lookupDemoDictionaryValues(dict);
         dictValueCache.put(dictExpression, valueSet);
         return valueSet;
+    }
+
+    private Set<String> lookupDemoDictionaryValues(Dict dict) {
+        if (dict == null) {
+            return Collections.emptySet();
+        }
+        String dicCode = dict.dicCode() == null ? "" : dict.dicCode().trim();
+        Set<String> values = DEMO_DICT_VALUES.get(dicCode);
+        return values == null ? Collections.emptySet() : values;
     }
 
     private List<String> extractDictionaryValues(Object fieldValue) {
@@ -321,14 +337,61 @@ public class TargetValidateTool extends AbstractTool {
         return dict.dicCode().trim();
     }
 
-    private void appendValidationError(StringBuilder err, String message) {
-        if (StrUtil.isBlank(message)) {
-            return;
+    private void addProblem(List<String> problems, String message) {
+        if (StrUtil.isNotBlank(message)) {
+            problems.add(message);
         }
-        if (err.length() > 0) {
-            err.append("\n");
+    }
+
+    private void addProblems(List<String> problems, List<String> more) {
+        if (more != null) {
+            problems.addAll(more);
         }
-        err.append(message);
+    }
+
+    private List<String> singleProblem(String message) {
+        List<String> problems = new ArrayList<String>();
+        addProblem(problems, message);
+        return problems;
+    }
+
+    /**
+     * 把校验问题转换为 user_choice 视图，等待用户选择后再继续，而不是让模型直接改写文件。
+     */
+    private ToolResult buildUserChoiceResult(List<String> problems) {
+        List<Map<String, Object>> options = new ArrayList<Map<String, Object>>();
+        for (int i = 0; i < problems.size(); i++) {
+            Map<String, Object> option = new LinkedHashMap<String, Object>();
+            option.put("key", optionKey(i));
+            option.put("label", problems.get(i));
+            options.add(option);
+        }
+        Map<String, Object> view = new LinkedHashMap<String, Object>();
+        view.put("_view_type", "user_choice");
+        view.put("title", "表单校验未通过");
+        view.put("description", "以下问题需要处理，请选择一项以继续：");
+        view.put("options", options);
+
+        String contentForModel = buildProblemsText(problems) + "\n请等待用户选择后再继续，不要直接修改文件。";
+        return ToolResult.userChoice(view, contentForModel);
+    }
+
+    private String optionKey(int index) {
+        if (index < 26) {
+            return String.valueOf((char) ('A' + index));
+        }
+        return "OPT" + (index + 1);
+    }
+
+    private String buildProblemsText(List<String> problems) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < problems.size(); i++) {
+            if (i > 0) {
+                sb.append("\n");
+            }
+            sb.append(optionKey(i)).append(". ").append(problems.get(i));
+        }
+        return sb.toString();
     }
 
     private Map<String, Object> buildParameters() {

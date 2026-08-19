@@ -39,6 +39,9 @@ public class CompositeSkill implements Skill {
         merged.setIdentityMatchMode(IdentityMatchMode.ANY);
         merged.setOutputContract(joinOutputContracts(skills));
         merged.setMaxLoopCount(resolveMaxLoopCount(skills));
+        merged.setAutoCompleteOnVerifiedWrite(hasAutoCompleteOnVerifiedWrite(skills));
+        merged.setAutoCompleteSummary(resolveAutoCompleteSummary(skills));
+        merged.setContextFileName(resolveContextFileName(skills));
         return merged;
     }
 
@@ -135,6 +138,41 @@ public class CompositeSkill implements Skill {
             maxLoopCount = Math.max(maxLoopCount, skill.definition().getMaxLoopCount());
         }
         return maxLoopCount;
+    }
+
+    private boolean hasAutoCompleteOnVerifiedWrite(List<Skill> skills) {
+        for (Skill skill : skills) {
+            if (skill != null && skill.definition() != null && skill.definition().isAutoCompleteOnVerifiedWrite()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String resolveAutoCompleteSummary(List<Skill> skills) {
+        for (Skill skill : skills) {
+            if (skill == null || skill.definition() == null) {
+                continue;
+            }
+            String summary = skill.definition().getAutoCompleteSummary();
+            if (!isBlank(summary)) {
+                return summary.trim();
+            }
+        }
+        return null;
+    }
+
+    private String resolveContextFileName(List<Skill> skills) {
+        for (Skill skill : skills) {
+            if (skill == null || skill.definition() == null) {
+                continue;
+            }
+            String fileName = skill.definition().getContextFileName();
+            if (!isBlank(fileName)) {
+                return fileName.trim();
+            }
+        }
+        return null;
     }
 
     private boolean isBlank(String value) {

@@ -20,6 +20,10 @@ public class ToolCapability {
         return new ToolCapability(true, true);
     }
 
+    public static ToolCapability readOnly() {
+        return new ToolCapability(true, false);
+    }
+
     public boolean isReadOnly() {
         return readOnly;
     }

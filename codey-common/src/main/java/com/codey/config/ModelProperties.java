@@ -13,6 +13,7 @@ public class ModelProperties {
     private Integer connectTimeoutMillis;
     private Integer readTimeoutMillis;
     private Integer maxRetries;
+    private Integer maxTokens;
 
     public String getProvider() {
         return provider;
@@ -84,5 +85,13 @@ public class ModelProperties {
 
     public void setMaxRetries(Integer maxRetries) {
         this.maxRetries = maxRetries;
+    }
+
+    public Integer getMaxTokens() {
+        return maxTokens;
+    }
+
+    public void setMaxTokens(Integer maxTokens) {
+        this.maxTokens = maxTokens;
     }
 }

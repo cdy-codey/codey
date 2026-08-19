@@ -44,6 +44,16 @@ export async function syncSystemAiAssistantPayload(payload, reason = 'manual') {
   return assistantController.syncPagePayloadToWorkspace(payload, reason)
 }
 
+// 向聊天流追加一条携带自定义卡片的助手消息（如"表格预览 + 确认填入"）。
+// 业务层在 onTaskEnded / onToolCall 等回调里调用，替代居中弹出的确认框。
+export function appendSystemAiAssistantCard(card) {
+  if (!assistantController?.appendAssistantCard) {
+    console.error('[appendSystemAiAssistantCard] 助手控制器未注册或缺少 appendAssistantCard')
+    return null
+  }
+  return assistantController.appendAssistantCard(card)
+}
+
 export function emitSystemAiAssistantEvent(eventName, payload) {
   assistantEventHandlers.forEach((handler) => {
     try {
@@ -72,6 +82,7 @@ if (typeof window !== 'undefined') {
     openSystemAiAssistant,
     closeSystemAiAssistant,
     syncSystemAiAssistantPayload,
+    appendSystemAiAssistantCard,
     emitSystemAiAssistantEvent,
     onSystemAiAssistantEvent,
   }

@@ -51,21 +51,26 @@ final class ToolCallProcessor {
         this.replanService = replanService;
     }
 
-    void processToolCalls(List<ModelToolCall> toolCalls,
+    ToolResult processToolCalls(List<ModelToolCall> toolCalls,
                           AgentSession session,
                           SkillDefinition skill,
                           String assistantContent,
                           String assistantReasoningContent) {
         if (toolCalls == null || toolCalls.isEmpty()) {
-            return;
+            return null;
         }
         assignMissingToolCallIds(toolCalls);
+        // 每轮处理前重置“写成功即自动完成”标记，避免上一轮残留影响本轮判断。
+        if (session != null) {
+            session.resetVerifiedWriteAutoComplete();
+        }
 
         List<ToolInvocation> parallelBatch = new ArrayList<ToolInvocation>();
         List<String> parallelSignatures = new ArrayList<String>();
         List<ModelToolCall> parallelToolCalls = new ArrayList<ModelToolCall>();
         List<ModelToolCall> executedToolCalls = new ArrayList<ModelToolCall>();
         List<ModelMessage> toolResultMessages = new ArrayList<ModelMessage>();
+        ToolResult pendingUserChoice = null;
         for (ModelToolCall toolCall : toolCalls) {
             ToolInvocation request = toToolInvocation(toolCall, session);
             if (!toolExecutor.canRunInParallel(request)
@@ -83,6 +88,14 @@ final class ToolCallProcessor {
             LoopGuardDecision guardDecision = loopGuard.inspect(request, isWriteTool, session);
             if (guardDecision.getAction() == LoopGuardDecision.Action.SKIP) {
                 session.appendSystemFeedback(guardDecision.getMessage());
+                // 关键：跳过重复请求时也要给模型回写一条可见的 tool 结果。
+                // 否则模型在下一轮看不到任何新信息，会原样重复同一工具请求，最终被判定为停滞。
+                rememberExecutedToolCall(executedToolCalls, toolCall);
+                appendToolResultMessage(
+                        toolResultMessages,
+                        toolCall,
+                        buildSkippedToolResult(request, session, guardDecision.getMessage())
+                );
                 continue;
             }
             if (guardDecision.getAction() == LoopGuardDecision.Action.REPLAN) {
@@ -103,7 +116,7 @@ final class ToolCallProcessor {
 
             if (isWriteTool) {
                 FinalResult confirmationState = toConfirmationState(request);
-                if (shouldRequireHumanConfirmation(confirmationState, request, session)) {
+                if (shouldRequireHumanConfirmation(confirmationState, request, session, skill)) {
                     HumanDecision decision = humanConfirmationService.confirmEdit(session, confirmationState, request);
                     sessionStore.appendEvent(SessionEventFactory.humanDecision(session.getSessionId(), decision));
                     session.appendInteraction(buildHumanDecisionMessage(request, confirmationState, decision));
@@ -122,6 +135,12 @@ final class ToolCallProcessor {
             ToolResult result = toolExecutor.execute(request, session.getWorkingDirectory(), session.getTenantId());
             sessionStore.appendEvent(SessionEventFactory.toolCall(session.getSessionId(), request, result));
             rememberExecutedToolCall(executedToolCalls, toolCall);
+            if (result.isUserChoice()) {
+                // 工具要求用户先选择再继续（如校验未通过列出问题），暂停本循环等待用户决策。
+                appendToolResultMessage(toolResultMessages, toolCall, result.getContentForModel());
+                pendingUserChoice = result;
+                break;
+            }
             if (!result.isSuccess()) {
                 // #endregion
                 loopGuard.recordFailure(session, requestSignature);
@@ -143,9 +162,14 @@ final class ToolCallProcessor {
                     sessionStore.appendEvent(SessionEventFactory.verification(session.getSessionId(), verifyResult));
                 }
                 if (verifyResult.isPassed()) {
-                    session.appendSystemFeedback(
-                            "最近写工具已执行成功并通过校验；如果用户目标已经满足，请直接输出 FINISH，不要为了确认结果重复读取同一文件。"
-                    );
+                    // 该技能配置了“写成功并通过校验即结束”，不再要求模型额外输出 FINISH，直接结束本轮循环。
+                    if (skill != null && skill.isAutoCompleteOnVerifiedWrite()) {
+                        session.markVerifiedWriteAutoComplete();
+                    } else {
+                        session.appendSystemFeedback(
+                                "最近写工具已执行成功并通过校验；如果用户目标已经满足，请直接输出 FINISH，不要为了确认结果重复读取同一文件。"
+                        );
+                    }
                 } else if (verifyResult.isFailed()) {
                     replanService.appendFeedbackAndRequestReplan(session, verifyResult.getMessage());
                 }
@@ -157,6 +181,7 @@ final class ToolCallProcessor {
 
         flushParallelBatch(parallelBatch, parallelSignatures, parallelToolCalls, session, executedToolCalls, toolResultMessages);
         flushExecutedToolTranscript(session, assistantContent, assistantReasoningContent, executedToolCalls, toolResultMessages);
+        return pendingUserChoice;
     }
 
     private ToolInvocation toToolInvocation(ModelToolCall toolCall) {
@@ -301,18 +326,26 @@ final class ToolCallProcessor {
         return builder.toString();
     }
 
-    private boolean shouldRequireHumanConfirmation(FinalResult turn, ToolInvocation request, AgentSession session) {
-        if (Boolean.TRUE.equals(turn.getRequiresHumanConfirmation())) {
-            return true;
-        }
-        if (!isBlank(turn.getUncertaintyReason())) {
-            return true;
-        }
+    private boolean shouldRequireHumanConfirmation(FinalResult turn, ToolInvocation request, AgentSession session, SkillDefinition skill) {
         if (request == null) {
             return true;
         }
         String toolName = request.getToolName();
+        // 写文件、改表单、删除、打补丁都属于高风险修改操作，执行前都需要人工确认。
+        if ("write_file".equals(toolName) || "edit_file".equals(toolName)) {
+            // 技能声明了上下文文件（如 context.json）时，写入该文件属于已授权动作，不再重复弹确认。
+            if (isFormContextTarget(request, skill)) {
+                return false;
+            }
+            return true;
+        }
         if ("delete_file".equals(toolName) || "apply_structured_patch".equals(toolName)) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(turn.getRequiresHumanConfirmation())) {
+            return true;
+        }
+        if (!isBlank(turn.getUncertaintyReason())) {
             return true;
         }
         return isBlank(resolveWriteTargetPath(request));
@@ -455,6 +488,23 @@ final class ToolCallProcessor {
         toolResultMessages.add(ModelMessage.toolResult(toolCall.getId(), toolCall.getName(), content));
     }
 
+    /**
+     * 构造被 LoopGuard 跳过的工具请求对模型可见的结果内容。
+     * read_file 优先复用已缓存的读取片段，其余工具回退为守卫反馈文案。
+     */
+    private String buildSkippedToolResult(ToolInvocation request, AgentSession session, String feedback) {
+        if (request != null && "read_file".equals(request.getToolName())) {
+            String path = readStringArg(request, "path");
+            Integer offset = readIntegerArg(request, "offset");
+            Integer limit = readIntegerArg(request, "limit");
+            String cached = session == null ? "" : session.getReadFileSnippetForRange(path, offset, limit);
+            if (!isBlank(cached)) {
+                return "该文件内容此前已读取，以下为已缓存片段，请直接复用并继续任务：\n" + cached;
+            }
+        }
+        return isBlank(feedback) ? "该工具请求已执行过，请复用已有结果。" : feedback;
+    }
+
     private void rememberReadFileSnippetIfAny(AgentSession session, ToolInvocation request, String contentForModel) {
         if (session == null || request == null || contentForModel == null) {
             return;
@@ -547,6 +597,19 @@ final class ToolCallProcessor {
             return path;
         }
         return "";
+    }
+
+    private boolean isFormContextTarget(ToolInvocation request, SkillDefinition skill) {
+        if (skill == null || isBlank(skill.getContextFileName())) {
+            return false;
+        }
+        String path = resolveWriteTargetPath(request);
+        if (isBlank(path)) {
+            return false;
+        }
+        String normalized = path.replace("\\", "/");
+        String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);
+        return skill.getContextFileName().equalsIgnoreCase(fileName);
     }
 
     private boolean isBlank(String value) {

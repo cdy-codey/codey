@@ -26,6 +26,7 @@ export {
   openSystemAiAssistant,
   closeSystemAiAssistant,
   syncSystemAiAssistantPayload,
+  appendSystemAiAssistantCard,
   emitSystemAiAssistantEvent,
   onSystemAiAssistantEvent,
 } from './assistantBridge.js'

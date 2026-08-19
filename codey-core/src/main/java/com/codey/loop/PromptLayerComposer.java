@@ -100,7 +100,8 @@ public class PromptLayerComposer {
     private String buildFinalResultFormatLayer() {
         return "## Final Result Format\n\n"
                 + "- 如需继续调用工具，必须使用 OpenAI 标准 tool_calls。\n"
-                + "- 当任务完成且不再需要工具时，只输出一个顶层 JSON 对象，不要输出 markdown 代码块，不要补充额外解释。\n"
+                + "- 当任务完成且不再需要工具时，输出一个顶层 JSON 对象作为最终结果，不要补充额外解释。\n"
+                + "- 特殊场景：当需要先向用户展示说明或表格、再让用户从选项中选择时，可以先用 markdown 输出说明/表格，最后用 ```json 代码块输出一个 user_choice 顶层 JSON；此时 markdown 部分用于展示，最后的 JSON 是唯一被解析的最终结果，禁止只输出纯文本提问而不给选项。\n"
                 + "- 顶层 JSON 只允许使用这些字段：status、view、requiresHumanConfirmation、uncertaintyReason。\n"
                 + "- view 是最终展示内容的唯一入口。纯文本也必须放进 view 中，例如：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"text\",\"content\":\"...\"}}\n"
                 + "- 结构化内容也必须放进 view 中，例如：{\"status\":\"FINISH\",\"view\":{\"_view_type\":\"form_data\",\"modules\":[...]}}\n"

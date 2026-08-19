@@ -74,18 +74,48 @@ final class ConversationState {
         return !pendingChoiceOptions.isEmpty();
     }
 
+    /**
+     * 判断用户输入是否命中待选项：优先按 key（A/1），其次按 label 文本。
+     * 前端点击选项按钮时发送的是 label 而非 key，缺少 label 匹配会导致选择无法被识别。
+     */
+    boolean matchesPendingChoice(String input) {
+        if (input == null) {
+            return false;
+        }
+        String normalized = input.trim();
+        if (normalized.isEmpty()) {
+            return false;
+        }
+        String upper = normalized.toUpperCase();
+        if (pendingChoiceOptions.containsKey(upper)) {
+            return true;
+        }
+        if (pendingChoiceOptions.containsKey(normalizeNumericChoice(upper))) {
+            return true;
+        }
+        return findOptionByLabel(normalized) != null;
+    }
+
     String resolvePendingChoice(String rawUserInput) {
         if (rawUserInput == null) {
             return "";
         }
-        String key = rawUserInput.trim();
-        if (key.isEmpty()) {
+        String input = rawUserInput.trim();
+        if (input.isEmpty()) {
             return "";
         }
-        key = key.toUpperCase();
-        String option = pendingChoiceOptions.get(key);
+        String upperInput = input.toUpperCase();
+        String matchedKey = upperInput;
+        String option = pendingChoiceOptions.get(upperInput);
         if (option == null) {
-            option = pendingChoiceOptions.get(normalizeNumericChoice(key));
+            String numericKey = normalizeNumericChoice(upperInput);
+            option = pendingChoiceOptions.get(numericKey);
+            matchedKey = numericKey;
+        }
+        if (option == null) {
+            // 前端点击选项按钮时发送的是 label 文本而非 key，按 label 精确匹配一次。
+            option = findOptionByLabel(input);
+            matchedKey = input;
         }
         if (option == null) {
             return "";
@@ -96,8 +126,21 @@ final class ConversationState {
             return option;
         }
         return prompt.trim()
-                + "\n用户选择: " + key
+                + "\n用户选择: " + matchedKey
                 + "\n请按这个选项继续执行: " + option;
+    }
+
+    private String findOptionByLabel(String input) {
+        if (input == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> entry : pendingChoiceOptions.entrySet()) {
+            String value = entry.getValue();
+            if (value != null && (value.equals(input) || value.equalsIgnoreCase(input))) {
+                return value;
+            }
+        }
+        return null;
     }
 
     void clearPendingChoice() {
@@ -150,6 +193,17 @@ final class ConversationState {
                 options.put(key.trim(), value.trim());
             }
         }
+        // JSON user_choice 视图的 options 数组（{"key":"A","label":"..."}）不会被上面的文本正则命中。
+        // 缺少这一支会导致待选项丢失，用户后续的选择无法被解析，模型只能重新提取并重复询问。
+        Pattern jsonKeyLabelPattern = Pattern.compile("\"key\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"label\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher jsonKeyLabelMatcher = jsonKeyLabelPattern.matcher(normalized);
+        while (jsonKeyLabelMatcher.find()) {
+            String key = jsonKeyLabelMatcher.group(1);
+            String value = jsonKeyLabelMatcher.group(2);
+            if (key != null && value != null && !value.trim().isEmpty()) {
+                options.put(key.trim().toUpperCase(), value.trim());
+            }
+        }
         if (options.isEmpty()) {
             return options;
         }
@@ -170,12 +224,31 @@ final class ConversationState {
             return "";
         }
         String normalized = text.replace("\r", "").trim();
+        // JSON user_choice 视图：优先取 description，其次 title，作为询问文案，
+        // 避免把整段 JSON（含 status:FINISH）当成目标回灌给模型。
+        String jsonDescription = extractJsonStringField(normalized, "description");
+        if (!jsonDescription.isEmpty()) {
+            return jsonDescription;
+        }
+        String jsonTitle = extractJsonStringField(normalized, "title");
+        if (!jsonTitle.isEmpty()) {
+            return jsonTitle;
+        }
         int index = normalized.lastIndexOf('\n');
         if (index < 0) {
             return normalized;
         }
         String tail = normalized.substring(index + 1).trim();
         return tail.isEmpty() ? normalized : tail;
+    }
+
+    private String extractJsonStringField(String text, String fieldName) {
+        if (text == null || fieldName == null) {
+            return "";
+        }
+        Pattern pattern = Pattern.compile("\"" + Pattern.quote(fieldName) + "\"\\s*:\\s*\"([^\"]*)\"");
+        Matcher matcher = pattern.matcher(text);
+        return matcher.find() ? matcher.group(1).trim() : "";
     }
 
     private String normalizeNumericChoice(String key) {

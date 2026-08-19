@@ -16,6 +16,7 @@ const STREAM_EVENT_TYPES = [
   'model_tool_call_started',
   'tool_execution_started',
   'tool_call',
+  'human_confirmation_required',
   'verification',
   'task_status',
   'final_summary',
@@ -23,6 +24,9 @@ const STREAM_EVENT_TYPES = [
   'debug_trace',
   'security_event',
 ]
+
+// 复杂度关键词：命中后进度条估算时长会适当上浮，反映任务可能更耗时。
+const COMPLEX_TASK_PATTERN = /批量|生成|填写|填表|校验|检查|合规|修改|重构|分析|编写|实现|开发|部署|测试|迁移|整理|转换|提取|导出|导入/
 
 function createChatApiAdapter(options = {}) {
   const requiredFunctionNames = [
@@ -76,6 +80,14 @@ export function useAiChat(options = {}) {
   const eventSource = ref(null)
   const activeAssistantId = ref('')
   const resumeContext = ref(null)
+  // 进度条状态：估算总时长后随时间推进，未完成时最高停在 99%。
+  const progress = ref(0)
+  const progressVisible = ref(false)
+  const progressLabel = ref('')
+  let progressTimer = null
+  let progressFinishTimer = null
+  let progressEstimatedMs = 0
+  let progressStartedAt = 0
 
   function isJsonParseLikeError(error) {
     const message = typeof error?.message === 'string' ? error.message.toLowerCase() : ''
@@ -266,7 +278,73 @@ export function useAiChat(options = {}) {
     activeAssistantId.value = ''
     pendingToolCalls.value = []
     isSending.value = false
+    stopProgress()
   }
+
+  // 根据任务内容粗略估算总耗时，供进度条按时间推进（后端未提供精确耗时字段）。
+  function estimateDurationMs(prompt) {
+    const text = typeof prompt === 'string' ? prompt : ''
+    const lengthMs = Math.min(4000, text.length * 80)
+    const complexityMs = COMPLEX_TASK_PATTERN.test(text) ? 2000 : 0
+    return Math.min(30000, 8000 + lengthMs + complexityMs)
+  }
+
+  function stopProgress() {
+    if (progressTimer) {
+      clearInterval(progressTimer)
+      progressTimer = null
+    }
+    if (progressFinishTimer) {
+      clearTimeout(progressFinishTimer)
+      progressFinishTimer = null
+    }
+    progressVisible.value = false
+    progress.value = 0
+    progressLabel.value = ''
+  }
+
+  function startProgress(prompt) {
+    stopProgress()
+    progressEstimatedMs = estimateDurationMs(prompt)
+    progressStartedAt = Date.now()
+    progress.value = 0
+    progressVisible.value = true
+    progressLabel.value = '正在分析需求...'
+    progressTimer = setInterval(tickProgress, 200)
+  }
+
+  function tickProgress() {
+    if (!progressVisible.value) {
+      return
+    }
+    const elapsed = Date.now() - progressStartedAt
+    const ratio = Math.min(1, elapsed / progressEstimatedMs)
+    // 减速曲线：快速逼近 99%，但完成事件到来前永不达到 100%。
+    const target = 99 * (1 - Math.pow(1 - ratio, 2.5))
+    progress.value = Math.min(99, Math.max(progress.value, Math.round(target)))
+  }
+
+  function noteProgress(label) {
+    if (!progressVisible.value || !label) {
+      return
+    }
+    progressLabel.value = label
+  }
+
+  function finishProgress() {
+    if (progressTimer) {
+      clearInterval(progressTimer)
+      progressTimer = null
+    }
+    progress.value = 100
+    progressLabel.value = '已完成'
+    // 完成态短暂展示后收起，避免与最终正文抢占注意力。
+    progressFinishTimer = setTimeout(() => {
+      progressVisible.value = false
+      progressFinishTimer = null
+    }, 500)
+  }
+
   function isEmptyAssistantMessage(message) {
     if (!message || message.role !== 'assistant') {
       return false
@@ -343,18 +421,52 @@ export function useAiChat(options = {}) {
     return message
   }
 
-  function mergeToolCalls(message, toolCalls = []) {
-    if (!message || !Array.isArray(toolCalls) || !toolCalls.length) {
+  // 工具调用条目：{ name: 展示名, status: pending|running|done|failed }
+  // 状态只向前推进，避免重复事件把已完成状态回退。
+  const TOOL_CALL_STATUS_ORDER = { pending: 0, running: 1, done: 2, failed: 2 }
+
+  function normalizeToolCall(item) {
+    if (!item) {
+      return null
+    }
+    if (typeof item === 'object') {
+      const name = normalizeContent(item.name).trim()
+      if (!name) {
+        return null
+      }
+      return { name, status: item.status || 'done' }
+    }
+    const name = normalizeContent(item).trim()
+    return name ? { name, status: 'done' } : null
+  }
+
+  function advanceToolCallStatus(current, next) {
+    const currentOrder = TOOL_CALL_STATUS_ORDER[current] ?? -1
+    const nextOrder = TOOL_CALL_STATUS_ORDER[next] ?? -1
+    return nextOrder >= currentOrder ? next : current
+  }
+
+  function upsertToolCalls(list, items = []) {
+    if (!Array.isArray(list)) {
       return
     }
-    const merged = new Set([...(message.toolCalls || []), ...toolCalls.filter(Boolean)])
-    message.toolCalls = Array.from(merged)
+    items.forEach((item) => {
+      const normalized = normalizeToolCall(item)
+      if (!normalized) {
+        return
+      }
+      const existing = list.find((toolCall) => toolCall && toolCall.name === normalized.name)
+      if (existing) {
+        existing.status = advanceToolCallStatus(existing.status, normalized.status)
+      } else {
+        list.push(normalized)
+      }
+    })
   }
 
   function appendToolCalls(toolCalls = []) {
-    const normalized = Array.isArray(toolCalls)
-      ? toolCalls.map((item) => normalizeContent(item).trim()).filter(Boolean)
-      : []
+    const items = Array.isArray(toolCalls) ? toolCalls : [toolCalls]
+    const normalized = items.map(normalizeToolCall).filter(Boolean)
     if (!normalized.length) {
       return
     }
@@ -362,12 +474,19 @@ export function useAiChat(options = {}) {
     if (currentId) {
       const existing = messages.value.find((item) => item.id === currentId)
       if (existing) {
-        mergeToolCalls(existing, normalized)
+        upsertToolCalls(existing.toolCalls || [], normalized)
         return
       }
     }
-    const merged = new Set([...(pendingToolCalls.value || []), ...normalized])
-    pendingToolCalls.value = Array.from(merged)
+    upsertToolCalls(pendingToolCalls.value, normalized)
+  }
+
+  // 向聊天流中追加一条携带自定义卡片的助手消息，供业务层展示预览与确认操作。
+  function appendAssistantCard(card) {
+    const message = createMessage('assistant', '', { live: false })
+    message.card = card
+    messages.value.push(message)
+    return message
   }
 
   function syncLiveSessionSummary(firstPrompt) {
@@ -466,20 +585,37 @@ function parseEventPayload(event) {
 
   function handleConnected(payload) {
     connectionStatus.value = `实时会话：${payload?.sessionId || sessionId.value}`
+    noteProgress('已连接，正在处理...')
   }
 
   function handleModelTextDelta(payload) {
     const message = ensureActiveAssistantMessage()
     message.content += payload?.message || payload?.payload?.delta || ''
+    noteProgress('正在生成内容...')
   }
 
   function handleModelThinkingDelta(payload) {
     const message = ensureActiveAssistantMessage()
     message.reasoning += payload?.message || payload?.payload?.delta || ''
+    noteProgress('正在思考...')
   }
 
   function handleModelToolCallStarted(payload) {
-    appendToolCalls([payload?.payload?.displayName || payload?.message])
+    appendToolCalls([{ name: payload?.payload?.displayName || payload?.message, status: 'pending' }])
+    noteProgress('正在准备工具调用...')
+  }
+
+  function handleToolExecutionStarted(payload) {
+    const toolName = payload?.message || payload?.payload?.toolName || ''
+    const displayName = payload?.payload?.displayName || toolName
+    appendToolCalls([{ name: displayName || toolName, status: 'running' }])
+    noteProgress('正在执行工具...')
+    invokeHook('onToolExecutionStarted', {
+      sessionId: sessionId.value,
+      toolName,
+      displayName,
+      payload,
+    })
   }
 
   function handleTaskStatus(payload) {
@@ -500,6 +636,7 @@ function parseEventPayload(event) {
       pendingToolCalls.value = []
       closeActiveAssistantMessage()
       isSending.value = false
+      stopProgress()
       invokeHook('onTaskFailed', { sessionId: sessionId.value, message, payload })
     }
   }
@@ -525,6 +662,7 @@ function parseEventPayload(event) {
     })
     closeActiveAssistantMessage()
     isSending.value = false
+    finishProgress()
     invokeHook('onFinalSummary', { sessionId: sessionId.value, summary: finalSummary, finalResult, payload })
     loadSessions(sessionId.value)
   }
@@ -535,16 +673,31 @@ function parseEventPayload(event) {
       payload?.payload?.request?.tool_name ||
       payload?.payload?.name ||
       ''
-    appendToolCalls([
+    const displayName =
       payload?.payload?.displayName ||
       payload?.payload?.request?.displayName ||
-      toolName,
-    ])
-    invokeHook('onToolCall', { sessionId: sessionId.value, toolName, payload })
+      toolName
+    const success = payload?.payload?.result?.success !== false
+    appendToolCalls([{ name: displayName || toolName, status: success ? 'done' : 'failed' }])
+    noteProgress('正在处理工具结果...')
+    invokeHook('onToolCall', { sessionId: sessionId.value, toolName, displayName, success, payload })
   }
 
   function handleVerificationOrHumanDecision(payload, eventType) {
-    appendToolCalls([payload?.payload?.displayName || payload?.stage || payload?.message || eventType])
+    appendToolCalls([{ name: payload?.payload?.displayName || payload?.stage || payload?.message || eventType, status: 'done' }])
+  }
+
+  function handleHumanConfirmation(payload) {
+    const inner = payload?.payload || {}
+    return invokeAsyncHook('onHumanConfirmation', {
+      sessionId: payload?.sessionId || sessionId.value,
+      confirmationId: inner.confirmationId,
+      toolName: inner.toolName,
+      arguments: inner.arguments,
+      summary: inner.summary,
+      uncertaintyReason: inner.uncertaintyReason,
+      payload,
+    })
   }
 
   function handleSecurityEvent(payload) {
@@ -591,10 +744,11 @@ function parseEventPayload(event) {
     task_status: handleTaskStatus,
     final_summary: handleFinalSummary,
     tool_call: handleToolCall,
+    human_confirmation_required: handleHumanConfirmation,
     security_event: handleSecurityEvent,
     model_output: handleModelOutput,
     // 以下事件类型只需记录或无需处理
-    tool_execution_started: () => {},
+    tool_execution_started: handleToolExecutionStarted,
     debug_trace: () => {},
     verification: (payload, eventType) => handleVerificationOrHumanDecision(payload, eventType),
   }
@@ -678,6 +832,7 @@ function parseEventPayload(event) {
     try {
       errorMessage.value = ''
       isSending.value = true
+      startProgress(goal)
       const liveSessionId = await ensureLiveSession(goal)
 
       const promptAfterHook = await invokeAsyncHook('onBeforeSend', {
@@ -698,6 +853,7 @@ function parseEventPayload(event) {
       )
     } catch (error) {
       isSending.value = false
+      stopProgress()
       applyUserFacingError(error, '发送消息失败', 'useAiChat.sendPrompt')
     }
   }
@@ -713,6 +869,7 @@ function parseEventPayload(event) {
     try {
       errorMessage.value = ''
       isSending.value = true
+      startProgress(label)
       const liveSessionId = await ensureLiveSession(label)
 
       // 聊天中显示选项文本，有备注时附加
@@ -732,6 +889,7 @@ function parseEventPayload(event) {
       )
     } catch (error) {
       isSending.value = false
+      stopProgress()
       applyUserFacingError(error, '发送选项失败', 'useAiChat.submitChoice')
     }
   }
@@ -831,6 +989,7 @@ function parseEventPayload(event) {
 
   onBeforeUnmount(() => {
     disconnectEventSource()
+    stopProgress()
   })
 
   return {
@@ -842,6 +1001,9 @@ function parseEventPayload(event) {
     isLoadingSessions,
     isLoadingDetail,
     isSending,
+    progress,
+    progressVisible,
+    progressLabel,
     errorMessage,
     connectionStatus,
     historyEnabled,
@@ -859,5 +1021,6 @@ function parseEventPayload(event) {
     clearSessions,
     hydrateLatestHistory,
     refreshWelcomeMessages,
+    appendAssistantCard,
   }
 }

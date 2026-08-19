@@ -44,7 +44,7 @@ public class ChatTurnSessionUpdater {
         session.resetForNextTurn();
         String rawGoal = goal;
         String normalized = rawGoal.trim();
-        if (session.hasPendingChoice() && isChoiceAnswer(normalized)) {
+        if (session.hasPendingChoice() && session.matchesPendingChoice(normalized)) {
             String resolved = session.resolvePendingChoice(normalized);
             if (!isBlank(resolved)) {
                 session.appendInteraction("用户选择: " + normalized + " => " + resolved);
@@ -83,20 +83,5 @@ public class ChatTurnSessionUpdater {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
-    }
-
-    private boolean isChoiceAnswer(String value) {
-        if (value == null) {
-            return false;
-        }
-        String normalized = value.trim();
-        if (normalized.isEmpty()) {
-            return false;
-        }
-        if (normalized.length() == 1) {
-            char c = Character.toUpperCase(normalized.charAt(0));
-            return (c >= 'A' && c <= 'D') || (c >= '0' && c <= '9');
-        }
-        return normalized.length() == 2 && normalized.matches("^\\d{1,2}$");
     }
 }

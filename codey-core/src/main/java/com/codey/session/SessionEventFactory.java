@@ -109,6 +109,22 @@ public final class SessionEventFactory {
         );
     }
 
+    public static SessionEvent humanConfirmationRequired(String sessionId, String confirmationId, ToolInvocation request, FinalResult turn) {
+        Map<String, Object> payload = new LinkedHashMap<String, Object>();
+        payload.put("confirmationId", confirmationId);
+        payload.put("toolName", request == null ? null : request.getToolName());
+        payload.put("arguments", request == null ? null : request.getArguments());
+        payload.put("summary", turn == null ? null : turn.getSummary());
+        payload.put("uncertaintyReason", turn == null ? null : turn.getUncertaintyReason());
+        return new SessionEvent(
+                sessionId,
+                SessionEventType.HUMAN_CONFIRMATION_REQUIRED,
+                null,
+                request == null ? null : request.getToolName(),
+                payload
+        );
+    }
+
     public static SessionEvent humanDecision(String sessionId, Object decision) {
         return new SessionEvent(
                 sessionId,
