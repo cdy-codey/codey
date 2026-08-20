@@ -3,8 +3,8 @@ import {
   extractAssistantContentFromFinalResult,
   extractFinalResultPayload,
   extractFinalSummaryText,
+  mergeFinalViewContent,
   normalizeContent,
-  normalizeFinalAssistantContent,
   normalizeToolMessageContent,
   parseModelOutputPayload,
 } from './chatMessageAdapter'
@@ -337,7 +337,7 @@ export function useAiChat(options = {}) {
       progressTimer = null
     }
     progress.value = 100
-    progressLabel.value = '已完成'
+    progressLabel.value = '正在总结摘要'
     // 完成态短暂展示后收起，避免与最终正文抢占注意力。
     progressFinishTimer = setTimeout(() => {
       progressVisible.value = false
@@ -657,11 +657,10 @@ function parseEventPayload(event) {
     const finalResult = extractFinalResultPayload(payload)
     const finalContent = extractAssistantContentFromFinalResult(finalResult)
     const summary = extractFinalSummaryText(payload)
-    if (finalContent) {
-      message.content = finalContent
-    } else {
-      message.content = normalizeFinalAssistantContent(message.content, summary)
-    }
+    // 内容合并：普通文本摘要只作兜底、不覆盖流式正文；
+    // 结构化 UI 视图（form_data 等）则在保留正文的同时追加 fenced 视图 JSON，
+    // 让 getMessageBlocks 同时渲染文本和格式化卡片，避免冲掉已生成的 AI 回复。
+    message.content = mergeFinalViewContent(message.content, finalContent || summary)
     const finalSummary = summary || message.content
     invokeHook('onAssistantFinished', {
       sessionId: sessionId.value,

@@ -48,13 +48,17 @@ public class ChatTurnSessionUpdater {
             String resolved = session.resolvePendingChoice(normalized);
             if (!isBlank(resolved)) {
                 session.appendInteraction("用户选择: " + normalized + " => " + resolved);
-                session.setUserGoal(resolved);
+                // 目标统一 trim 后存储，与 transcript 文本保持一致，
+                // 避免 PromptContractValidator 的子串匹配因前后空白而失败。
+                session.setUserGoal(resolved.trim());
                 // 用户输入进入 transcript，作为跨轮完整时间线的一部分。
                 session.appendUserMessage(resolved);
                 return;
             }
         }
-        session.setUserGoal(rawGoal);
+        // 只存 trim 后的目标；transcript 追加与渲染视图都会 trim，
+        // 未 trim 的原文会导致校验时 prompt.contains(goal) 找不到目标。
+        session.setUserGoal(normalized);
         session.appendUserMessage(rawGoal);
     }
 

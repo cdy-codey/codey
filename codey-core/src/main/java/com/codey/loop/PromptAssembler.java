@@ -120,6 +120,13 @@ public class PromptAssembler {
         if (session != null && session.getIdentities() != null && !session.getIdentities().isEmpty()) {
             builder.append("当前会话身份: ").append(String.join(", ", session.getIdentities())).append("\n");
         }
+        if (session != null && !isBlank(session.getUserGoal())) {
+            // 用户目标必须在此冗余注入：prompt 中该文本的唯一副本原本只在
+            // transcript 的 user 消息里，会被上下文摘要折叠(discardTranscriptBeforeLatestBundle)
+            // 和 transcript 头部裁剪(trimModelTranscript)删掉，删掉后 PromptContractValidator
+            // 的"user goal missing"校验必然失败。这里显式携带一份，保证目标始终可被校验命中。
+            builder.append("用户目标: ").append(session.getUserGoal().trim()).append("\n");
+        }
         if (session != null && !isBlank(session.getWorkingDirectory())) {
             builder.append("当前工作目录: ").append(session.getWorkingDirectory().trim()).append("\n");
         }

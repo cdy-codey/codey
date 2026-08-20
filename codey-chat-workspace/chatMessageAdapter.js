@@ -63,7 +63,9 @@ export function normalizeFinalAssistantContent(currentContent, summary) {
     return normalizedContent
   }
   const extractedSummary = extractSummaryFromCandidate(normalizedContent)
-  if (extractedSummary && extractedSummary === normalizedSummary) {
+  // 去重替换仅当正文本身就是结构化占位 JSON（去围栏后是 {"status":...} / {"summary":...}）
+  // 时生效；正文里还夹着真实回复文本时保留原文，避免摘要冲掉完整的 AI 回复。
+  if (extractedSummary && extractedSummary === normalizedSummary && looksLikeStructuredFinalPayload(normalizedContent)) {
     return normalizedSummary
   }
   if (normalizedSummary && looksLikeStructuredFinalPayload(normalizedContent)) {
@@ -110,6 +112,56 @@ export function extractAssistantContentFromView(view) {
   } catch (error) {
     return ''
   }
+}
+
+// 判断一段文本能否解析为结构化 UI 视图（兼容 status/view 包装与裸视图两种形态）。
+function parseViewPayload(value) {
+  const content = normalizeContent(value).trim()
+  if (!content) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(content)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null
+    }
+    if (parsed._view_type) {
+      return parsed
+    }
+    if (parsed.view && typeof parsed.view === 'object' && !Array.isArray(parsed.view) && parsed.view._view_type) {
+      return parsed.view
+    }
+    return null
+  } catch (error) {
+    return null
+  }
+}
+
+// final_summary 收口时的内容合并策略：
+// 纯文本摘要走 normalizeFinalAssistantContent 的兜底逻辑（不覆盖正文）；
+// 结构化 UI 视图（form_data / diff_data / user_choice）则“正文保留 + 视图以 fenced json 追加”，
+// 让 getMessageBlocks 同时渲染文本段落和格式化卡片，绝不用视图覆盖已生成的 AI 回复。
+export function mergeFinalViewContent(currentContent, finalPayload) {
+  const normalizedSummary = normalizeContent(finalPayload).trim()
+  if (!looksLikeUiViewPayload(normalizedSummary)) {
+    return normalizeFinalAssistantContent(currentContent, normalizedSummary)
+  }
+  const current = normalizeContent(currentContent).trim()
+  if (!current) {
+    // 气泡里没有正文：直接展示视图 JSON，由 getMessageBlocks 解析成格式化卡片。
+    return normalizedSummary
+  }
+  // 以 { 开头：完整视图 JSON 直接保留；流式中断产生的残缺 JSON 用干净视图修正，
+  // 避免 getMessageBlocks 一直把它当成“流式输出中”而卡在进度条上。
+  if (current.startsWith('{')) {
+    return parseViewPayload(current) ? current : normalizedSummary
+  }
+  // 正文是普通文本（如“提取结果概览”）：文本原样保留，末尾追加 fenced 视图 JSON。
+  const embedded = /```json\s*([\s\S]*?)```/.exec(current)
+  if (embedded && parseViewPayload(embedded[1])) {
+    return current
+  }
+  return `${current}\n\n\`\`\`json\n${normalizedSummary}\n\`\`\``
 }
 
 export function buildToolResultPreview(payload) {

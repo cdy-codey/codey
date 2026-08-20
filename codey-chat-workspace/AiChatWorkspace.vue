@@ -2191,17 +2191,6 @@ watch(
                             </div>
                           </div>
                           <template v-else-if="block.parsedUiView._view_type === 'form_data'">
-                            <div
-                              v-if="typeof block.parsedUiView.summary === 'string' && block.parsedUiView.summary.trim()"
-                              class="ai-form-summary ai-card"
-                            >
-                              <div class="ai-card-header ai-form-module-header ai-form-summary-header">
-                                简要解析
-                              </div>
-                              <div class="ai-card-body ai-form-module-body ai-form-summary-body">
-                                {{ block.parsedUiView.summary }}
-                              </div>
-                            </div>
                             <template v-for="(module, mIdx) in block.parsedUiView.modules" :key="mIdx">
                             <!-- Object View -->
                             <div
@@ -3621,27 +3610,6 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.ai-form-summary {
-  margin-bottom: 0;
-  border-radius: 14px;
-}
-
-.ai-form-summary-header {
-  padding: 10px 12px;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 600;
-  background: #f8fafc;
-}
-
-.ai-form-summary-body {
-  padding: 10px 12px;
-  color: #475569;
-  font-size: 13px;
-  line-height: 1.75;
-  white-space: pre-wrap;
 }
 
 .ai-form-module {
