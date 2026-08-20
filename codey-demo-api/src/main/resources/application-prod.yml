@@ -13,6 +13,13 @@ spring:
 upload:
   directory: ./uploads
 
+# 远程采购目录查询服务配置
+target-information:
+  # TODO: 请填写实际的线上服务地址，例如 https://catalog.example.com
+  service-url: ""
+  # 远程接口鉴权 Key（生产环境建议通过环境变量覆盖）
+  api-key: "4d1ed3fff459b0bac50d5c03d69dab4a12f2148b9c0ff01c"
+
 codey:
   model:
     provider: http

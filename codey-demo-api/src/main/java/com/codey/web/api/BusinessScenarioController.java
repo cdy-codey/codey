@@ -1,6 +1,7 @@
 package com.codey.web.api;
 
 import com.codey.web.common.ApiResponse;
+import com.codey.web.entity.BizRequire;
 import com.codey.web.service.BusinessScenarioService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,7 +21,7 @@ public class BusinessScenarioController {
     }
 
     @GetMapping("/procurement/context")
-    public ApiResponse<BusinessScenarioService.ProcurementFormContext> getProcurementFormContext() {
+    public ApiResponse<BizRequire> getProcurementFormContext() {
         return ApiResponse.success(
                 "采购申请示例上下文查询成功",
                 businessScenarioService.getProcurementFormContext()

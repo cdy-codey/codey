@@ -167,9 +167,6 @@ const optionMaps = reactive({
   businessDocTypeOptions: [],
   ynOptions: [],
   isSmbOptions: [],
-  // 标的明细中的下拉选项
-  targetTypeOptions: [],
-  purchaseTypeOptions: [],
 })
 
 // 标的明细金额汇总（申购金额由标的明细自动汇总）
@@ -204,7 +201,7 @@ function normalizeTarget(item = {}, index = 0) {
     rowNo: item.rowNo || index + 1,
     targetName: item.targetName || '',
     targetTypeName: item.targetTypeName || '',
-    purchaseTypeName: item.purchaseTypeName || '',
+    targetTypeCode: item.targetTypeCode || '',
     num: toNumber(item.num) || 1,
     unitPrice: toNumber(item.unitPrice),
     unit: item.unit || '台',
@@ -277,8 +274,6 @@ function applyScenarioContext(context) {
   optionMaps.businessDocTypeOptions = mapOptions(context?.businessDocTypeOptions)
   optionMaps.ynOptions = mapOptions(context?.ynOptions)
   optionMaps.isSmbOptions = mapOptions(context?.isSmbOptions)
-  optionMaps.targetTypeOptions = mapOptions(context?.targetTypeOptions)
-  optionMaps.purchaseTypeOptions = mapOptions(context?.purchaseTypeOptions)
   // 还原附件
   formModel.attachments = Array.isArray(context?.attachments) ? [...context.attachments] : []
   recalculatePurchaseAmount()
@@ -775,18 +770,16 @@ async function handleCloseAssistant() {
             <el-table-column label="标的名称" min-width="140">
               <template #default="{ row }"><el-input v-model="row.targetName" placeholder="请输入" /></template>
             </el-table-column>
-            <el-table-column label="标的类型" min-width="120">
+            <!-- 标的类型：由 AI 根据采购目录查询结果回填，直接文本展示，不提供下拉选择 -->
+            <el-table-column prop="targetTypeName" label="标的类型" min-width="120">
               <template #default="{ row }">
-                <el-select v-model="row.targetTypeName" placeholder="请选择">
-                  <el-option v-for="o in optionMaps.targetTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
-                </el-select>
+                <span>{{ row.targetTypeName }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="采购分类" min-width="120">
+            <!-- 采购分类：展示标的类型编号 targetTypeCode，由 AI 根据采购目录查询结果回填，直接文本展示，不提供下拉选择 -->
+            <el-table-column prop="targetTypeCode" label="采购分类" min-width="120">
               <template #default="{ row }">
-                <el-select v-model="row.purchaseTypeName" placeholder="请选择">
-                  <el-option v-for="o in optionMaps.purchaseTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
-                </el-select>
+                <span>{{ row.targetTypeCode }}</span>
               </template>
             </el-table-column>
             <el-table-column label="数量" width="100">

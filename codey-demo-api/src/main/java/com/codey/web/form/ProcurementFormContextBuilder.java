@@ -43,11 +43,31 @@ public class ProcurementFormContextBuilder {
 
     /**
      * 把表单元数据中的历史参考工作流、推荐工具、特殊字段规则拼接为自然语言业务背景。
+     * 当前聚焦输出“标的类型必须查询采购目录接口”的联动规则。
      */
     @SuppressWarnings("unchecked")
     private String buildContextText(Map<String, Object> metadata) {
         StringBuilder md = new StringBuilder();
-       
+
+        // 从元数据的特殊字段规则中提取标的类型联动规则（targetTypeId / targetTypeName / targetTypeCode）
+        List<Map<String, Object>> specialFieldRules = (List<Map<String, Object>>) metadata.get("specialFieldRules");
+        if (specialFieldRules != null) {
+            for (Map<String, Object> rule : specialFieldRules) {
+                if (!"targetTypeFields".equals(rule.get("ruleName"))) {
+                    continue;
+                }
+                md.append("### 标的类型填写规则\n\n");
+                md.append("- **涉及字段**：").append(rule.get("fieldNames")).append("\n");
+                md.append("- **描述**：").append(rule.get("description")).append("\n");
+                // 明确强制要求：填写标的类型前必须先查询采购目录，禁止臆造。
+                // 注意：此处对 AI 屏蔽内部工具名与接口地址，仅描述业务行为，具体工具由表单模式元数据（recommendedTools）下发给 AI。
+                md.append("- **填写规则**：填写标的类型的 targetTypeId、targetTypeName、targetTypeCode 三个联动字段前，")
+                        .append("必须先调用采购目录查询工具，以标的名称作为查询条件按名称模糊查询采购目录，禁止凭记忆臆造标的类型；")
+                        .append("查询到结果后，将返回条目的 biz_code 赋值给 targetTypeId、name 赋值给 targetTypeName，targetTypeCode 按返回条目中的标的类型编号字段同步回填。\n");
+                md.append("\n");
+            }
+        }
+
         return md.toString();
     }
 
