@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -22,7 +23,10 @@ import java.util.Map;
 public class WriteFileTool extends AbstractWorkspaceTool {
     private static final int MAX_PREVIEW_LINES = 16;
 
+    // ObjectWriter 线程安全，复用实例避免每次写入都重建（含 JSON 工厂初始化开销）。
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final com.fasterxml.jackson.databind.ObjectWriter prettyWriter =
+            objectMapper.writerWithDefaultPrettyPrinter();
 
     @Override
     public String name() {
@@ -52,25 +56,43 @@ public class WriteFileTool extends AbstractWorkspaceTool {
     public ToolResult execute(ToolInvocation request, WorkspaceToolContext context) {
         try {
             String pathValue = readRequiredString(request, "path");
-            String content = readRequiredString(request, "content");
+            String content = readOptionalString(request, "content");
+            if (content == null || content.trim().isEmpty()) {
+                // content 缺失多为模型输出被截断（finish_reason=length）导致：给模型明确引导，避免无意义重试。
+                return ToolResult.fail("写入文件失败：content 参数为空。请重新生成包含完整文件内容的 write_file 调用；"
+                        + "若内容较长导致单次输出被截断，请调大模型 max_tokens 配置或改用 edit_file 分次更新。");
+            }
             Path target = context.resolvePath(pathValue);
             boolean existedBefore = Files.exists(target);
-            String originalContent = existedBefore
+            // 表单模式：一次性整文件替换，无需读取原文件做 diff 对比，跳过 readAllBytes 与逐行比较。
+            boolean formMode = context.isFormMode();
+            String originalContent = (!formMode && existedBefore)
                     ? new String(Files.readAllBytes(target), StandardCharsets.UTF_8)
                     : "";
             if (target.getParent() != null) {
                 Files.createDirectories(target.getParent());
             }
-            Files.write(target, content.getBytes(StandardCharsets.UTF_8));
+            // 复用同一份字节数组：写入文件与计算字节数共用，避免大内容重复编码。
+            byte[] contentBytes = content.getBytes(StandardCharsets.UTF_8);
+            Files.write(target, contentBytes);
 
             Map<String, Object> payload = new LinkedHashMap<String, Object>();
             payload.put("path", relativize(context, target));
             payload.put("created", !existedBefore);
-            payload.put("bytes", content.getBytes(StandardCharsets.UTF_8).length);
+            payload.put("bytes", contentBytes.length);
             payload.put("summary", existedBefore ? "已更新文件内容" : "已新建文件");
-            payload.put("diffSummary", FileMutationSupport.buildDiffSummary(originalContent, content));
-            payload.put("preview", FileMutationSupport.buildPreview(originalContent, content, MAX_PREVIEW_LINES));
-            String result = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
+            if (formMode) {
+                // 表单模式不产出 diff 摘要与预览，减少大文件写入时的字符串处理开销。
+                payload.put("diffSummary", "formMode replace, diff skipped");
+                payload.put("preview", Collections.emptyList());
+            } else {
+                // 非表单模式：diff 摘要与预览一次行扫描产出，避免对原/新内容重复 split 与遍历。
+                FileMutationSupport.DiffResult diff =
+                        FileMutationSupport.buildDiff(originalContent, content, MAX_PREVIEW_LINES);
+                payload.put("diffSummary", diff.getSummary());
+                payload.put("preview", diff.getPreview());
+            }
+            String result = prettyWriter.writeValueAsString(payload);
             return ToolResult.ok("Write file success:\n" + result, existedBefore ? "已保存文件" : "已新建文件");
         } catch (Exception exception) {
             return ToolResult.fail("写入文件失败：" + exception.getMessage());
@@ -109,6 +131,11 @@ public class WriteFileTool extends AbstractWorkspaceTool {
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
         return String.valueOf(value);
+    }
+
+    private String readOptionalString(ToolInvocation request, String fieldName) {
+        Object value = request.getArguments().get(fieldName);
+        return value == null ? null : String.valueOf(value);
     }
 
     private Map<String, Object> stringProperty(String description) {

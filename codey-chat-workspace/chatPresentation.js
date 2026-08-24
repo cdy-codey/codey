@@ -96,11 +96,12 @@ export function getMessageBlocks(content, status) {
           // 连关键结构都没闭合时才退化为流式占位（进度条）
           parsedUiView = parsePartialViewJson(unclosedContent) || { streaming: true }
         } else {
-          // 如果已结束，尝试容错解析
+          // 已结束：先严格解析；失败再用宽容解析兜底（补全未闭合引号/括号），
+          // 避免“前言 + 未闭合围栏”混排时把完整 JSON 显示成原始字符串。
           try {
             parsedUiView = resolveUiViewPayload(JSON.parse(unclosedContent))
           } catch (e) {
-            // 保持 null，展示原码
+            parsedUiView = parsePartialViewJson(unclosedContent)
           }
         }
       }

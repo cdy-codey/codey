@@ -1586,7 +1586,7 @@ function getToolStatus(message) {
 function toolCallStatusText(toolCall) {
   const status = toolCall?.status || 'done'
   if (status === 'pending') {
-    return '待执行'
+    return '执行中，请稍等'
   }
   if (status === 'running') {
     return '进行中'
@@ -2061,7 +2061,6 @@ watch(
                           </div>
                           <div class="ai-progress-meta">
                             <span class="ai-progress-label">{{ progressLabel || '正在处理...' }}</span>
-                            <span class="ai-progress-value">{{ progress }}%</span>
                           </div>
                         </div>
                         <template v-if="reasoningBlockMap[message.id]?.length">
@@ -2186,7 +2185,6 @@ watch(
                               </div>
                               <div class="ai-progress-meta">
                                 <span class="ai-progress-label">{{ progressLabel || '正在生成表单...' }}</span>
-                                <span class="ai-progress-value">{{ progress }}%</span>
                               </div>
                             </div>
                           </div>
@@ -2314,7 +2312,6 @@ watch(
                         </div>
                         <div class="ai-progress-meta">
                           <span class="ai-progress-label">{{ progressLabel || '正在处理...' }}</span>
-                          <span class="ai-progress-value">{{ progress }}%</span>
                         </div>
                       </div>
                     </div>
@@ -2619,7 +2616,7 @@ watch(
               :disabled="!canSend"
               @click="handleSend(inputValue)"
             >
-              {{ isSending ? `生成中 ${progress}%` : '发送' }}
+              {{ isSending ? '生成中' : '发送' }}
             </button>
           </div>
         </div>
@@ -3234,13 +3231,6 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.ai-progress-value {
-  flex-shrink: 0;
-  color: #2f6df6;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
 /* 不确定进度条：用于无法给出具体百分比、但需要表达“仍在运行”的局部指示。 */

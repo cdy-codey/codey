@@ -20,16 +20,14 @@ import java.util.Set;
 public class ToolExposurePlanner {
     /**
      * 表单模式下屏蔽的基础工具：表单模式字段信息已完整提供，AI 直接输出 JSON 结果，
-     * 不需要（也不允许）通过多轮文件读写来修改结果，因此屏蔽两类工具：
+     * 不需要（也不允许）通过格式读写工具反复修改结果，因此仅屏蔽格式读写工具：
      * <ul>
-     *   <li>编辑文件工具：edit_file / apply_structured_patch / delete_file</li>
      *   <li>格式读写工具：read_json / search_json / edit_json</li>
      * </ul>
+     * 编辑文件工具（edit_file / apply_structured_patch / delete_file）已放开，
+     * 允许 AI 在表单模式下对工作目录文件做增量修改。
      */
     private static final Set<String> FORM_MODE_BLOCKED_TOOLS = new HashSet<String>(Arrays.asList(
-            "edit_file",
-            "apply_structured_patch",
-            "delete_file",
             "read_json",
             "search_json",
             "edit_json"
@@ -61,7 +59,7 @@ public class ToolExposurePlanner {
     }
 
     /**
-     * 表单模式下屏蔽指定的编辑文件工具与格式读写工具。
+     * 表单模式下屏蔽指定的格式读写工具（read_json / search_json / edit_json）。
      * 命中屏蔽名单的工具既不暴露给模型，也不允许在运行时被调用。
      */
     private boolean isBlockedInFormMode(ToolSpec tool, AgentSession session) {

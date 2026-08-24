@@ -73,6 +73,23 @@ const PROCUREMENT_FORM_FIELD_LABELS = {
   attachments: '需求附件',
 }
 
+// 采购标的明细（targetList）子字段中文名映射：与界面表格列一一对应（前端为权威）
+// 配置子字段白名单后，后端按点分路径（targetList.xxx）过滤标的明细嵌套 Schema，只保留界面实际展示的列
+const PROCUREMENT_TARGET_FIELD_LABELS = {
+  targetName: '标的名称',
+  targetTypeName: '标的类型',
+  targetTypeCode: '采购分类',
+  num: '数量',
+  unitPrice: '单价（元）',
+  unit: '单位',
+  targetPrice: '金额（元）',
+  targetContent: '规格参数',
+  storageArea: '存放地',
+  expectPurchaseTime: '期望使用时间',
+  referenceListStr: '参考品牌',
+  remark: '备注',
+}
+
 // 采购需求基础信息，字段映射自 BizRequire 实体
 const formModel = reactive({
   // 基本信息
@@ -141,11 +158,20 @@ const formModel = reactive({
 })
 
 // 表单界面展示的可见字段：由 formModel 顶层字段派生，label 取字段中文名映射（前端为权威）。
+// 标的明细（targetList）额外追加子字段白名单（点分路径 targetList.xxx），
+// 后端据此过滤嵌套 Schema，避免把未在界面展示的标的子字段暴露给 AI。
 // 对象化结构（{ label, field }）供后端按 field 过滤、用 label 覆盖 Schema 中的字段中文描述。
-const PROCUREMENT_FORM_VISIBLE_FIELDS = Object.keys(formModel).map((field) => ({
-  label: PROCUREMENT_FORM_FIELD_LABELS[field] || field,
-  field,
-}))
+const PROCUREMENT_FORM_VISIBLE_FIELDS = [
+  ...Object.keys(formModel).map((field) => ({
+    label: PROCUREMENT_FORM_FIELD_LABELS[field] || field,
+    field,
+  })),
+  // 标的明细子字段：点分路径供后端逐级过滤，字段名与界面表格列保持一致
+  ...Object.keys(PROCUREMENT_TARGET_FIELD_LABELS).map((field) => ({
+    label: PROCUREMENT_TARGET_FIELD_LABELS[field],
+    field: `targetList.${field}`,
+  })),
+]
 
 // 附件上传相关状态
 const uploading = ref(false)

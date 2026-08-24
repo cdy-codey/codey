@@ -15,6 +15,7 @@ import java.util.Map;
  */
 public class WorkspaceToolContext implements ToolContext {
     private static final String ATTR_TENANT_ID = "tenantId";
+    private static final String ATTR_FORM_MODE = "formMode";
 
     private final Path workspaceRoot;
     private final String workingDirectory;
@@ -97,6 +98,29 @@ public class WorkspaceToolContext implements ToolContext {
     @Override
     public Map<String, Object> getAttributes() {
         return attributes;
+    }
+
+    /**
+     * 注入表单模式标记到工具上下文，供写文件等工具在表单模式下跳过 diff 对比、直接整文件替换。
+     */
+    public WorkspaceToolContext withFormMode(boolean formMode) {
+        if (!formMode) {
+            return this;
+        }
+        Map<String, Object> merged = new LinkedHashMap<String, Object>(attributes);
+        merged.put(ATTR_FORM_MODE, Boolean.TRUE);
+        return new WorkspaceToolContext(
+                workspaceRoot,
+                workingDirectory,
+                workspaceGateway,
+                requestId,
+                sessionId,
+                Collections.unmodifiableMap(merged)
+        );
+    }
+
+    public boolean isFormMode() {
+        return Boolean.TRUE.equals(getAttribute(ATTR_FORM_MODE));
     }
 
     @Override

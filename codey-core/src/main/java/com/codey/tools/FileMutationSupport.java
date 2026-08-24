@@ -57,45 +57,47 @@ public final class FileMutationSupport {
     }
 
     public static String buildDiffSummary(String originalContent, String updatedContent) {
-        String[] originalLines = safe(originalContent).split("\\R", -1);
-        String[] updatedLines = safe(updatedContent).split("\\R", -1);
-        int min = Math.min(originalLines.length, updatedLines.length);
-        int firstChangedLine = -1;
-        for (int index = 0; index < min; index++) {
-            if (!originalLines[index].equals(updatedLines[index])) {
-                firstChangedLine = index + 1;
-                break;
-            }
-        }
-        if (firstChangedLine < 0 && originalLines.length != updatedLines.length) {
-            firstChangedLine = min + 1;
-        }
-        return "originalLines=" + originalLines.length
-                + ", updatedLines=" + updatedLines.length
-                + ", firstChangedLine=" + firstChangedLine;
+        return buildDiff(originalContent, updatedContent, 0).getSummary();
     }
 
     public static List<String> buildPreview(String originalContent, String updatedContent, int maxPreviewLines) {
-        List<String> originalLines = toLines(originalContent);
-        List<String> updatedLines = toLines(updatedContent);
-        int max = Math.max(originalLines.size(), updatedLines.size());
-        int firstChangedIndex = 0;
-        while (firstChangedIndex < max) {
-            String left = firstChangedIndex < originalLines.size() ? originalLines.get(firstChangedIndex) : null;
-            String right = firstChangedIndex < updatedLines.size() ? updatedLines.get(firstChangedIndex) : null;
-            if (left == null ? right != null : !left.equals(right)) {
+        return buildDiff(originalContent, updatedContent, maxPreviewLines).getPreview();
+    }
+
+    /**
+     * 一次行扫描同时产出 diff 摘要与预览，避免对同一份内容重复 split/遍历。
+     * 大文件写入时是写工具的主要 CPU 开销点，合并后可将字符串数组分配与比较次数减半。
+     */
+    public static DiffResult buildDiff(String originalContent, String updatedContent, int maxPreviewLines) {
+        String[] originalLines = safe(originalContent).split("\\R", -1);
+        String[] updatedLines = safe(updatedContent).split("\\R", -1);
+        int min = Math.min(originalLines.length, updatedLines.length);
+        int firstChangedIndex = -1;
+        for (int index = 0; index < min; index++) {
+            if (!originalLines[index].equals(updatedLines[index])) {
+                firstChangedIndex = index;
                 break;
             }
-            firstChangedIndex++;
         }
+        if (firstChangedIndex < 0 && originalLines.length != updatedLines.length) {
+            firstChangedIndex = min;
+        }
+        int firstChangedLine = firstChangedIndex < 0 ? -1 : firstChangedIndex + 1;
+        String summary = "originalLines=" + originalLines.length
+                + ", updatedLines=" + updatedLines.length
+                + ", firstChangedLine=" + firstChangedLine;
 
-        int previewStart = Math.max(0, firstChangedIndex - 1);
-        int previewEnd = Math.min(updatedLines.size(), previewStart + Math.max(1, maxPreviewLines));
         List<String> preview = new ArrayList<String>();
-        for (int index = previewStart; index < previewEnd; index++) {
-            preview.add((index + 1) + ": " + updatedLines.get(index));
+        if (maxPreviewLines > 0) {
+            // 无变化时保持旧预览语义（从内容末尾往回取），避免行为差异影响既有 UI。
+            int previewFirstIndex = firstChangedIndex < 0 ? originalLines.length : firstChangedIndex;
+            int previewStart = Math.max(0, previewFirstIndex - 1);
+            int previewEnd = Math.min(updatedLines.length, previewStart + Math.max(1, maxPreviewLines));
+            for (int index = previewStart; index < previewEnd; index++) {
+                preview.add((index + 1) + ": " + updatedLines[index]);
+            }
         }
-        return preview;
+        return new DiffResult(summary, preview);
     }
 
     public static List<String> toLines(String content) {
@@ -156,6 +158,24 @@ public final class FileMutationSupport {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    public static final class DiffResult {
+        private final String summary;
+        private final List<String> preview;
+
+        private DiffResult(String summary, List<String> preview) {
+            this.summary = summary;
+            this.preview = preview;
+        }
+
+        public String getSummary() {
+            return summary;
+        }
+
+        public List<String> getPreview() {
+            return preview;
+        }
     }
 
     public static final class ReplaceResult {

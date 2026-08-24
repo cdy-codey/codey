@@ -21,9 +21,17 @@ export function parseModelOutputPayload(payload) {
     const message = choice?.message || {}
     // 优先取后端注入的中文 displayName，与 tool_execution_started / tool_call 等事件的展示名保持一致，
     // 避免同一工具因中英文名不同而在工具调用列表中重复展示；无 displayName 时回退真实 function.name。
+    // 同时保留英文真实名 rawName 作为稳定去重标识，保证“同一工具”无论哪个事件先到都不会产生中英两条记录。
     const toolCalls = Array.isArray(message?.tool_calls)
       ? message.tool_calls
-          .map((item) => item?.function?.displayName || item?.function?.name || item?.name || '')
+          .map((item) => {
+            const rawName = normalizeContent(item?.function?.name).trim()
+            const name =
+              normalizeContent(item?.function?.displayName).trim() ||
+              rawName ||
+              normalizeContent(item?.name).trim()
+            return name ? { name, rawName } : null
+          })
           .filter(Boolean)
       : []
     return {
@@ -156,12 +164,36 @@ export function mergeFinalViewContent(currentContent, finalPayload) {
   if (current.startsWith('{')) {
     return parseViewPayload(current) ? current : normalizedSummary
   }
-  // 正文是普通文本（如“提取结果概览”）：文本原样保留，末尾追加 fenced 视图 JSON。
-  const embedded = /```json\s*([\s\S]*?)```/.exec(current)
-  if (embedded && parseViewPayload(embedded[1])) {
+  // 正文中已含可渲染的视图 JSON（兼容闭合围栏与“前言 + 未闭合 ```json{...}”混排）时，
+  // 直接保留正文，不再追加第二份视图 JSON，避免同一视图被重复渲染成表单卡片和 JSON 字符串。
+  if (extractEmbeddedViewPayload(current)) {
     return current
   }
+  // 正文是普通文本（如“提取结果概览”）：文本原样保留，末尾追加 fenced 视图 JSON。
   return `${current}\n\n\`\`\`json\n${normalizedSummary}\n\`\`\``
+}
+
+// 从正文中提取已内嵌的视图 JSON（兼容闭合围栏与“前言 + 未闭合 ```json{...}”两种形态），
+// 存在则说明正文已经包含可渲染的视图，mergeFinalViewContent 无需再追加第二份。
+function extractEmbeddedViewPayload(value) {
+  const content = normalizeContent(value)
+  if (!content.includes('"_view_type"')) {
+    return null
+  }
+  // 标准输出形态：闭合围栏内的完整 JSON。
+  const closedFence = /```json\s*([\s\S]*?)```/.exec(content)
+  if (closedFence) {
+    const closedView = parseViewPayload(closedFence[1])
+    if (closedView) {
+      return closedView
+    }
+  }
+  // 兼容“前言 + 未闭合 ```json{...}”混排：提取正文中最后一个平衡 JSON 对象再判断。
+  const lastJson = extractLastJsonObject(content)
+  if (!lastJson) {
+    return null
+  }
+  return parseViewPayload(lastJson)
 }
 
 export function buildToolResultPreview(payload) {

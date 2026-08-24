@@ -68,8 +68,11 @@ public class EditFileTool extends AbstractWorkspaceTool {
             Map<String, Object> payload = new LinkedHashMap<String, Object>();
             payload.put("path", relativize(context, target));
             payload.put("summary", replaceResult.getSummary());
-            payload.put("diffSummary", FileMutationSupport.buildDiffSummary(originalContent, replaceResult.getUpdatedContent()));
-            payload.put("preview", FileMutationSupport.buildPreview(originalContent, replaceResult.getUpdatedContent(), MAX_PREVIEW_LINES));
+            // diff 摘要与预览一次行扫描产出，避免对原/新内容重复 split 与遍历。
+            FileMutationSupport.DiffResult diff =
+                    FileMutationSupport.buildDiff(originalContent, replaceResult.getUpdatedContent(), MAX_PREVIEW_LINES);
+            payload.put("diffSummary", diff.getSummary());
+            payload.put("preview", diff.getPreview());
             String result = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
             return ToolResult.ok("Edit file success:\n" + result, "已完成文件更新");
         } catch (Exception exception) {

@@ -31,4 +31,5 @@ codey:
     connect-timeout-millis: 10000
     read-timeout-millis: 30000
     max-retries: 1
-    max-tokens: 8192
+    # 单次输出上限设为模型允许的最大值（DeepSeek V4 为 384K），避免表单模式一次性写入大文件时被截断
+    max-tokens: 384000

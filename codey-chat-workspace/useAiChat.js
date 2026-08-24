@@ -421,7 +421,7 @@ export function useAiChat(options = {}) {
     return message
   }
 
-  // 工具调用条目：{ name: 展示名, status: pending|running|done|failed }
+  // 工具调用条目：{ name: 展示名(中文优先), rawName: 英文真实名(稳定去重标识), status: pending|running|done|failed }
   // 状态只向前推进，避免重复事件把已完成状态回退。
   const TOOL_CALL_STATUS_ORDER = { pending: 0, running: 1, done: 2, failed: 2 }
 
@@ -434,16 +434,48 @@ export function useAiChat(options = {}) {
       if (!name) {
         return null
       }
-      return { name, status: item.status || 'done' }
+      const rawName = normalizeContent(item.rawName).trim()
+      return { name, rawName, status: item.status || 'done' }
     }
     const name = normalizeContent(item).trim()
-    return name ? { name, status: 'done' } : null
+    return name ? { name, rawName: '', status: 'done' } : null
   }
 
   function advanceToolCallStatus(current, next) {
     const currentOrder = TOOL_CALL_STATUS_ORDER[current] ?? -1
     const nextOrder = TOOL_CALL_STATUS_ORDER[next] ?? -1
     return nextOrder >= currentOrder ? next : current
+  }
+
+  // 同一工具的去重判定：优先按英文真实名（rawName）匹配，
+  // 其次按展示名（name）匹配，兼容历史归档只存中文/英文字符串的旧条目。
+  function findExistingToolCall(list, normalized) {
+    const rawKey = normalized.rawName ? normalized.rawName.trim() : ''
+    const nameKey = normalized.name.trim()
+    return list.find((toolCall) => {
+      if (!toolCall) {
+        return false
+      }
+      const existingRawKey = toolCall.rawName ? toolCall.rawName.trim() : ''
+      const existingName = typeof toolCall.name === 'string' ? toolCall.name.trim() : ''
+      // 1) 双方都有英文真实名且相同
+      if (rawKey && existingRawKey && existingRawKey === rawKey) {
+        return true
+      }
+      // 2) 展示名相同（兼容归档只存中文名/英文名且新事件展示名一致的场景）
+      if (existingName && existingName === nameKey) {
+        return true
+      }
+      // 3) 归档旧条目只存英文原文（name 即英文名），新事件带中文名 + 英文 rawName：交叉匹配
+      if (rawKey && existingName && existingName === rawKey) {
+        return true
+      }
+      // 4) 归档旧条目带 rawName，新事件展示名与旧 rawName 一致
+      if (existingRawKey && nameKey && nameKey === existingRawKey) {
+        return true
+      }
+      return false
+    })
   }
 
   function upsertToolCalls(list, items = []) {
@@ -455,8 +487,16 @@ export function useAiChat(options = {}) {
       if (!normalized) {
         return
       }
-      const existing = list.find((toolCall) => toolCall && toolCall.name === normalized.name)
+      const existing = findExistingToolCall(list, normalized)
       if (existing) {
+        // 新事件携带中文展示名（name !== rawName）时升级展示名；
+        // 仅带英文原文（name === rawName）时保留已有中文名，避免把中文又退回英文。
+        if (normalized.rawName && normalized.name && normalized.name !== normalized.rawName) {
+          existing.name = normalized.name
+        } else if (!normalized.rawName) {
+          existing.name = normalized.name
+        }
+        existing.rawName = existing.rawName || normalized.rawName
         existing.status = advanceToolCallStatus(existing.status, normalized.status)
       } else {
         list.push(normalized)
@@ -528,7 +568,17 @@ export function useAiChat(options = {}) {
           createMessage(item.role, normalizeContent(item.content), {
             reasoning: normalizeContent(item.reasoning),
             name: normalizeContent(item.displayName || item.name),
-            toolCalls: Array.isArray(item.toolCalls) ? item.toolCalls.filter(Boolean) : [],
+            // 历史归档的 toolCalls 可能是字符串数组，统一规范化为 { name, status } 对象，
+            // 便于后续 replay 事件按 rawName/name 归并，避免同一工具中英两条重复展示。
+            toolCalls: Array.isArray(item.toolCalls)
+              ? item.toolCalls
+                  .map((toolCall) =>
+                    typeof toolCall === 'string'
+                      ? { name: toolCall, status: 'done' }
+                      : toolCall,
+                  )
+                  .filter(Boolean)
+              : [],
             live: false,
           }),
         )
@@ -612,14 +662,20 @@ function parseEventPayload(event) {
   }
 
   function handleModelToolCallStarted(payload) {
-    appendToolCalls([{ name: payload?.payload?.displayName || payload?.message, status: 'pending' }])
+    // rawName 取英文真实工具名（message 或 payload.name），name 优先取后端注入的中文 displayName，
+    // 缺少 displayName 时回退英文原文，保证与后续事件按 rawName 归并为同一条记录。
+    const rawName =
+      normalizeContent(payload?.message).trim() || normalizeContent(payload?.payload?.name).trim()
+    appendToolCalls([
+      { name: payload?.payload?.displayName || rawName, rawName, status: 'pending' },
+    ])
     noteProgress('正在准备工具调用...')
   }
 
   function handleToolExecutionStarted(payload) {
     const toolName = payload?.message || payload?.payload?.toolName || ''
     const displayName = payload?.payload?.displayName || toolName
-    appendToolCalls([{ name: displayName || toolName, status: 'running' }])
+    appendToolCalls([{ name: displayName || toolName, rawName: toolName, status: 'running' }])
     noteProgress('正在执行工具...')
     invokeHook('onToolExecutionStarted', {
       sessionId: sessionId.value,
@@ -688,7 +744,9 @@ function parseEventPayload(event) {
       payload?.payload?.request?.displayName ||
       toolName
     const success = payload?.payload?.result?.success !== false
-    appendToolCalls([{ name: displayName || toolName, status: success ? 'done' : 'failed' }])
+    appendToolCalls([
+      { name: displayName || toolName, rawName: toolName, status: success ? 'done' : 'failed' },
+    ])
     noteProgress('正在处理工具结果...')
     invokeHook('onToolCall', { sessionId: sessionId.value, toolName, displayName, success, payload })
   }

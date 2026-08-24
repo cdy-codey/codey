@@ -7,6 +7,7 @@ import com.codey.infra.ModelResponse;
 import com.codey.infra.ModelStreamListener;
 import com.codey.infra.ModelToolCall;
 import com.codey.config.AgentSession;
+import com.codey.config.ModelProperties;
 import com.codey.session.SessionEventFactory;
 import com.codey.session.SessionStore;
 import com.codey.tools.ToolRegistry;
@@ -17,6 +18,10 @@ import java.util.List;
  * 负责单轮模型请求构建、调用和响应契约校验。
  */
 final class ModelTurnExecutor {
+    // 未显式配置 max_tokens 时兜底为模型允许的最大值（DeepSeek V4 单次输出上限 384K），
+    // 避免表单模式一次性写入大文件时因单次输出被截断导致 content 缺失。
+    private static final int DEFAULT_MAX_TOKENS = 384000;
+
     private final ModelGateway modelGateway;
     private final ToolRegistry toolRegistry;
     private final ResponseContractValidator responseContractValidator;
@@ -96,7 +101,7 @@ final class ModelTurnExecutor {
         ModelRequest request = new ModelRequest();
         final String sessionId = session == null ? null : session.getSessionId();
         request.setSessionId(sessionId);
-        request.setModelConfig(session == null ? null : session.getModelConfig());
+        request.setModelConfig(resolveRequestModelConfig(session));
         request.setIncludeThinking(session == null || session.isIncludeThinking());
         request.setRequestType(ModelRequestType.BUSINESS);
         request.setMessages(promptPackage == null ? null : promptPackage.getMessages());
@@ -118,6 +123,32 @@ final class ModelTurnExecutor {
             }
         });
         return request;
+    }
+
+    /**
+     * 复制会话模型配置为请求级独立副本，避免请求内修改污染共享的会话/启动配置对象。
+     * max_tokens 未显式配置时兜底为模型最大输出上限，保证大文件写入不被单次输出截断；
+     * 业务方仍可通过任务/会话配置显式覆盖（显式配置优先）。
+     */
+    private ModelProperties resolveRequestModelConfig(AgentSession session) {
+        ModelProperties source = session == null ? null : session.getModelConfig();
+        ModelProperties copy = new ModelProperties();
+        if (source != null) {
+            copy.setProvider(source.getProvider());
+            copy.setEndpoint(source.getEndpoint());
+            copy.setModelName(source.getModelName());
+            copy.setApiKey(source.getApiKey());
+            copy.setApiKeyEnv(source.getApiKeyEnv());
+            copy.setTemperature(source.getTemperature());
+            copy.setConnectTimeoutMillis(source.getConnectTimeoutMillis());
+            copy.setReadTimeoutMillis(source.getReadTimeoutMillis());
+            copy.setMaxRetries(source.getMaxRetries());
+            copy.setMaxTokens(source.getMaxTokens());
+        }
+        if (copy.getMaxTokens() == null) {
+            copy.setMaxTokens(DEFAULT_MAX_TOKENS);
+        }
+        return copy;
     }
 
     private String safe(String value) {

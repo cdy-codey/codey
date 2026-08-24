@@ -99,8 +99,11 @@ public class EditJsonTool extends AbstractWorkspaceTool {
             Map<String, Object> payload = new LinkedHashMap<String, Object>();
             payload.put("path", relativize(context, target));
             payload.put("operations", appliedOperations);
-            payload.put("diffSummary", FileMutationSupport.buildDiffSummary(originalContent, updatedContent));
-            payload.put("preview", FileMutationSupport.buildPreview(originalContent, updatedContent, MAX_PREVIEW_LINES));
+            // diff 摘要与预览一次行扫描产出，避免对原/新内容重复 split 与遍历。
+            FileMutationSupport.DiffResult diff =
+                    FileMutationSupport.buildDiff(originalContent, updatedContent, MAX_PREVIEW_LINES);
+            payload.put("diffSummary", diff.getSummary());
+            payload.put("preview", diff.getPreview());
             String result = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
             return ToolResult.ok("Edit json success:\n" + result, "已完成 JSON 更新");
         } catch (Exception exception) {

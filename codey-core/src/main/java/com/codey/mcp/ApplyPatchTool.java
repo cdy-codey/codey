@@ -101,8 +101,9 @@ public class ApplyPatchTool extends AbstractWorkspaceTool {
         payload.put("path", relativize(context, target));
         payload.put("action", "ADD_FILE");
         payload.put("summary", "已根据补丁新建文件");
-        payload.put("diffSummary", FileMutationSupport.buildDiffSummary("", updatedContent));
-        payload.put("preview", FileMutationSupport.buildPreview("", updatedContent, MAX_PREVIEW_LINES));
+        FileMutationSupport.DiffResult diff = FileMutationSupport.buildDiff("", updatedContent, MAX_PREVIEW_LINES);
+        payload.put("diffSummary", diff.getSummary());
+        payload.put("preview", diff.getPreview());
         return payload;
     }
 
@@ -124,8 +125,10 @@ public class ApplyPatchTool extends AbstractWorkspaceTool {
         payload.put("path", relativize(context, target));
         payload.put("action", "UPDATE_FILE");
         payload.put("summary", "已根据补丁更新文件");
-        payload.put("diffSummary", FileMutationSupport.buildDiffSummary(originalContent, updatedContent));
-        payload.put("preview", FileMutationSupport.buildPreview(originalContent, updatedContent, MAX_PREVIEW_LINES));
+        FileMutationSupport.DiffResult diff =
+                FileMutationSupport.buildDiff(originalContent, updatedContent, MAX_PREVIEW_LINES);
+        payload.put("diffSummary", diff.getSummary());
+        payload.put("preview", diff.getPreview());
         return payload;
     }
 
